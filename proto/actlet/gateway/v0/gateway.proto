@@ -1,0 +1,292 @@
+// Actlet gateway protocol, version 0.
+//
+// An Actlet worker connects out to one gateway address served by the
+// orchestrator. It registers, then keeps two independent streams open: one
+// for control commands and one for activity events, so that slow activity
+// never delays control.
+//
+// EXPERIMENTAL (v0): messages may change incompatibly until v1.
+
+syntax = "proto3";
+
+package actlet.gateway.v0;
+
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/actlet/actlet/proto/actlet/gateway/v0;gatewayv0";
+
+// Gateway is served by the orchestrator and called by Actlet workers.
+// Workers authenticate with an "authorization: Bearer <token>" metadata
+// entry on every call.
+service Gateway {
+  // Register attaches a worker to a session: a new one when session_id is
+  // empty, or an existing one when a worker resumes.
+  rpc Register(RegisterRequest) returns (RegisterResponse);
+
+  // Control carries commands to the worker and acknowledgements and status
+  // back. The worker's first message is a ControlHello.
+  rpc Control(stream ControlUp) returns (stream ControlDown);
+
+  // PublishActivity carries activity events to the gateway. The worker's
+  // first message is an ActivityHello; the gateway answers with an
+  // ActivityAck of what it already has, and the worker sends from there.
+  rpc PublishActivity(stream ActivityUp) returns (stream ActivityAck);
+}
+
+// --- Registration ---
+
+message RegisterRequest {
+  // Protocol version the worker speaks: "v0".
+  string protocol_version = 1;
+  // Stable identity of the worker instance, e.g. a host or Pod name.
+  string worker_id = 2;
+  // Empty for a new session; the session's ID when resuming.
+  string session_id = 3;
+  // Run number of this session on the worker, starting at 1 and increasing
+  // with every start of the process. Activity is sequenced per epoch.
+  uint64 epoch = 4;
+  // Features the worker supports.
+  repeated string capabilities = 5;
+  // Version of the Actlet binary, for diagnostics.
+  string actlet_version = 6;
+}
+
+message RegisterResponse {
+  string session_id = 1;
+  Profile profile = 2;
+  // The task to run. Optional when the session folder already holds one.
+  Task task = 3;
+}
+
+// Profile selects the worker's behaviour within the ceilings its deployment
+// configuration sets.
+message Profile {
+  string id = 1;
+  string version = 2;
+  Limits limits = 3;
+  // Mode used when the worker is asked to pause by an OS signal instead of
+  // a command. Unspecified means drain.
+  PauseMode default_pause_mode = 4;
+  // Grace period for stop commands that don't give one.
+  google.protobuf.Duration stop_grace = 5;
+  DisconnectBehavior on_disconnect = 6;
+}
+
+message Limits {
+  uint32 max_workers = 1;
+  uint32 max_tool_concurrency = 2;
+}
+
+enum DisconnectBehavior {
+  DISCONNECT_BEHAVIOR_UNSPECIFIED = 0;
+  // Keep doing local work while disconnected (the default).
+  DISCONNECT_BEHAVIOR_CONTINUE_LOCAL = 1;
+}
+
+// Task describes the work for a session. It mirrors the task.json file in
+// the session folder.
+message Task {
+  // Version of the task document schema: "v0".
+  string schema = 1;
+  string id = 2;
+  // What kind of task this is; it decides how definition and input are read.
+  string kind = 3;
+  // What to do: a UTF-8 JSON document whose schema depends on kind.
+  bytes definition = 4;
+  // The task input: a UTF-8 JSON document whose schema depends on kind.
+  bytes input = 5;
+}
+
+// --- Control ---
+
+message ControlUp {
+  oneof msg {
+    ControlHello hello = 1;
+    CommandAck ack = 2;
+    Status status = 3;
+  }
+}
+
+message ControlHello {
+  string session_id = 1;
+  uint64 epoch = 2;
+  SessionState state = 3;
+}
+
+message ControlDown {
+  oneof msg {
+    Command command = 1;
+  }
+}
+
+// Command is an instruction to the worker. The worker records every command
+// durably before acknowledging it, and acknowledges a repeated ID again
+// without applying it twice, so commands can be resent safely.
+message Command {
+  // Unique per session, chosen by the sender.
+  string id = 1;
+  Origin origin = 2;
+  // Who issued the command, e.g. an operator name. Informational.
+  string actor = 3;
+  oneof action {
+    Pause pause = 10;
+    Stop stop = 11;
+    Steer steer = 12;
+  }
+}
+
+enum Origin {
+  ORIGIN_UNSPECIFIED = 0;
+  ORIGIN_ORCHESTRATOR = 1;
+  ORIGIN_LOCAL = 2;
+}
+
+// Pause: stop starting new work, persist, and exit the process. The session
+// resumes when a worker is started again on the same session folder.
+message Pause {
+  // Required: a pause without a mode is rejected.
+  PauseMode mode = 1;
+}
+
+enum PauseMode {
+  PAUSE_MODE_UNSPECIFIED = 0;
+  // Let running work finish, then pause.
+  PAUSE_MODE_DRAIN = 1;
+  // Signal running work to stop, record what happened, then pause.
+  PAUSE_MODE_INTERRUPT = 2;
+}
+
+// Stop: cancel the task, persist, and exit. A stopped session doesn't
+// resume.
+message Stop {
+  // How long running work gets after being signalled before it is killed.
+  // Unset means the profile's stop_grace.
+  google.protobuf.Duration grace = 1;
+  // Kill running work immediately, ignoring grace.
+  bool kill = 2;
+}
+
+// Steer passes an operator note to the session.
+message Steer {
+  string note = 1;
+}
+
+message CommandAck {
+  string command_id = 1;
+  CommandResult result = 2;
+  // Why a command was rejected, or other detail.
+  string message = 3;
+  // The command was already applied earlier; it wasn't applied again.
+  bool duplicate = 4;
+  SessionState state = 5;
+}
+
+enum CommandResult {
+  COMMAND_RESULT_UNSPECIFIED = 0;
+  COMMAND_RESULT_ACCEPTED = 1;
+  COMMAND_RESULT_REJECTED = 2;
+}
+
+message Status {
+  SessionState state = 1;
+  google.protobuf.Timestamp time = 2;
+}
+
+enum SessionState {
+  SESSION_STATE_UNSPECIFIED = 0;
+  SESSION_STATE_RUNNING = 1;
+  // Finishing or interrupting work before exiting paused.
+  SESSION_STATE_PAUSING = 2;
+  // Cancelling work before exiting stopped.
+  SESSION_STATE_STOPPING = 3;
+  // Terminal states, reported in the last status before the worker exits.
+  SESSION_STATE_PAUSED = 4;
+  SESSION_STATE_STOPPED = 5;
+  SESSION_STATE_COMPLETED = 6;
+  SESSION_STATE_FAILED = 7;
+}
+
+// --- Activity ---
+
+message ActivityUp {
+  oneof msg {
+    ActivityHello hello = 1;
+    ActivityBatch batch = 2;
+  }
+}
+
+message ActivityHello {
+  string session_id = 1;
+  // The epoch whose events this stream carries.
+  uint64 epoch = 2;
+}
+
+message ActivityBatch {
+  // Events in sequence order, all of the stream's epoch.
+  repeated ActivityEvent events = 1;
+}
+
+// ActivityAck reports the highest sequence number up to which the gateway
+// holds every event of the epoch. The worker resends anything after it.
+message ActivityAck {
+  uint64 epoch = 1;
+  uint64 acked_seq = 2;
+}
+
+// ActivityEvent is one semantic event. Sequence numbers start at 1 in each
+// epoch and have no gaps; events the worker had to drop are summarised by a
+// Gap event instead.
+message ActivityEvent {
+  // Unique within the session: "<epoch>.<seq>".
+  string id = 1;
+  uint64 epoch = 2;
+  uint64 seq = 3;
+  google.protobuf.Timestamp time = 4;
+  oneof body {
+    SessionStarted started = 10;
+    StateChange state = 11;
+    CommandReceived command = 12;
+    SteerNote steer = 13;
+    Text text = 14;
+    Gap gap = 15;
+  }
+}
+
+message SessionStarted {
+  uint64 epoch = 1;
+  string profile_id = 2;
+  string profile_version = 3;
+  // This start resumed or recovered an existing session.
+  bool resumed = 4;
+}
+
+message StateChange {
+  SessionState from = 1;
+  SessionState to = 2;
+  string reason = 3;
+}
+
+message CommandReceived {
+  Command command = 1;
+  CommandResult result = 2;
+  string message = 3;
+}
+
+message SteerNote {
+  string note = 1;
+  Origin origin = 2;
+  string actor = 3;
+}
+
+// Text is a display-only line of output.
+message Text {
+  string text = 1;
+}
+
+// Gap marks events the worker dropped because its local buffers were full.
+message Gap {
+  uint64 dropped = 1;
+  google.protobuf.Timestamp first = 2;
+  google.protobuf.Timestamp last = 3;
+}
