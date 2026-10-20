@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/encoding/protowire"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	gatewayv0 "github.com/actlet/actlet/proto/actlet/gateway/v0"
@@ -153,4 +154,73 @@ func encodedHeader(t *testing.T, path string) []byte {
 	}
 	n := 14 + int(data[12]) + int(data[13])<<8 + 4
 	return data[:n]
+}
+
+// The agent's events are named by kind and counted by worker, and an
+// event from a newer worker is "unknown".
+func TestReplayAgentEvents(t *testing.T) {
+	store, err := sdk.NewRecordingStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	bodies := []func(*gatewayv0.ActivityEvent){
+		func(ev *gatewayv0.ActivityEvent) {
+			ev.Body = &gatewayv0.ActivityEvent_ModelTurn{ModelTurn: &gatewayv0.ModelTurn{Turn: 1, Text: "hi"}}
+		},
+		func(ev *gatewayv0.ActivityEvent) {
+			ev.Body = &gatewayv0.ActivityEvent_ToolStarted{ToolStarted: &gatewayv0.ToolStarted{Tool: "shell"}}
+		},
+		func(ev *gatewayv0.ActivityEvent) {
+			ev.Body = &gatewayv0.ActivityEvent_ToolFinished{ToolFinished: &gatewayv0.ToolFinished{Tool: "shell"}}
+		},
+		func(ev *gatewayv0.ActivityEvent) {
+			ev.Body = &gatewayv0.ActivityEvent_FileChange{FileChange: &gatewayv0.FileChange{Path: "a", Diff: "+x"}}
+		},
+		func(ev *gatewayv0.ActivityEvent) {
+			ev.Worker = "root.1"
+			ev.Body = &gatewayv0.ActivityEvent_SubagentSpawned{SubagentSpawned: &gatewayv0.SubagentSpawned{Parent: "root"}}
+		},
+		func(ev *gatewayv0.ActivityEvent) {
+			ev.Worker = "root.1"
+			ev.Body = &gatewayv0.ActivityEvent_SubagentFinished{SubagentFinished: &gatewayv0.SubagentFinished{Result: "ok"}}
+		},
+		func(ev *gatewayv0.ActivityEvent) {
+			ev.Body = nil // a body this build doesn't know
+			ev.ProtoReflect().SetUnknown(protowire.AppendString(protowire.AppendTag(nil, 99, protowire.BytesType), "new"))
+		},
+	}
+	var evs []*gatewayv0.ActivityEvent
+	for i, body := range bodies {
+		evs = append(evs, event(1, uint64(i+1), func(ev *gatewayv0.ActivityEvent) {
+			ev.Worker = "root"
+			body(ev)
+		}))
+	}
+	if err := store.Append(context.Background(), "s", evs); err != nil {
+		t.Fatal(err)
+	}
+	_ = store.Close()
+
+	var stdout, stderr bytes.Buffer
+	if code := run([]string{"replay", "inspect", store.Path("s")}, &stdout, &stderr); code != 0 {
+		t.Fatalf("exit %d: %s", code, stderr.String())
+	}
+	for _, want := range []string{
+		"kinds:    file_change 1, model_turn 1, subagent_finished 1, subagent_spawned 1, tool_finished 1, tool_started 1, unknown 1",
+		"workers:  root 5, root.1 2",
+	} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Errorf("inspect output lacks %q:\n%s", want, stdout.String())
+		}
+	}
+	stdout.Reset()
+	if code := run([]string{"replay", "export", "--jsonl", store.Path("s")}, &stdout, &stderr); code != 0 {
+		t.Fatalf("export: exit %d: %s", code, stderr.String())
+	}
+	for _, want := range []string{`"model_turn":{"turn":"1"`, `"tool_started":{"tool":"shell"}`, `"file_change":{"path":"a"`,
+		`"subagent_spawned":{"parent":"root"}`, `"worker":"root.1"`} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Errorf("export lacks %s", want)
+		}
+	}
 }

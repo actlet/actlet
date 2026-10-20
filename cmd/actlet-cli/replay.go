@@ -68,21 +68,13 @@ func readEvents(r *journal.Reader, fn func(*gatewayv0.ActivityEvent)) error {
 	}
 }
 
-// eventKind names an event's kind.
+// eventKind names an event's kind after its body's field in the
+// protocol, such as "text" or "model_turn". A body this build doesn't know,
+// from a newer worker, is "unknown".
 func eventKind(ev *gatewayv0.ActivityEvent) string {
-	switch ev.Body.(type) {
-	case *gatewayv0.ActivityEvent_Started:
-		return "started"
-	case *gatewayv0.ActivityEvent_State:
-		return "state"
-	case *gatewayv0.ActivityEvent_Command:
-		return "command"
-	case *gatewayv0.ActivityEvent_Steer:
-		return "steer"
-	case *gatewayv0.ActivityEvent_Text:
-		return "text"
-	case *gatewayv0.ActivityEvent_Gap:
-		return "gap"
+	m := ev.ProtoReflect()
+	if fd := m.WhichOneof(m.Descriptor().Oneofs().ByName("body")); fd != nil {
+		return string(fd.Name())
 	}
 	return "unknown"
 }
@@ -120,10 +112,14 @@ func runReplayInspect(args []string, stdout, stderr io.Writer) int {
 
 	epochs := map[uint64]*epochSummary{}
 	kinds := map[string]int{}
+	workers := map[string]int{}
 	var total, dropped, gaps int64
 	endErr := readEvents(r, func(ev *gatewayv0.ActivityEvent) {
 		total++
 		kinds[eventKind(ev)]++
+		if w := ev.GetWorker(); w != "" {
+			workers[w]++
+		}
 		if g := ev.GetGap(); g != nil {
 			gaps++
 			dropped += int64(g.GetDropped())
@@ -159,16 +155,10 @@ func runReplayInspect(args []string, stdout, stderr io.Writer) int {
 			e.firstAt.UTC().Format(time.RFC3339), e.lastAt.UTC().Format(time.RFC3339))
 	}
 	if len(kinds) > 0 {
-		names := make([]string, 0, len(kinds))
-		for k := range kinds {
-			names = append(names, k)
-		}
-		sort.Strings(names)
-		parts := make([]string, len(names))
-		for i, k := range names {
-			parts[i] = fmt.Sprintf("%s %d", k, kinds[k])
-		}
-		fmt.Fprintf(stdout, "kinds:    %s\n", strings.Join(parts, ", "))
+		fmt.Fprintf(stdout, "kinds:    %s\n", counts(kinds))
+	}
+	if len(workers) > 0 {
+		fmt.Fprintf(stdout, "workers:  %s\n", counts(workers))
 	}
 	if gaps > 0 {
 		fmt.Fprintf(stdout, "dropped:  %d display-only events, reported by %d gap events\n", dropped, gaps)
@@ -185,6 +175,20 @@ func runReplayInspect(args []string, stdout, stderr io.Writer) int {
 		printInvalid(stdout, path, endErr, total)
 		return 1
 	}
+}
+
+// counts lists counts by name, sorted by name.
+func counts(m map[string]int) string {
+	names := make([]string, 0, len(m))
+	for k := range m {
+		names = append(names, k)
+	}
+	sort.Strings(names)
+	parts := make([]string, len(names))
+	for i, k := range names {
+		parts[i] = fmt.Sprintf("%s %d", k, m[k])
+	}
+	return strings.Join(parts, ", ")
 }
 
 func runReplayExport(args []string, stdout, stderr io.Writer) int {
