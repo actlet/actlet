@@ -196,7 +196,13 @@ func (r *Recovered) apply(jr journal.Record) error {
 	}
 	if agent.IsRecord(jr.Kind) {
 		if jr.Kind == agent.KindCheckpoint {
-			r.Agent = r.Agent[:0]
+			// Keep the parts of a packed checkpoint, which come just
+			// before it.
+			n := len(r.Agent)
+			for n > 0 && r.Agent[n-1].Kind == agent.KindCheckpointPart {
+				n--
+			}
+			r.Agent = append(r.Agent[:0], r.Agent[n:]...)
 		}
 		jr.Data = append([]byte(nil), jr.Data...)
 		r.Agent = append(r.Agent, jr)

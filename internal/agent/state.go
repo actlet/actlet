@@ -22,6 +22,7 @@ type stateSet struct {
 	order     []string // creation order
 	delivered map[string]bool
 	spawned   uint32
+	parts     parts // of a packed checkpoint, during recovery
 }
 
 func newStateSet() *stateSet {
@@ -66,6 +67,8 @@ func decode(r journal.Record) (proto.Message, error) {
 	switch r.Kind {
 	case KindCheckpoint:
 		m = &agentpb.Checkpoint{}
+	case KindCheckpointPart:
+		m = &agentpb.CheckpointPart{}
 	case KindInferenceIntent:
 		m = &agentpb.InferenceIntent{}
 	case KindInferenceOutcome:
@@ -99,7 +102,16 @@ func (s *stateSet) apply(m proto.Message) error {
 		return w, nil
 	}
 	switch m := m.(type) {
+	case *agentpb.CheckpointPart:
+		s.parts.add(m)
 	case *agentpb.Checkpoint:
+		if m.GetPacked() != nil {
+			cp, err := s.parts.unpack(m.GetPacked())
+			if err != nil {
+				return err
+			}
+			m = cp
+		}
 		s.restore(m)
 	case *agentpb.InferenceIntent:
 		w, err := worker(m.GetWorkerId())

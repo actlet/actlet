@@ -38,7 +38,11 @@ type Checkpoint struct {
 	// Steer notes already given to the agent, by command ID.
 	SteersDelivered []string `protobuf:"bytes,2,rep,name=steers_delivered,json=steersDelivered,proto3" json:"steers_delivered,omitempty"`
 	// Subagents created so far.
-	Spawned       uint32 `protobuf:"varint,3,opt,name=spawned,proto3" json:"spawned,omitempty"`
+	Spawned uint32 `protobuf:"varint,3,opt,name=spawned,proto3" json:"spawned,omitempty"`
+	// Set when the checkpoint is too large for one record: its encoding,
+	// compressed, is in the parts just before it, and the fields above are
+	// empty.
+	Packed        *PackedCheckpoint `protobuf:"bytes,4,opt,name=packed,proto3" json:"packed,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -94,6 +98,141 @@ func (x *Checkpoint) GetSpawned() uint32 {
 	return 0
 }
 
+func (x *Checkpoint) GetPacked() *PackedCheckpoint {
+	if x != nil {
+		return x.Packed
+	}
+	return nil
+}
+
+// PackedCheckpoint describes a checkpoint stored in parts.
+type PackedCheckpoint struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// How many parts there are.
+	Parts uint32 `protobuf:"varint,1,opt,name=parts,proto3" json:"parts,omitempty"`
+	// The SHA-256 of the compressed encoding, which names its parts.
+	Sha256 []byte `protobuf:"bytes,2,opt,name=sha256,proto3" json:"sha256,omitempty"`
+	// The encoding's size before compression.
+	Size          uint64 `protobuf:"varint,3,opt,name=size,proto3" json:"size,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PackedCheckpoint) Reset() {
+	*x = PackedCheckpoint{}
+	mi := &file_internal_agent_agentpb_agent_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PackedCheckpoint) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PackedCheckpoint) ProtoMessage() {}
+
+func (x *PackedCheckpoint) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_agent_agentpb_agent_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PackedCheckpoint.ProtoReflect.Descriptor instead.
+func (*PackedCheckpoint) Descriptor() ([]byte, []int) {
+	return file_internal_agent_agentpb_agent_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *PackedCheckpoint) GetParts() uint32 {
+	if x != nil {
+		return x.Parts
+	}
+	return 0
+}
+
+func (x *PackedCheckpoint) GetSha256() []byte {
+	if x != nil {
+		return x.Sha256
+	}
+	return nil
+}
+
+func (x *PackedCheckpoint) GetSize() uint64 {
+	if x != nil {
+		return x.Size
+	}
+	return 0
+}
+
+// CheckpointPart is a piece of a packed checkpoint's compressed encoding
+// (kind "agent.checkpoint_part").
+type CheckpointPart struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The packed checkpoint's SHA-256.
+	Sha256 []byte `protobuf:"bytes,1,opt,name=sha256,proto3" json:"sha256,omitempty"`
+	// The part's place, from 0.
+	Index         uint32 `protobuf:"varint,2,opt,name=index,proto3" json:"index,omitempty"`
+	Data          []byte `protobuf:"bytes,3,opt,name=data,proto3" json:"data,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CheckpointPart) Reset() {
+	*x = CheckpointPart{}
+	mi := &file_internal_agent_agentpb_agent_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CheckpointPart) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CheckpointPart) ProtoMessage() {}
+
+func (x *CheckpointPart) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_agent_agentpb_agent_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CheckpointPart.ProtoReflect.Descriptor instead.
+func (*CheckpointPart) Descriptor() ([]byte, []int) {
+	return file_internal_agent_agentpb_agent_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *CheckpointPart) GetSha256() []byte {
+	if x != nil {
+		return x.Sha256
+	}
+	return nil
+}
+
+func (x *CheckpointPart) GetIndex() uint32 {
+	if x != nil {
+		return x.Index
+	}
+	return 0
+}
+
+func (x *CheckpointPart) GetData() []byte {
+	if x != nil {
+		return x.Data
+	}
+	return nil
+}
+
 // WorkerState is one worker's execution state.
 type WorkerState struct {
 	state    protoimpl.MessageState `protogen:"open.v1"`
@@ -129,7 +268,7 @@ type WorkerState struct {
 
 func (x *WorkerState) Reset() {
 	*x = WorkerState{}
-	mi := &file_internal_agent_agentpb_agent_proto_msgTypes[1]
+	mi := &file_internal_agent_agentpb_agent_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -141,7 +280,7 @@ func (x *WorkerState) String() string {
 func (*WorkerState) ProtoMessage() {}
 
 func (x *WorkerState) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_agent_agentpb_agent_proto_msgTypes[1]
+	mi := &file_internal_agent_agentpb_agent_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -154,7 +293,7 @@ func (x *WorkerState) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WorkerState.ProtoReflect.Descriptor instead.
 func (*WorkerState) Descriptor() ([]byte, []int) {
-	return file_internal_agent_agentpb_agent_proto_rawDescGZIP(), []int{1}
+	return file_internal_agent_agentpb_agent_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *WorkerState) GetWorkerId() string {
@@ -297,7 +436,7 @@ type InferenceIntent struct {
 
 func (x *InferenceIntent) Reset() {
 	*x = InferenceIntent{}
-	mi := &file_internal_agent_agentpb_agent_proto_msgTypes[2]
+	mi := &file_internal_agent_agentpb_agent_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -309,7 +448,7 @@ func (x *InferenceIntent) String() string {
 func (*InferenceIntent) ProtoMessage() {}
 
 func (x *InferenceIntent) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_agent_agentpb_agent_proto_msgTypes[2]
+	mi := &file_internal_agent_agentpb_agent_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -322,7 +461,7 @@ func (x *InferenceIntent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InferenceIntent.ProtoReflect.Descriptor instead.
 func (*InferenceIntent) Descriptor() ([]byte, []int) {
-	return file_internal_agent_agentpb_agent_proto_rawDescGZIP(), []int{2}
+	return file_internal_agent_agentpb_agent_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *InferenceIntent) GetIntentId() string {
@@ -360,7 +499,7 @@ type InferenceOutcome struct {
 
 func (x *InferenceOutcome) Reset() {
 	*x = InferenceOutcome{}
-	mi := &file_internal_agent_agentpb_agent_proto_msgTypes[3]
+	mi := &file_internal_agent_agentpb_agent_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -372,7 +511,7 @@ func (x *InferenceOutcome) String() string {
 func (*InferenceOutcome) ProtoMessage() {}
 
 func (x *InferenceOutcome) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_agent_agentpb_agent_proto_msgTypes[3]
+	mi := &file_internal_agent_agentpb_agent_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -385,7 +524,7 @@ func (x *InferenceOutcome) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InferenceOutcome.ProtoReflect.Descriptor instead.
 func (*InferenceOutcome) Descriptor() ([]byte, []int) {
-	return file_internal_agent_agentpb_agent_proto_rawDescGZIP(), []int{3}
+	return file_internal_agent_agentpb_agent_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *InferenceOutcome) GetIntentId() string {
@@ -442,7 +581,7 @@ type ToolIntent struct {
 
 func (x *ToolIntent) Reset() {
 	*x = ToolIntent{}
-	mi := &file_internal_agent_agentpb_agent_proto_msgTypes[4]
+	mi := &file_internal_agent_agentpb_agent_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -454,7 +593,7 @@ func (x *ToolIntent) String() string {
 func (*ToolIntent) ProtoMessage() {}
 
 func (x *ToolIntent) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_agent_agentpb_agent_proto_msgTypes[4]
+	mi := &file_internal_agent_agentpb_agent_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -467,7 +606,7 @@ func (x *ToolIntent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ToolIntent.ProtoReflect.Descriptor instead.
 func (*ToolIntent) Descriptor() ([]byte, []int) {
-	return file_internal_agent_agentpb_agent_proto_rawDescGZIP(), []int{4}
+	return file_internal_agent_agentpb_agent_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *ToolIntent) GetIntentId() string {
@@ -540,7 +679,7 @@ type ToolOutcome struct {
 
 func (x *ToolOutcome) Reset() {
 	*x = ToolOutcome{}
-	mi := &file_internal_agent_agentpb_agent_proto_msgTypes[5]
+	mi := &file_internal_agent_agentpb_agent_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -552,7 +691,7 @@ func (x *ToolOutcome) String() string {
 func (*ToolOutcome) ProtoMessage() {}
 
 func (x *ToolOutcome) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_agent_agentpb_agent_proto_msgTypes[5]
+	mi := &file_internal_agent_agentpb_agent_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -565,7 +704,7 @@ func (x *ToolOutcome) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ToolOutcome.ProtoReflect.Descriptor instead.
 func (*ToolOutcome) Descriptor() ([]byte, []int) {
-	return file_internal_agent_agentpb_agent_proto_rawDescGZIP(), []int{5}
+	return file_internal_agent_agentpb_agent_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *ToolOutcome) GetIntentId() string {
@@ -643,7 +782,7 @@ type Spawn struct {
 
 func (x *Spawn) Reset() {
 	*x = Spawn{}
-	mi := &file_internal_agent_agentpb_agent_proto_msgTypes[6]
+	mi := &file_internal_agent_agentpb_agent_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -655,7 +794,7 @@ func (x *Spawn) String() string {
 func (*Spawn) ProtoMessage() {}
 
 func (x *Spawn) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_agent_agentpb_agent_proto_msgTypes[6]
+	mi := &file_internal_agent_agentpb_agent_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -668,7 +807,7 @@ func (x *Spawn) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Spawn.ProtoReflect.Descriptor instead.
 func (*Spawn) Descriptor() ([]byte, []int) {
-	return file_internal_agent_agentpb_agent_proto_rawDescGZIP(), []int{6}
+	return file_internal_agent_agentpb_agent_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *Spawn) GetIntentId() string {
@@ -719,7 +858,7 @@ type WorkerDone struct {
 
 func (x *WorkerDone) Reset() {
 	*x = WorkerDone{}
-	mi := &file_internal_agent_agentpb_agent_proto_msgTypes[7]
+	mi := &file_internal_agent_agentpb_agent_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -731,7 +870,7 @@ func (x *WorkerDone) String() string {
 func (*WorkerDone) ProtoMessage() {}
 
 func (x *WorkerDone) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_agent_agentpb_agent_proto_msgTypes[7]
+	mi := &file_internal_agent_agentpb_agent_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -744,7 +883,7 @@ func (x *WorkerDone) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WorkerDone.ProtoReflect.Descriptor instead.
 func (*WorkerDone) Descriptor() ([]byte, []int) {
-	return file_internal_agent_agentpb_agent_proto_rawDescGZIP(), []int{7}
+	return file_internal_agent_agentpb_agent_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *WorkerDone) GetWorkerId() string {
@@ -783,7 +922,7 @@ type SteerDelivered struct {
 
 func (x *SteerDelivered) Reset() {
 	*x = SteerDelivered{}
-	mi := &file_internal_agent_agentpb_agent_proto_msgTypes[8]
+	mi := &file_internal_agent_agentpb_agent_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -795,7 +934,7 @@ func (x *SteerDelivered) String() string {
 func (*SteerDelivered) ProtoMessage() {}
 
 func (x *SteerDelivered) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_agent_agentpb_agent_proto_msgTypes[8]
+	mi := &file_internal_agent_agentpb_agent_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -808,7 +947,7 @@ func (x *SteerDelivered) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SteerDelivered.ProtoReflect.Descriptor instead.
 func (*SteerDelivered) Descriptor() ([]byte, []int) {
-	return file_internal_agent_agentpb_agent_proto_rawDescGZIP(), []int{8}
+	return file_internal_agent_agentpb_agent_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *SteerDelivered) GetWorkerId() string {
@@ -836,12 +975,21 @@ var File_internal_agent_agentpb_agent_proto protoreflect.FileDescriptor
 
 const file_internal_agent_agentpb_agent_proto_rawDesc = "" +
 	"\n" +
-	"\"internal/agent/agentpb/agent.proto\x12\x0factlet.agent.v0\x1a\x1factlet/gateway/v0/gateway.proto\"\x89\x01\n" +
+	"\"internal/agent/agentpb/agent.proto\x12\x0factlet.agent.v0\x1a\x1factlet/gateway/v0/gateway.proto\"\xc4\x01\n" +
 	"\n" +
 	"Checkpoint\x126\n" +
 	"\aworkers\x18\x01 \x03(\v2\x1c.actlet.agent.v0.WorkerStateR\aworkers\x12)\n" +
 	"\x10steers_delivered\x18\x02 \x03(\tR\x0fsteersDelivered\x12\x18\n" +
-	"\aspawned\x18\x03 \x01(\rR\aspawned\"\xbe\x05\n" +
+	"\aspawned\x18\x03 \x01(\rR\aspawned\x129\n" +
+	"\x06packed\x18\x04 \x01(\v2!.actlet.agent.v0.PackedCheckpointR\x06packed\"T\n" +
+	"\x10PackedCheckpoint\x12\x14\n" +
+	"\x05parts\x18\x01 \x01(\rR\x05parts\x12\x16\n" +
+	"\x06sha256\x18\x02 \x01(\fR\x06sha256\x12\x12\n" +
+	"\x04size\x18\x03 \x01(\x04R\x04size\"R\n" +
+	"\x0eCheckpointPart\x12\x16\n" +
+	"\x06sha256\x18\x01 \x01(\fR\x06sha256\x12\x14\n" +
+	"\x05index\x18\x02 \x01(\rR\x05index\x12\x12\n" +
+	"\x04data\x18\x03 \x01(\fR\x04data\"\xbe\x05\n" +
 	"\vWorkerState\x12\x1b\n" +
 	"\tworker_id\x18\x01 \x01(\tR\bworkerId\x12\x1b\n" +
 	"\tparent_id\x18\x02 \x01(\tR\bparentId\x12$\n" +
@@ -919,39 +1067,42 @@ func file_internal_agent_agentpb_agent_proto_rawDescGZIP() []byte {
 	return file_internal_agent_agentpb_agent_proto_rawDescData
 }
 
-var file_internal_agent_agentpb_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
+var file_internal_agent_agentpb_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
 var file_internal_agent_agentpb_agent_proto_goTypes = []any{
 	(*Checkpoint)(nil),       // 0: actlet.agent.v0.Checkpoint
-	(*WorkerState)(nil),      // 1: actlet.agent.v0.WorkerState
-	(*InferenceIntent)(nil),  // 2: actlet.agent.v0.InferenceIntent
-	(*InferenceOutcome)(nil), // 3: actlet.agent.v0.InferenceOutcome
-	(*ToolIntent)(nil),       // 4: actlet.agent.v0.ToolIntent
-	(*ToolOutcome)(nil),      // 5: actlet.agent.v0.ToolOutcome
-	(*Spawn)(nil),            // 6: actlet.agent.v0.Spawn
-	(*WorkerDone)(nil),       // 7: actlet.agent.v0.WorkerDone
-	(*SteerDelivered)(nil),   // 8: actlet.agent.v0.SteerDelivered
-	(*v0.Message)(nil),       // 9: actlet.gateway.v0.Message
-	(*v0.Usage)(nil),         // 10: actlet.gateway.v0.Usage
-	(*v0.InferenceDone)(nil), // 11: actlet.gateway.v0.InferenceDone
+	(*PackedCheckpoint)(nil), // 1: actlet.agent.v0.PackedCheckpoint
+	(*CheckpointPart)(nil),   // 2: actlet.agent.v0.CheckpointPart
+	(*WorkerState)(nil),      // 3: actlet.agent.v0.WorkerState
+	(*InferenceIntent)(nil),  // 4: actlet.agent.v0.InferenceIntent
+	(*InferenceOutcome)(nil), // 5: actlet.agent.v0.InferenceOutcome
+	(*ToolIntent)(nil),       // 6: actlet.agent.v0.ToolIntent
+	(*ToolOutcome)(nil),      // 7: actlet.agent.v0.ToolOutcome
+	(*Spawn)(nil),            // 8: actlet.agent.v0.Spawn
+	(*WorkerDone)(nil),       // 9: actlet.agent.v0.WorkerDone
+	(*SteerDelivered)(nil),   // 10: actlet.agent.v0.SteerDelivered
+	(*v0.Message)(nil),       // 11: actlet.gateway.v0.Message
+	(*v0.Usage)(nil),         // 12: actlet.gateway.v0.Usage
+	(*v0.InferenceDone)(nil), // 13: actlet.gateway.v0.InferenceDone
 }
 var file_internal_agent_agentpb_agent_proto_depIdxs = []int32{
-	1,  // 0: actlet.agent.v0.Checkpoint.workers:type_name -> actlet.agent.v0.WorkerState
-	9,  // 1: actlet.agent.v0.WorkerState.messages:type_name -> actlet.gateway.v0.Message
-	10, // 2: actlet.agent.v0.WorkerState.usage:type_name -> actlet.gateway.v0.Usage
-	2,  // 3: actlet.agent.v0.WorkerState.inference:type_name -> actlet.agent.v0.InferenceIntent
-	9,  // 4: actlet.agent.v0.WorkerState.pending:type_name -> actlet.gateway.v0.Message
-	4,  // 5: actlet.agent.v0.WorkerState.intents:type_name -> actlet.agent.v0.ToolIntent
-	5,  // 6: actlet.agent.v0.WorkerState.results:type_name -> actlet.agent.v0.ToolOutcome
-	7,  // 7: actlet.agent.v0.WorkerState.done:type_name -> actlet.agent.v0.WorkerDone
-	9,  // 8: actlet.agent.v0.InferenceOutcome.message:type_name -> actlet.gateway.v0.Message
-	11, // 9: actlet.agent.v0.InferenceOutcome.done:type_name -> actlet.gateway.v0.InferenceDone
-	10, // 10: actlet.agent.v0.ToolOutcome.usage:type_name -> actlet.gateway.v0.Usage
-	1,  // 11: actlet.agent.v0.Spawn.worker:type_name -> actlet.agent.v0.WorkerState
-	12, // [12:12] is the sub-list for method output_type
-	12, // [12:12] is the sub-list for method input_type
-	12, // [12:12] is the sub-list for extension type_name
-	12, // [12:12] is the sub-list for extension extendee
-	0,  // [0:12] is the sub-list for field type_name
+	3,  // 0: actlet.agent.v0.Checkpoint.workers:type_name -> actlet.agent.v0.WorkerState
+	1,  // 1: actlet.agent.v0.Checkpoint.packed:type_name -> actlet.agent.v0.PackedCheckpoint
+	11, // 2: actlet.agent.v0.WorkerState.messages:type_name -> actlet.gateway.v0.Message
+	12, // 3: actlet.agent.v0.WorkerState.usage:type_name -> actlet.gateway.v0.Usage
+	4,  // 4: actlet.agent.v0.WorkerState.inference:type_name -> actlet.agent.v0.InferenceIntent
+	11, // 5: actlet.agent.v0.WorkerState.pending:type_name -> actlet.gateway.v0.Message
+	6,  // 6: actlet.agent.v0.WorkerState.intents:type_name -> actlet.agent.v0.ToolIntent
+	7,  // 7: actlet.agent.v0.WorkerState.results:type_name -> actlet.agent.v0.ToolOutcome
+	9,  // 8: actlet.agent.v0.WorkerState.done:type_name -> actlet.agent.v0.WorkerDone
+	11, // 9: actlet.agent.v0.InferenceOutcome.message:type_name -> actlet.gateway.v0.Message
+	13, // 10: actlet.agent.v0.InferenceOutcome.done:type_name -> actlet.gateway.v0.InferenceDone
+	12, // 11: actlet.agent.v0.ToolOutcome.usage:type_name -> actlet.gateway.v0.Usage
+	3,  // 12: actlet.agent.v0.Spawn.worker:type_name -> actlet.agent.v0.WorkerState
+	13, // [13:13] is the sub-list for method output_type
+	13, // [13:13] is the sub-list for method input_type
+	13, // [13:13] is the sub-list for extension type_name
+	13, // [13:13] is the sub-list for extension extendee
+	0,  // [0:13] is the sub-list for field type_name
 }
 
 func init() { file_internal_agent_agentpb_agent_proto_init() }
@@ -965,7 +1116,7 @@ func file_internal_agent_agentpb_agent_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_internal_agent_agentpb_agent_proto_rawDesc), len(file_internal_agent_agentpb_agent_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   9,
+			NumMessages:   11,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

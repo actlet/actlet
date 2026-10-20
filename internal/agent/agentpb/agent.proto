@@ -22,6 +22,30 @@ message Checkpoint {
   repeated string steers_delivered = 2;
   // Subagents created so far.
   uint32 spawned = 3;
+  // Set when the checkpoint is too large for one record: its encoding,
+  // compressed, is in the parts just before it, and the fields above are
+  // empty.
+  PackedCheckpoint packed = 4;
+}
+
+// PackedCheckpoint describes a checkpoint stored in parts.
+message PackedCheckpoint {
+  // How many parts there are.
+  uint32 parts = 1;
+  // The SHA-256 of the compressed encoding, which names its parts.
+  bytes sha256 = 2;
+  // The encoding's size before compression.
+  uint64 size = 3;
+}
+
+// CheckpointPart is a piece of a packed checkpoint's compressed encoding
+// (kind "agent.checkpoint_part").
+message CheckpointPart {
+  // The packed checkpoint's SHA-256.
+  bytes sha256 = 1;
+  // The part's place, from 0.
+  uint32 index = 2;
+  bytes data = 3;
 }
 
 // WorkerState is one worker's execution state.

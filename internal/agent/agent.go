@@ -45,6 +45,7 @@ const Kind = "agent"
 // Journal record kinds.
 const (
 	KindCheckpoint       = "agent.checkpoint"
+	KindCheckpointPart   = "agent.checkpoint_part"
 	KindInferenceIntent  = "agent.inference.intent"
 	KindInferenceOutcome = "agent.inference.outcome"
 	KindToolIntent       = "tool.intent"
@@ -514,6 +515,8 @@ func kindOf(m proto.Message) string {
 	switch m.(type) {
 	case *agentpb.Checkpoint:
 		return KindCheckpoint
+	case *agentpb.CheckpointPart:
+		return KindCheckpointPart
 	case *agentpb.InferenceIntent:
 		return KindInferenceIntent
 	case *agentpb.InferenceOutcome:
@@ -539,15 +542,21 @@ func (b *box) checkpoint() error {
 	if b.failed != nil {
 		return b.failed
 	}
-	cp := b.st.checkpoint()
-	if size := proto.Size(cp); size > journal.DefaultLimits().MaxRecordData-1024 {
+	recs, err := pack(b.st.checkpoint())
+	if errors.Is(err, errCheckpointTooLarge) {
 		// Recovery replays from the previous checkpoint instead.
-		b.log.Warn("agent: the workers' state is too large to checkpoint", "bytes", size)
+		b.log.Warn("agent: not checkpointing", "err", err)
 		return nil
 	}
-	if err := b.env.Record(context.Background(), KindCheckpoint, cp); err != nil {
-		b.failed = fmt.Errorf("recording a checkpoint: %w", err)
+	if err != nil {
+		b.failed = fmt.Errorf("packing a checkpoint: %w", err)
 		return b.failed
+	}
+	for _, m := range recs {
+		if err := b.env.Record(context.Background(), kindOf(m), m); err != nil {
+			b.failed = fmt.Errorf("recording a checkpoint: %w", err)
+			return b.failed
+		}
 	}
 	b.turns = 0
 	return nil

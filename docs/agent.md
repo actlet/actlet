@@ -90,7 +90,7 @@ What a call writes is taken from its input, so an edit of a file that an earlier
 
 ## Durability and recovery
 
-Every model call and every tool call is written to the session journal as an **intent** before it starts and an **outcome** when it ends. Each record is written and applied to the workers' state as one step, so a **checkpoint** holds the state of every worker, calls in flight included. Checkpoints are written at model-turn boundaries: after every turn, or every `checkpoint_every_turns` turns from the profile, and when the session pauses. A run restores every worker from the latest checkpoint, replays the records after it, and continues each worker:
+Every model call and every tool call is written to the session journal as an **intent** before it starts and an **outcome** when it ends. Each record is written and applied to the workers' state as one step, so a **checkpoint** holds the state of every worker, calls in flight included. Checkpoints are written at model-turn boundaries: after every turn, or every `checkpoint_every_turns` turns from the profile, and when the session pauses. A checkpoint larger than a journal record (4 MiB), as long conversations make, is compressed and written in parts and then a small record that names them by checksum; a crash among the parts leaves the previous checkpoint the latest. A run restores every worker from the latest checkpoint, replays the records after it, and continues each worker:
 
 - **A model call without an outcome** is made again, from the same conversation and with the same intent ID, which the gateway uses as an idempotency key. A call is never continued mid-answer.
 - **A tool call without an outcome** follows its tool's policy:

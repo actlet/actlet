@@ -195,6 +195,9 @@ func (s *sandbox) sinceCheckpoint() []journal.Record {
 	for i, r := range s.records {
 		if r.Kind == KindCheckpoint {
 			start = i
+			for start > 0 && s.records[start-1].Kind == KindCheckpointPart {
+				start--
+			}
 		}
 	}
 	return append([]journal.Record(nil), s.records[start:]...)
