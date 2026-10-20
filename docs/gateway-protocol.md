@@ -171,7 +171,7 @@ The Go package [`sdk`](../sdk) implements the gateway side for embedding in an o
 - `sdk.NewServer(sdk.Options{...})` with an `Assign` function that decides each session's profile and task, an optional `Authenticate`, and an `ActivityStore`;
 - `Session.Pause`, `Stop`, `Steer` and `Send` to issue commands and wait for their acknowledgements, with queuing and resending handled;
 - `sdk.MemoryStore` and `sdk.RecordingStore` (one `.actrec` file per session, readable with `actlet-cli replay inspect` and `actlet-cli replay export`);
-- `OnInference` to answer agents' model calls, deduplicated by intent ID, and `OnDecide` and `OnTool` to answer [bridged tools](#bridged-tools);
+- `OnInference` to answer agents' model calls, deduplicated by intent ID, and `OnDecide` and `OnTool` to answer [bridged tools](#bridged-tools), for which the SDK has [provider adapters](providers.md);
 - `Session.UpdateProfile` to change a running session's profile, which the SDK also applies when the worker registers again;
 - `Server.RegisterAttach` to serve the [attach protocol](../proto/actlet/attach/v0/attach.proto) to viewers such as `actlet-cli attach`. A viewer names its session in the `actlet-session` request metadata. Viewers are authenticated with `Authenticate`, like workers (`grpc.Method` tells their calls apart); `AuthorizeAttach` decides which sessions each may attach to, and `AttachCommands` what it may send, by default what the session's profile lets local viewers send. A viewer gets the session's earlier activity when the store is an `ActivityReader`, as both stores are, then live events; the server keeps a bounded backlog per watched session, and a slow viewer skips events rather than slowing the session's activity down.
 

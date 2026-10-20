@@ -101,6 +101,11 @@ demo-tui: build ## Try the TUI: a scripted demo session with the viewer in the f
 demo-attach: build ## Attach the TUI to the running demo, from a second terminal (or start one)
 	@examples/demo/demo.sh attach
 
+.PHONY: smoke-providers
+smoke-providers: ## One tiny real call per route of PROVIDERS=<file>; needs the keys, costs a little
+	@test -n "$(PROVIDERS)" || { echo "usage: make smoke-providers PROVIDERS=providers.yaml (see docs/providers.md)"; exit 2; }
+	go test -tags smoke -run '^TestSmoke$$' -count=1 -v ./sdk/adapters/router -args -providers="$(abspath $(PROVIDERS))"
+
 .PHONY: fuzz
 fuzz: ## Fuzz the journal reader (FUZZTIME per target, default 2m)
 	@for t in $(FUZZ_TARGETS); do \
