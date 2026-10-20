@@ -136,7 +136,7 @@ The Go package [`sdk`](../sdk) implements the gateway side for embedding in an o
 
 - `sdk.NewServer(sdk.Options{...})` with an `Assign` function that decides each session's profile and task, an optional `Authenticate`, and an `ActivityStore`;
 - `Session.Pause`, `Stop`, `Steer` and `Send` to issue commands and wait for their acknowledgements, with queuing and resending handled;
-- `sdk.MemoryStore` and `sdk.RecordingStore` (one `.actrec` file per session, readable with `actlet journal inspect` and `actlet journal export`).
+- `sdk.MemoryStore` and `sdk.RecordingStore` (one `.actrec` file per session, readable with `actlet-cli replay inspect` and `actlet-cli replay export`).
 
 Gateways in other languages implement the same three calls from the proto file. They must:
 

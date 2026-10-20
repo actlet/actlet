@@ -38,19 +38,28 @@ func TestDockerVolumeSurvival(t *testing.T) {
 		t.Skipf("image %s not available (run make image): %s", image, bytes.TrimSpace(out))
 	}
 
-	// The writer is this package's crash helper, built for the daemon's
-	// architecture and mounted into the image.
+	// The writer is this package's crash helper, and the reader actlet-cli,
+	// both built for the daemon's architecture and mounted into the image.
 	arch := strings.TrimSpace(dockerOut(t, "version", "--format", "{{.Server.Arch}}"))
 	binDir := t.TempDir()
-	build := exec.Command("go", "test", "-c", "-o", filepath.Join(binDir, "journal.test"), ".")
-	build.Env = append(os.Environ(), "CGO_ENABLED=0", "GOOS=linux", "GOARCH="+arch)
-	if out, err := build.CombinedOutput(); err != nil {
-		t.Fatalf("build helper: %v\n%s", err, out)
+	for _, build := range []*exec.Cmd{
+		exec.Command("go", "test", "-c", "-o", filepath.Join(binDir, "journal.test"), "."),
+		exec.Command("go", "build", "-o", filepath.Join(binDir, "actlet-cli"), "../../cmd/actlet-cli"),
+	} {
+		build.Env = append(os.Environ(), "CGO_ENABLED=0", "GOOS=linux", "GOARCH="+arch)
+		if out, err := build.CombinedOutput(); err != nil {
+			t.Fatalf("build %v: %v\n%s", build.Args, err, out)
+		}
 	}
 
 	volume := fmt.Sprintf("actlet-test-%d-%d", os.Getpid(), time.Now().UnixNano())
 	dockerOut(t, "volume", "create", volume)
 	t.Cleanup(func() { _ = exec.Command("docker", "volume", "rm", "-f", volume).Run() })
+	// cli runs actlet-cli in a container with the volume mounted.
+	cli := func(args ...string) []string {
+		return append([]string{"run", "--rm", "--entrypoint", "/t/actlet-cli",
+			"-v", binDir + ":/t:ro", "-v", volume + ":/var/lib/actlet", image}, args...)
+	}
 
 	const dir = "/var/lib/actlet"
 	const journalPath = dir + "/session.actlet"
@@ -92,7 +101,7 @@ func TestDockerVolumeSurvival(t *testing.T) {
 		dockerOut(t, "rm", name)
 
 		// A new container sees every acknowledged record on the volume.
-		export := dockerOut(t, "run", "--rm", "-v", volume+":"+dir, image, "journal", "export", "--jsonl", journalPath)
+		export := dockerOut(t, cli("journal", "export", "--jsonl", journalPath)...)
 		var got uint64
 		sc = bufio.NewScanner(strings.NewReader(export))
 		sc.Buffer(nil, 1<<20)
@@ -121,7 +130,7 @@ func TestDockerVolumeSurvival(t *testing.T) {
 	// The boundary: the session lives on the volume, not in the container.
 	dockerOut(t, "volume", "rm", volume)
 	dockerOut(t, "volume", "create", volume)
-	cmd := exec.Command("docker", "run", "--rm", "-v", volume+":"+dir, image, "journal", "inspect", journalPath)
+	cmd := exec.Command("docker", cli("journal", "inspect", journalPath)...)
 	out, err := cmd.CombinedOutput()
 	if err == nil || !strings.Contains(string(out), "no such file") {
 		t.Fatalf("after deleting the volume: err=%v, output:\n%s", err, out)

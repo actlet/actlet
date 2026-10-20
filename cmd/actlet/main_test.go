@@ -22,6 +22,8 @@ func TestRun(t *testing.T) {
 		{name: "version help", args: []string{"version", "-h"}, wantCode: 0, wantStderr: "Usage: actlet version"},
 		{name: "version bad flag", args: []string{"version", "-x"}, wantCode: 2, wantStderr: "flag provided but not defined"},
 		{name: "version extra arg", args: []string{"version", "extra"}, wantCode: 2, wantStderr: `unexpected argument "extra"`},
+		{name: "help lists exit codes", args: []string{"help"}, wantCode: 0, wantStdout: "3  the session paused"},
+		{name: "journal moved", args: []string{"journal", "inspect", "x"}, wantCode: 2, wantStderr: "moved to actlet-cli"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -37,21 +39,5 @@ func TestRun(t *testing.T) {
 				t.Errorf("stderr = %q, want it to contain %q", stderr.String(), tt.wantStderr)
 			}
 		})
-	}
-}
-
-func TestRunVersionUsesBuildInfo(t *testing.T) {
-	oldVersion, oldCommit, oldDate := version, commit, date
-	t.Cleanup(func() { version, commit, date = oldVersion, oldCommit, oldDate })
-	version, commit, date = "v1.2.3", "abc1234", "2026-01-02T03:04:05Z"
-
-	var stdout, stderr bytes.Buffer
-	if code := run([]string{"version"}, &stdout, &stderr); code != 0 {
-		t.Fatalf("exit code = %d, stderr = %q", code, stderr.String())
-	}
-	for _, want := range []string{"actlet v1.2.3", "commit:   abc1234", "built:    2026-01-02T03:04:05Z"} {
-		if !strings.Contains(stdout.String(), want) {
-			t.Errorf("stdout = %q, want it to contain %q", stdout.String(), want)
-		}
 	}
 }

@@ -10,7 +10,8 @@ Early development: there is no real agent yet. What works today:
 
 - `actlet run` connects to a gateway, registers its session, and runs a built-in demo task in place of agent work. It takes pause, stop and steer commands, streams activity, and recovers from its journal. See the [gateway protocol](docs/gateway-protocol.md).
 - `actlet-devgw` is a development gateway to run it against, built on the orchestrator SDK in [`sdk/`](sdk).
-- The session journal is the crash-recoverable record each session keeps ([format and guarantees](docs/journal-format.md)). `actlet journal inspect` and `actlet journal export --jsonl` read journals and activity recordings.
+- `actlet-cli` holds the offline tools for journals and recordings; it never runs a session.
+- The session journal is the crash-recoverable record each session keeps ([format and guarantees](docs/journal-format.md)). `actlet-cli journal inspect|export` reads journals and `actlet-cli replay inspect|export` reads activity recordings.
 
 All protocols and formats are experimental (v0).
 
@@ -40,7 +41,7 @@ Requirements: Go 1.27 or newer and GNU Make. `make setup` installs the pinned ve
 
 ```sh
 make setup   # download modules, install development tools
-make build   # build bin/actlet and bin/actlet-devgw
+make build   # build bin/actlet, bin/actlet-cli and bin/actlet-devgw
 make test    # run the tests with the race detector, and a short fuzz run
 make test-docker  # recovery across container replacement (needs Docker)
 make check   # gofmt, go vet, golangci-lint, go.mod tidiness

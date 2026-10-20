@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/actlet/actlet/internal/buildinfo"
 	"github.com/actlet/actlet/internal/gwclient"
 	"github.com/actlet/actlet/internal/runner"
 	"github.com/actlet/actlet/internal/session"
@@ -117,7 +118,7 @@ func runRun(args []string, stdout, stderr io.Writer, signals <-chan os.Signal) i
 		Gateway:            gwclient.Config{Addr: *addr, Token: *token, TLS: *useTLS, CAFile: *caFile},
 		SessionDir:         *dir,
 		WorkerID:           *workerID,
-		Version:            version,
+		Version:            buildinfo.Version,
 		MaxWorkers:         uint32(max(*maxWorkers, 0)),
 		MaxToolConcurrency: uint32(max(*maxTools, 0)),
 		DefaultStopGrace:   *stopGrace,

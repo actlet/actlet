@@ -6,7 +6,7 @@ This document describes the on-disk format, what "durable" means for it, how a d
 
 > **Status: experimental.** This is format version 0. The layout, the record schema and the guarantees below may change incompatibly, and version 0 journals may not be readable by later versions. The provisional file extension is `.actlet`.
 
-The implementation lives in `internal/journal`. Run `actlet journal inspect <file>` to look inside a journal and `actlet journal export --jsonl <file>` to dump its records.
+The implementation lives in `internal/journal`. Run `actlet-cli journal inspect <file>` to look inside a journal and `actlet-cli journal export --jsonl <file>` to dump its records.
 
 ## Design in brief
 
@@ -138,7 +138,7 @@ The rule that decides between truncating and refusing comes from how the writer 
 | A length or count above the configured limits | **limit exceeded** | refuse, even in the final batch |
 | An unknown format version, codec, checksum or flag | **unsupported** | refuse, even in the final batch |
 
-The committed prefix is everything before the first problem. Batches over the limits or in an unknown encoding are never truncated, even at the end of the file, because they may come from a newer or differently configured writer. Corruption in earlier data is never skipped or silently truncated. It is reported with its offset, and someone has to decide what to do. `actlet journal inspect` shows exactly where it is.
+The committed prefix is everything before the first problem. Batches over the limits or in an unknown encoding are never truncated, even at the end of the file, because they may come from a newer or differently configured writer. Corruption in earlier data is never skipped or silently truncated. It is reported with its offset, and someone has to decide what to do. `actlet-cli journal inspect` shows exactly where it is.
 
 `Open` reports what it found in `Writer.Recovery()`. `Truncated()` gives the number of bytes it dropped, and `TailErr` gives the reason. Callers should log every truncation.
 
@@ -146,7 +146,7 @@ The trade-off: if the final batch *was* acknowledged and the storage later damag
 
 The file header is written and synced before `Create` returns, so a journal with a damaged or missing header is reported as corrupt, never as torn.
 
-Readers don't take the lock. `actlet journal inspect` can look at a journal while it's being written, and it then usually sees a clean end, possibly a torn tail.
+Readers don't take the lock. `actlet-cli journal inspect` can look at a journal while it's being written, and it then usually sees a clean end, possibly a torn tail.
 
 ## Limits
 

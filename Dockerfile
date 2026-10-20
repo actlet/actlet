@@ -17,7 +17,7 @@ COPY . .
 ARG TARGETOS TARGETARCH
 ARG VERSION=dev COMMIT=unknown DATE=unknown
 RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath \
-      -ldflags "-s -w -X main.version=${VERSION} -X main.commit=${COMMIT} -X main.date=${DATE}" \
+      -ldflags "-s -w -X github.com/actlet/actlet/internal/buildinfo.Version=${VERSION} -X github.com/actlet/actlet/internal/buildinfo.Commit=${COMMIT} -X github.com/actlet/actlet/internal/buildinfo.Date=${DATE}" \
       -o /out/actlet ./cmd/actlet \
  && mkdir /out/session
 

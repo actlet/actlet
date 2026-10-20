@@ -16,7 +16,7 @@ import (
 )
 
 const journalUsage = `Usage:
-  actlet journal <command> [arguments]
+  actlet-cli journal <command> [arguments]
 
 Commands:
   inspect    Show a journal's header, batches and validity
@@ -41,7 +41,7 @@ func runJournal(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprint(stdout, journalUsage)
 		return 0
 	default:
-		fmt.Fprintf(stderr, "actlet journal: unknown command %q\n\n", cmd)
+		fmt.Fprintf(stderr, "actlet-cli journal: unknown command %q\n\n", cmd)
 		fmt.Fprint(stderr, journalUsage)
 		return 2
 	}
@@ -56,7 +56,7 @@ func parseFileArgs(fs *flag.FlagSet, args []string, stderr io.Writer) (string, i
 		return "", 2, false
 	}
 	if fs.NArg() != 1 {
-		fmt.Fprintf(stderr, "actlet journal %s: expected one journal file\n", fs.Name())
+		fmt.Fprintf(stderr, "actlet-cli %s: expected one file\n", fs.Name())
 		fs.Usage()
 		return "", 2, false
 	}
@@ -83,11 +83,11 @@ func openJournal(path string, opts journal.ReaderOptions) (*journal.Reader, int6
 }
 
 func runJournalInspect(args []string, stdout, stderr io.Writer) int {
-	fs := flag.NewFlagSet("inspect", flag.ContinueOnError)
+	fs := flag.NewFlagSet("journal inspect", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	summary := fs.Bool("summary", false, "print only the summary, not every batch")
 	fs.Usage = func() {
-		fmt.Fprintln(stderr, "Usage: actlet journal inspect [-summary] <file>")
+		fmt.Fprintln(stderr, "Usage: actlet-cli journal inspect [-summary] <file>")
 		fmt.Fprintln(stderr)
 		fmt.Fprintln(stderr, "Validate a journal and print its header, batches and committed prefix.")
 		fmt.Fprintln(stderr, "Exits 1 if the journal is corrupt or unreadable. An incomplete or damaged")
@@ -110,7 +110,7 @@ func runJournalInspect(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	if err != nil {
-		fmt.Fprintf(stderr, "actlet journal inspect: %v\n", err)
+		fmt.Fprintf(stderr, "actlet-cli journal inspect: %v\n", err)
 		return 1
 	}
 	defer closeJournal()
@@ -198,7 +198,7 @@ func printInvalid(stdout io.Writer, path string, err error, intact int64) {
 		fmt.Fprintln(stdout, "hint:     data that was already synced is damaged, so the journal can't be opened for")
 		fmt.Fprintln(stdout, "          writing. Keep a copy of the file before changing it.")
 		if intact > 0 {
-			fmt.Fprintf(stdout, "          Export the intact records with: actlet journal export --jsonl %s\n", path)
+			fmt.Fprintf(stdout, "          Export the intact records with: actlet-cli journal export --jsonl %s\n", path)
 		}
 	case errors.Is(fe, journal.ErrLimit):
 		fmt.Fprintln(stdout, "hint:     a batch is larger than this build accepts. It may have been written with")
@@ -220,11 +220,11 @@ type exportRecord struct {
 }
 
 func runJournalExport(args []string, stdout, stderr io.Writer) int {
-	fs := flag.NewFlagSet("export", flag.ContinueOnError)
+	fs := flag.NewFlagSet("journal export", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	jsonl := fs.Bool("jsonl", false, "export as JSON Lines, one record per line (required)")
 	fs.Usage = func() {
-		fmt.Fprintln(stderr, "Usage: actlet journal export --jsonl <file>")
+		fmt.Fprintln(stderr, "Usage: actlet-cli journal export --jsonl <file>")
 		fmt.Fprintln(stderr)
 		fmt.Fprintln(stderr, "Write every record of the journal's valid prefix to standard output.")
 		fmt.Fprintln(stderr, "Each line holds seq, kind, time and data (or data_base64 for binary data).")
@@ -238,13 +238,13 @@ func runJournalExport(args []string, stdout, stderr io.Writer) int {
 		return code
 	}
 	if !*jsonl {
-		fmt.Fprintln(stderr, "actlet journal export: choose an output format: --jsonl")
+		fmt.Fprintln(stderr, "actlet-cli journal export: choose an output format: --jsonl")
 		return 2
 	}
 
 	r, _, closeJournal, err := openJournal(path, journal.ReaderOptions{})
 	if err != nil {
-		fmt.Fprintf(stderr, "actlet journal export: %v\n", err)
+		fmt.Fprintf(stderr, "actlet-cli journal export: %v\n", err)
 		return 1
 	}
 	defer closeJournal()
@@ -258,12 +258,12 @@ func runJournalExport(args []string, stdout, stderr io.Writer) int {
 			break
 		}
 		if errors.Is(err, journal.ErrTornTail) {
-			fmt.Fprintf(stderr, "actlet journal export: stopped at an incomplete final batch: %v\n", err)
+			fmt.Fprintf(stderr, "actlet-cli journal export: stopped at an incomplete final batch: %v\n", err)
 			break
 		}
 		if err != nil {
 			_ = out.Flush()
-			fmt.Fprintf(stderr, "actlet journal export: %v\n", err)
+			fmt.Fprintf(stderr, "actlet-cli journal export: %v\n", err)
 			return 1
 		}
 		for _, rec := range b.Records {
@@ -275,13 +275,13 @@ func runJournalExport(args []string, stdout, stderr io.Writer) int {
 				line.DataBase64 = rec.Data
 			}
 			if err := enc.Encode(line); err != nil {
-				fmt.Fprintf(stderr, "actlet journal export: %v\n", err)
+				fmt.Fprintf(stderr, "actlet-cli journal export: %v\n", err)
 				return 1
 			}
 		}
 	}
 	if err := out.Flush(); err != nil {
-		fmt.Fprintf(stderr, "actlet journal export: %v\n", err)
+		fmt.Fprintf(stderr, "actlet-cli journal export: %v\n", err)
 		return 1
 	}
 	return 0

@@ -17,3 +17,8 @@ coverage.*
 .vscode/
 *.swp
 .DS_Store
+
+# Binaries from a plain "go build" in the repository root
+/actlet
+/actlet-cli
+/actlet-devgw
