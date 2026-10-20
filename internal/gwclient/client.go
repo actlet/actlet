@@ -378,10 +378,12 @@ func (c *Client) RunActivity(ctx context.Context, sessionID string, src Activity
 	for {
 		progressed, err := c.activityOnce(ctx, sessionID, src)
 		switch {
-		case err == nil:
+		case err == nil && src.Done():
 			return nil
 		case ctx.Err() != nil:
 			return ctx.Err()
+		case err == nil:
+			err = errStreamClosed // never give up on a source with events left
 		}
 		if progressed {
 			b.reset()
@@ -399,15 +401,20 @@ func (c *Client) RunActivity(ctx context.Context, sessionID string, src Activity
 	}
 }
 
-var errAckTimeout = errors.New("no acknowledgement in time")
+var (
+	errAckTimeout   = errors.New("no acknowledgement in time")
+	errStreamClosed = errors.New("activity stream closed")
+)
 
 func (c *Client) activityOnce(ctx context.Context, sessionID string, src ActivitySource) (progressed bool, err error) {
 	sctx, cancel := context.WithCancelCause(ctx)
 	defer cancel(nil)
+	c.log.Debug("activity: opening stream", "epoch", src.Epoch())
 	stream, err := c.gw.PublishActivity(sctx, grpc.WaitForReady(true))
 	if err != nil {
 		return false, err
 	}
+	c.log.Debug("activity: stream open, sending hello", "epoch", src.Epoch())
 	hello := &gatewayv0.ActivityUp{Msg: &gatewayv0.ActivityUp_Hello{Hello: &gatewayv0.ActivityHello{SessionId: sessionID, Epoch: src.Epoch()}}}
 	if err := stream.Send(hello); err != nil {
 		return false, err
@@ -418,6 +425,7 @@ func (c *Client) activityOnce(ctx context.Context, sessionID string, src Activit
 	}
 	src.Ack(first.GetAckedSeq())
 	sent := first.GetAckedSeq()
+	c.log.Debug("activity: resuming", "epoch", src.Epoch(), "gateway_has", sent)
 
 	// Acknowledgements arrive on their own goroutine.
 	var mu sync.Mutex
@@ -427,6 +435,7 @@ func (c *Client) activityOnce(ctx context.Context, sessionID string, src Activit
 		for {
 			ack, err := stream.Recv()
 			if err != nil {
+				c.log.Debug("activity: stream ended", "epoch", src.Epoch(), "err", err)
 				cancel(err)
 				return
 			}
@@ -461,20 +470,27 @@ func (c *Client) activityOnce(ctx context.Context, sessionID string, src Activit
 		}
 	}()
 
-	fail := func() (bool, error) {
+	// fail reports why the stream ended. It never returns a nil error: a
+	// Send can fail before the receiving goroutine has recorded the cause.
+	fail := func(err error) (bool, error) {
 		mu.Lock()
 		defer mu.Unlock()
-		if cause := context.Cause(sctx); cause != nil && ctx.Err() == nil {
-			return progressed, cause
+		switch {
+		case ctx.Err() != nil:
+			err = ctx.Err()
+		case context.Cause(sctx) != nil:
+			err = context.Cause(sctx)
+		case err == nil:
+			err = errStreamClosed
 		}
-		return progressed, ctx.Err()
+		return progressed, err
 	}
 	for {
 		// Keep at most Window events unacknowledged.
 		for sent-src.Acked() >= uint64(c.cfg.Window) {
 			select {
 			case <-sctx.Done():
-				return fail()
+				return fail(nil)
 			case <-acked:
 			}
 		}
@@ -484,7 +500,7 @@ func (c *Client) activityOnce(ctx context.Context, sessionID string, src Activit
 			for !src.Done() {
 				select {
 				case <-sctx.Done():
-					return fail()
+					return fail(nil)
 				case <-acked:
 				}
 			}
@@ -492,10 +508,10 @@ func (c *Client) activityOnce(ctx context.Context, sessionID string, src Activit
 			return true, nil
 		}
 		if err != nil {
-			return fail()
+			return fail(err)
 		}
 		if err := stream.Send(&gatewayv0.ActivityUp{Msg: &gatewayv0.ActivityUp_Batch{Batch: &gatewayv0.ActivityBatch{Events: evs}}}); err != nil {
-			return fail()
+			return fail(fmt.Errorf("send: %w", err))
 		}
 		mu.Lock()
 		if sent == src.Acked() {

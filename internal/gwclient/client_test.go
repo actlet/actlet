@@ -461,3 +461,28 @@ func TestNewRejectsBadConfig(t *testing.T) {
 		t.Error("New with a missing CA file succeeded")
 	}
 }
+
+// A gateway that ends the stream while the worker is sending must not stop
+// delivery: the worker reconnects and finishes.
+func TestActivityReconnectsWhenGatewayEndsStream(t *testing.T) {
+	var streams atomic.Int32
+	received := make(chan uint64, 100)
+	acking := ackingPublisher(0, received)
+	c := serve(t, &fakeGateway{publish: func(s gatewayv0.Gateway_PublishActivityServer) error {
+		if streams.Add(1) <= 3 {
+			// Answer the hello, then end the stream at once.
+			if _, err := s.Recv(); err != nil {
+				return err
+			}
+			return s.Send(&gatewayv0.ActivityAck{Epoch: 1})
+		}
+		return acking(s)
+	}}, Config{})
+	src := newSource(50)
+	if err := c.RunActivity(ctxT(t, 5*time.Second), "s1", src, nil); err != nil {
+		t.Fatalf("RunActivity: %v", err)
+	}
+	if !src.Done() || streams.Load() != 4 {
+		t.Fatalf("done %v after %d streams, want everything delivered on the fourth", src.Done(), streams.Load())
+	}
+}
