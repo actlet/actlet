@@ -3,7 +3,10 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"encoding/json"
+	"fmt"
+	"hash/crc32"
 	"os"
 	"path/filepath"
 	"strings"
@@ -61,15 +64,22 @@ func TestJournalInspectTornAndCorrupt(t *testing.T) {
 
 	// headerLen is the file header size for the session ID "cli-test".
 	const headerLen = 14 + len("cli-test") + 4
+	secondBatch := headerLen + 40 + int(binary.LittleEndian.Uint32(data[headerLen+20:]))
 	cases := []struct {
 		name     string
 		data     []byte
 		wantCode int
 		want     []string
 	}{
-		{"incomplete final batch", data[:len(data)-5], 0, []string{"records:  3 (seq 1-3)", "would truncate the last"}},
+		{"incomplete final batch", data[:len(data)-5], 0, []string{"records:  3 (seq 1-3)", "would truncate the last", "hint:"}},
 		{"damaged final batch", flip(data, len(data)-10), 0, []string{"records:  3 (seq 1-3)", "damaged final batch"}},
-		{"damaged first batch", flip(data, headerLen+33), 1, []string{"records:  0", "INVALID"}},
+		{"damaged first batch", flip(data, headerLen+33), 1, []string{
+			"records:  0", "INVALID", fmt.Sprintf("problem:  at offset %d; 0 intact records", headerLen),
+		}},
+		{"damaged second batch", flip(data, secondBatch+33), 1, []string{
+			"records:  1 (seq 1-1)", "INVALID", "1 intact record before it", "journal export --jsonl",
+		}},
+		{"unknown version", setVersion(data, 9), 1, []string{"INVALID", "in the file header", "newer version"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -81,6 +91,7 @@ func TestJournalInspectTornAndCorrupt(t *testing.T) {
 			if code := run([]string{"journal", "inspect", "-summary", path}, &stdout, &stderr); code != tc.wantCode {
 				t.Fatalf("exit %d, want %d\n%s", code, tc.wantCode, stdout.String())
 			}
+			t.Logf("inspect output:\n%s", stdout.String())
 			for _, w := range tc.want {
 				if !strings.Contains(stdout.String(), w) {
 					t.Errorf("output missing %q:\n%s", w, stdout.String())
@@ -88,6 +99,16 @@ func TestJournalInspectTornAndCorrupt(t *testing.T) {
 			}
 		})
 	}
+}
+
+// setVersion rewrites the format version in the file header and fixes up
+// the header CRC.
+func setVersion(data []byte, v uint16) []byte {
+	c := bytes.Clone(data)
+	n := 14 + int(binary.LittleEndian.Uint16(c[12:]))
+	binary.LittleEndian.PutUint16(c[8:], v)
+	binary.LittleEndian.PutUint32(c[n:], crc32.Checksum(c[:n], crc32.MakeTable(crc32.Castagnoli)))
+	return c
 }
 
 func flip(data []byte, i int) []byte {

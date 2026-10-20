@@ -102,6 +102,13 @@ func runJournalInspect(args []string, stdout, stderr io.Writer) int {
 	}
 
 	r, size, closeJournal, err := openJournal(path, journal.ReaderOptions{})
+	var fe *journal.FormatError
+	if errors.As(err, &fe) {
+		// The file header itself is invalid.
+		fmt.Fprintf(stdout, "file:     %s\n", path)
+		printInvalid(stdout, path, err, -1)
+		return 1
+	}
 	if err != nil {
 		fmt.Fprintf(stderr, "actlet journal inspect: %v\n", err)
 		return 1
@@ -119,7 +126,8 @@ func runJournalInspect(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stdout)
 		fmt.Fprintln(tw, "batch\toffset\tfirst seq\tlast seq\trecords\tcodec\tstored\traw\t")
 	}
-	var batches, records, stored, raw uint64
+	var batches, stored, raw uint64
+	var records int64
 	var endErr error
 	for {
 		b, err := r.Next()
@@ -128,7 +136,7 @@ func runJournalInspect(args []string, stdout, stderr io.Writer) int {
 			break
 		}
 		batches++
-		records += uint64(b.Count)
+		records += int64(b.Count)
 		stored += uint64(b.FrameLen)
 		raw += uint64(b.RawLen)
 		if !*summary {
@@ -150,17 +158,54 @@ func runJournalInspect(args []string, stdout, stderr io.Writer) int {
 	}
 	fmt.Fprintf(stdout, "valid to: offset %d\n", r.Offset())
 
-	switch {
-	case errors.Is(endErr, io.EOF):
+	if errors.Is(endErr, io.EOF) {
 		fmt.Fprintln(stdout, "status:   ok")
 		return 0
-	case errors.Is(endErr, journal.ErrTornTail):
+	}
+	if errors.Is(endErr, journal.ErrTornTail) {
 		fmt.Fprintf(stdout, "status:   ok, but opening the journal for writing would truncate the last %d bytes\n", size-r.Offset())
 		fmt.Fprintf(stdout, "          (%v)\n", endErr)
+		fmt.Fprintln(stdout, "hint:     this is what an interrupted write or a power loss leaves behind: the final")
+		fmt.Fprintln(stdout, "          batch never fully reached the disk, so its records were most likely never")
+		fmt.Fprintln(stdout, "          acknowledged.")
 		return 0
-	default:
-		fmt.Fprintf(stdout, "status:   INVALID: %v\n", endErr)
-		return 1
+	}
+
+	printInvalid(stdout, path, endErr, records)
+	return 1
+}
+
+// printInvalid prints the status of an invalid journal, where the problem is
+// and what to do about it. intact is the number of records before the
+// problem, or -1 if the file header itself is invalid.
+func printInvalid(stdout io.Writer, path string, err error, intact int64) {
+	fmt.Fprintf(stdout, "status:   INVALID: %v\n", err)
+	var fe *journal.FormatError
+	if !errors.As(err, &fe) {
+		return
+	}
+	if intact < 0 {
+		fmt.Fprintf(stdout, "problem:  in the file header, at offset %d\n", fe.Offset)
+	} else {
+		plural := "s"
+		if intact == 1 {
+			plural = ""
+		}
+		fmt.Fprintf(stdout, "problem:  at offset %d; %d intact record%s before it\n", fe.Offset, intact, plural)
+	}
+	switch {
+	case errors.Is(fe, journal.ErrCorrupt):
+		fmt.Fprintln(stdout, "hint:     data that was already synced is damaged, so the journal can't be opened for")
+		fmt.Fprintln(stdout, "          writing. Keep a copy of the file before changing it.")
+		if intact > 0 {
+			fmt.Fprintf(stdout, "          Export the intact records with: actlet journal export --jsonl %s\n", path)
+		}
+	case errors.Is(fe, journal.ErrLimit):
+		fmt.Fprintln(stdout, "hint:     a batch is larger than this build accepts. It may have been written with")
+		fmt.Fprintln(stdout, "          larger limits; read it with a build configured the same way.")
+	case errors.Is(fe, journal.ErrUnsupported):
+		fmt.Fprintln(stdout, "hint:     the journal uses a format version, codec or checksum this build doesn't know.")
+		fmt.Fprintln(stdout, "          It was probably written by a newer version of actlet.")
 	}
 }
 

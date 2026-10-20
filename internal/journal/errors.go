@@ -14,7 +14,7 @@ var (
 	// ErrTornTail reports an incomplete or damaged final batch at the end of
 	// the file, left by a write that never fully reached the disk. Recovery
 	// truncates it.
-	ErrTornTail = errors.New("journal: incomplete trailing batch")
+	ErrTornTail = errors.New("journal: torn final batch")
 
 	// ErrLimit reports a length that exceeds the configured limits.
 	ErrLimit = errors.New("journal: limit exceeded")
