@@ -178,14 +178,17 @@ func (m *Model) Serve(ctx context.Context, call *sdk.InferenceCall) error {
 		}
 	}
 	for i, c := range turn.ToolCalls {
-		input := []byte("{}")
+		input := "{}"
 		if c.Input != nil {
-			var err error
-			if input, err = json.Marshal(c.Input); err != nil {
+			var buf bytes.Buffer
+			enc := json.NewEncoder(&buf)
+			enc.SetEscapeHTML(false)
+			if err := enc.Encode(c.Input); err != nil {
 				return status.Errorf(codes.Internal, "scripted model: %v", err)
 			}
+			input = strings.TrimSuffix(buf.String(), "\n")
 		}
-		if err := call.ToolCall(fmt.Sprintf("call_%d_%d", n+1, i+1), c.Name, string(input)); err != nil {
+		if err := call.ToolCall(fmt.Sprintf("call_%d_%d", n+1, i+1), c.Name, input); err != nil {
 			return err
 		}
 	}
