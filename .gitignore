@@ -1,0 +1,19 @@
+# Build output
+/bin/
+/dist/
+
+# Test and coverage output
+*.test
+*.out
+coverage.*
+*.coverprofile
+
+# Local session journals and activity recordings
+*.actlet
+*.actrec
+
+# Editors and OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
