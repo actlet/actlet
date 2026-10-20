@@ -295,9 +295,16 @@ func (w *worker) spawn(call *gatewayv0.ToolCall, prev *agentpb.ToolIntent) error
 		}
 	}
 
-	// Wait for the subagent; it runs on its own goroutine.
+	// Wait for the subagent; it runs on its own goroutine. One that
+	// crashed without finishing, such as with a panic, failed: its parent
+	// carries on.
 	if err := b.waitFor(child); err != nil {
-		return err
+		if b.view(child).GetDone() == nil {
+			crashed := &agentpb.WorkerDone{WorkerId: child, IsError: true, Result: "the subagent failed: " + err.Error()}
+			if err := b.commit(crashed); err != nil {
+				return err
+			}
+		}
 	}
 	st := b.view(child)
 	done := st.GetDone()

@@ -316,3 +316,17 @@ func TestSteerGoesToRoot(t *testing.T) {
 	s.steers = []Steer{{CommandID: "c1", Note: "a note"}}
 	s.mustFinish()
 }
+
+// A subagent that panics fails on its own: its parent gets the failure as
+// the call's result and carries on.
+func TestSubagentPanic(t *testing.T) {
+	s := newSandbox(t,
+		turn{calls: [][2]string{spawnCall("doomed")}},
+		turn{check: expect("the subagent failed: worker root.1 panicked"), text: "done anyway"},
+	)
+	s.model.sub["doomed"] = []turn{{check: func(*gatewayv0.InferenceRequest) error { panic("boom") }}}
+	s.mustFinish()
+	if s.file("output/result.md") != "done anyway\n" {
+		t.Errorf("result.md = %q", s.file("output/result.md"))
+	}
+}
