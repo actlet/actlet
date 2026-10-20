@@ -116,7 +116,7 @@ A batch can be fully written but not acknowledged: the process dies between the 
 
 ## Recovery
 
-`Open` takes the lock, then reads the journal from the start and validates every batch. It stops at the first problem and classifies it.
+`Open` takes the lock, then reads the journal from the start and validates the framing, checksums and sequence numbers of every batch. It doesn't decompress or decode payloads, which makes opening a large journal roughly twenty times faster. It stops at the first problem and classifies it.
 
 The rule that decides between truncating and refusing comes from how the writer works. It syncs every batch before it writes the next one, so at most the **final** batch can be unsynced at any moment. Damage confined to the final batch is therefore what an interrupted write or a power loss leaves behind, and it is truncated. Damage in a batch that another batch follows is in data that was already synced, so it is corruption.
 
@@ -130,7 +130,8 @@ The rule that decides between truncating and refusing comes from how the writer 
 | A bad commit trailer or checksum in a batch with only zeros or nothing after it | **torn tail** (damaged final batch) | truncate, sync, append |
 | An invalid batch header with a valid batch somewhere after it | **corruption** | refuse to open, leave the file as is |
 | A bad commit trailer or checksum in a batch followed by more data | **corruption** | refuse |
-| A payload that passes its checksum but doesn't decode, a wrong record count or a sequence gap | **corruption** | refuse |
+| A sequence gap between batches | **corruption** | refuse |
+| A payload that passes its checksum but doesn't decode, or holds the wrong records | **corruption** | `Open` doesn't decode payloads, so this is reported when the records are read |
 | A length or count above the configured limits | **limit exceeded** | refuse, even in the final batch |
 | An unknown format version, codec, checksum or flag | **unsupported** | refuse, even in the final batch |
 

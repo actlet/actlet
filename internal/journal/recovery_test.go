@@ -286,3 +286,25 @@ func TestReaderSeesLiveJournal(t *testing.T) {
 		t.Fatalf("read %d records, want 4", len(got))
 	}
 }
+
+// Open validates checksums without decoding payloads; a batch that passes
+// its checksum but doesn't decode is reported when its records are read.
+func TestOpenDoesNotDecodePayloads(t *testing.T) {
+	data := fixture(t, 1)
+	garbage := []byte("not protobuf \xff\xff\xff")
+	data = append(data, craftBatch(batchHeader{codec: CodecNone, firstSeq: 2, count: 1,
+		storedLen: uint32(len(garbage)), rawLen: uint32(len(garbage))}, garbage)...)
+	path := tempJournal(t)
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	w := mustOpen(t, path, testOptions())
+	if got := w.Recovery(); got.LastSeq != 2 || got.Tail != TailClean {
+		t.Fatalf("Recovery = %+v, want 2 records and a clean tail", got)
+	}
+	mustClose(t, w)
+	if _, err := scanBytes(data, ReaderOptions{}); !errors.Is(err, ErrCorrupt) {
+		t.Fatalf("decoding scan: err = %v, want ErrCorrupt", err)
+	}
+}

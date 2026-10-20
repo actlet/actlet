@@ -210,6 +210,10 @@ func Create(path string, opts Options) (w *Writer, err error) {
 // scans the file: a torn trailing batch is truncated and the truncation
 // synced; corruption or an unsupported format is returned as an error and
 // the journal is left untouched.
+//
+// The scan validates framing and checksums but doesn't decode payloads.
+// A payload that passes its checksum yet doesn't decode, which only a
+// faulty writer can produce, is reported when the records are read.
 func Open(path string, opts Options) (w *Writer, err error) {
 	opts, err = opts.withDefaults()
 	if err != nil {
@@ -234,7 +238,9 @@ func Open(path string, opts Options) (w *Writer, err error) {
 		return nil, fmt.Errorf("journal: stat: %w", err)
 	}
 
-	res, err := Scan(f, st.Size(), ReaderOptions{Limits: opts.Limits})
+	// Recovery needs framing, checksums and sequence ranges, not records:
+	// skip decoding payloads, which is most of the cost of a scan.
+	res, err := Scan(f, st.Size(), ReaderOptions{Limits: opts.Limits, SkipRecords: true})
 	if err != nil {
 		return nil, err
 	}
