@@ -26,6 +26,11 @@ type fakeGateway struct {
 	register func(context.Context, *gatewayv0.RegisterRequest) (*gatewayv0.RegisterResponse, error)
 	control  func(gatewayv0.Gateway_ControlServer) error
 	publish  func(gatewayv0.Gateway_PublishActivityServer) error
+	infer    func(*gatewayv0.InferenceRequest, gatewayv0.Gateway_InferServer) error
+}
+
+func (f *fakeGateway) Infer(req *gatewayv0.InferenceRequest, s gatewayv0.Gateway_InferServer) error {
+	return f.infer(req, s)
 }
 
 func (f *fakeGateway) Register(ctx context.Context, req *gatewayv0.RegisterRequest) (*gatewayv0.RegisterResponse, error) {

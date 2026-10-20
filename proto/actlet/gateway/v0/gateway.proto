@@ -32,6 +32,12 @@ service Gateway {
   // first message is an ActivityHello; the gateway answers with an
   // ActivityAck of what it already has, and the worker sends from there.
   rpc PublishActivity(stream ActivityUp) returns (stream ActivityAck);
+
+  // Infer makes one model call for a session's agent: the worker sends the
+  // conversation, and the gateway streams the model's answer. The gateway
+  // resolves the model alias to a provider and model of its choosing; the
+  // worker never sees providers or credentials.
+  rpc Infer(InferenceRequest) returns (stream InferenceResponse);
 }
 
 // --- Registration ---
@@ -79,10 +85,22 @@ message Profile {
   // Not enforced by v0 workers yet.
   repeated Budget budgets = 8;
   // The models the session may use, by alias. Workers never see provider
-  // names or credentials. Not used by v0 workers yet.
+  // names or credentials. The agent uses the alias of the "main" role.
   ModelCatalog models = 9;
-  // The tools the session may use. Not enforced by v0 workers yet.
+  // The local tools the session may use, with their settings. Empty
+  // allows all of them with default settings.
   repeated ToolGrant tools = 10;
+  // The implementor's instructions to the agent, added to Actlet's base
+  // prompt.
+  string instructions = 11;
+  // Replaces Actlet's base prompt when set.
+  string base_prompt = 12;
+  // Notes on what is installed in the container and how to use it, added
+  // to the agent's prompt along with any manifest in the image.
+  string tools_manifest = 13;
+  // How many model turns pass between execution checkpoints. 0 means
+  // every turn.
+  uint32 checkpoint_every_turns = 14;
 }
 
 message Budget {
@@ -330,6 +348,10 @@ message ActivityEvent {
     SteerNote steer = 13;
     Text text = 14;
     Gap gap = 15;
+    ModelTurn model_turn = 16;
+    ToolStarted tool_started = 17;
+    ToolFinished tool_finished = 18;
+    FileChange file_change = 19;
   }
 }
 
@@ -369,4 +391,150 @@ message Gap {
   uint64 dropped = 1;
   google.protobuf.Timestamp first = 2;
   google.protobuf.Timestamp last = 3;
+}
+
+// ModelTurn is one completed model call of the agent.
+message ModelTurn {
+  uint64 turn = 1;
+  string model = 2;
+  // The model's text, possibly cut short.
+  string text = 3;
+  // Names of the tools the model called.
+  repeated string tool_calls = 4;
+  StopReason stop_reason = 5;
+  Usage usage = 6;
+}
+
+// ToolStarted is a tool call the agent is starting.
+message ToolStarted {
+  string call_id = 1;
+  string tool = 2;
+  // The call's JSON input, possibly cut short.
+  string input = 3;
+}
+
+// ToolFinished is the result of a tool call.
+message ToolFinished {
+  string call_id = 1;
+  string tool = 2;
+  bool is_error = 3;
+  // The outcome is unknown: the worker stopped while the call ran.
+  bool outcome_unknown = 4;
+  // What the model is told, possibly cut short.
+  string output = 5;
+  google.protobuf.Duration took = 6;
+}
+
+// FileChange is a file a tool changed.
+message FileChange {
+  string call_id = 1;
+  // Relative to the workspace when inside it.
+  string path = 2;
+  bool created = 3;
+  // A unified diff, possibly cut short.
+  string diff = 4;
+}
+
+// --- Inference ---
+
+// InferenceRequest is one model call. The conversation is provider
+// neutral; the continuation carries whatever provider state the gateway
+// needs between calls.
+message InferenceRequest {
+  string session_id = 1;
+  uint64 epoch = 2;
+  // Identifies the call. The worker records it before calling and sends
+  // the same ID when it retries the call, also after a crash, so the
+  // gateway can use it as an idempotency key: a call with an ID the
+  // gateway has already answered should get the same answer.
+  string intent_id = 3;
+  // The model alias from the profile's catalogue.
+  string model = 4;
+  string system = 5;
+  repeated Message messages = 6;
+  repeated ToolSpec tools = 7;
+  // The continuation of the previous response in this conversation,
+  // passed back unchanged. The worker never interprets it.
+  bytes continuation = 8;
+  // 0 lets the gateway choose.
+  uint32 max_output_tokens = 9;
+}
+
+message Message {
+  Role role = 1;
+  repeated Part parts = 2;
+}
+
+enum Role {
+  ROLE_UNSPECIFIED = 0;
+  ROLE_USER = 1;
+  ROLE_ASSISTANT = 2;
+}
+
+message Part {
+  oneof part {
+    string text = 1;
+    ToolCall tool_call = 2;
+    ToolResult tool_result = 3;
+  }
+}
+
+// ToolCall is the model asking to run a tool.
+message ToolCall {
+  // Unique within the conversation; chosen by the model's provider.
+  string id = 1;
+  string name = 2;
+  // The input, a JSON object.
+  string input = 3;
+}
+
+// ToolResult answers a ToolCall, in a user message.
+message ToolResult {
+  string call_id = 1;
+  string content = 2;
+  bool is_error = 3;
+}
+
+// ToolSpec describes a tool the model may call.
+message ToolSpec {
+  string name = 1;
+  string description = 2;
+  // The JSON schema of the tool's input.
+  string input_schema = 3;
+}
+
+// InferenceResponse streams the answer: text deltas and complete tool
+// calls in the order the model produced them, then Done.
+message InferenceResponse {
+  oneof msg {
+    string text_delta = 1;
+    ToolCall tool_call = 2;
+    InferenceDone done = 3;
+  }
+}
+
+message InferenceDone {
+  StopReason stop_reason = 1;
+  Usage usage = 2;
+  // Passed back with the next request of the conversation.
+  bytes continuation = 3;
+  // The gateway answered from an earlier call with the same intent ID.
+  bool replayed = 4;
+}
+
+enum StopReason {
+  STOP_REASON_UNSPECIFIED = 0;
+  // The model finished its answer.
+  STOP_REASON_END_TURN = 1;
+  // The model wants tool results.
+  STOP_REASON_TOOL_USE = 2;
+  STOP_REASON_MAX_TOKENS = 3;
+  STOP_REASON_REFUSAL = 4;
+}
+
+message Usage {
+  uint64 input_tokens = 1;
+  uint64 output_tokens = 2;
+  uint64 cache_read_tokens = 3;
+  uint64 cache_write_tokens = 4;
 }

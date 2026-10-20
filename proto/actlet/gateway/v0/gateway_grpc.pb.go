@@ -31,6 +31,7 @@ const (
 	Gateway_Register_FullMethodName        = "/actlet.gateway.v0.Gateway/Register"
 	Gateway_Control_FullMethodName         = "/actlet.gateway.v0.Gateway/Control"
 	Gateway_PublishActivity_FullMethodName = "/actlet.gateway.v0.Gateway/PublishActivity"
+	Gateway_Infer_FullMethodName           = "/actlet.gateway.v0.Gateway/Infer"
 )
 
 // GatewayClient is the client API for Gateway service.
@@ -51,6 +52,11 @@ type GatewayClient interface {
 	// first message is an ActivityHello; the gateway answers with an
 	// ActivityAck of what it already has, and the worker sends from there.
 	PublishActivity(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[ActivityUp, ActivityAck], error)
+	// Infer makes one model call for a session's agent: the worker sends the
+	// conversation, and the gateway streams the model's answer. The gateway
+	// resolves the model alias to a provider and model of its choosing; the
+	// worker never sees providers or credentials.
+	Infer(ctx context.Context, in *InferenceRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[InferenceResponse], error)
 }
 
 type gatewayClient struct {
@@ -97,6 +103,25 @@ func (c *gatewayClient) PublishActivity(ctx context.Context, opts ...grpc.CallOp
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type Gateway_PublishActivityClient = grpc.BidiStreamingClient[ActivityUp, ActivityAck]
 
+func (c *gatewayClient) Infer(ctx context.Context, in *InferenceRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[InferenceResponse], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &Gateway_ServiceDesc.Streams[2], Gateway_Infer_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[InferenceRequest, InferenceResponse]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type Gateway_InferClient = grpc.ServerStreamingClient[InferenceResponse]
+
 // GatewayServer is the server API for Gateway service.
 // All implementations must embed UnimplementedGatewayServer
 // for forward compatibility.
@@ -115,6 +140,11 @@ type GatewayServer interface {
 	// first message is an ActivityHello; the gateway answers with an
 	// ActivityAck of what it already has, and the worker sends from there.
 	PublishActivity(grpc.BidiStreamingServer[ActivityUp, ActivityAck]) error
+	// Infer makes one model call for a session's agent: the worker sends the
+	// conversation, and the gateway streams the model's answer. The gateway
+	// resolves the model alias to a provider and model of its choosing; the
+	// worker never sees providers or credentials.
+	Infer(*InferenceRequest, grpc.ServerStreamingServer[InferenceResponse]) error
 	mustEmbedUnimplementedGatewayServer()
 }
 
@@ -133,6 +163,9 @@ func (UnimplementedGatewayServer) Control(grpc.BidiStreamingServer[ControlUp, Co
 }
 func (UnimplementedGatewayServer) PublishActivity(grpc.BidiStreamingServer[ActivityUp, ActivityAck]) error {
 	return status.Error(codes.Unimplemented, "method PublishActivity not implemented")
+}
+func (UnimplementedGatewayServer) Infer(*InferenceRequest, grpc.ServerStreamingServer[InferenceResponse]) error {
+	return status.Error(codes.Unimplemented, "method Infer not implemented")
 }
 func (UnimplementedGatewayServer) mustEmbedUnimplementedGatewayServer() {}
 func (UnimplementedGatewayServer) testEmbeddedByValue()                 {}
@@ -187,6 +220,17 @@ func _Gateway_PublishActivity_Handler(srv interface{}, stream grpc.ServerStream)
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type Gateway_PublishActivityServer = grpc.BidiStreamingServer[ActivityUp, ActivityAck]
 
+func _Gateway_Infer_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(InferenceRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(GatewayServer).Infer(m, &grpc.GenericServerStream[InferenceRequest, InferenceResponse]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type Gateway_InferServer = grpc.ServerStreamingServer[InferenceResponse]
+
 // Gateway_ServiceDesc is the grpc.ServiceDesc for Gateway service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -211,6 +255,11 @@ var Gateway_ServiceDesc = grpc.ServiceDesc{
 			Handler:       _Gateway_PublishActivity_Handler,
 			ServerStreams: true,
 			ClientStreams: true,
+		},
+		{
+			StreamName:    "Infer",
+			Handler:       _Gateway_Infer_Handler,
+			ServerStreams: true,
 		},
 	},
 	Metadata: "actlet/gateway/v0/gateway.proto",

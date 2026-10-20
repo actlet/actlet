@@ -8,13 +8,14 @@ This document describes protocol version **v0**, how Actlet behaves on top of it
 
 ## Overview
 
-The transport is gRPC over one address. A worker uses three calls:
+The transport is gRPC over one address. A worker uses four calls:
 
 | Call | Kind | Purpose |
 |---|---|---|
 | `Register` | unary | Attach the worker to a session; receive the profile and the task |
 | `Control` | bidirectional stream | Commands to the worker; acknowledgements and status from it |
 | `PublishActivity` | bidirectional stream | Activity events from the worker; acknowledgements from the gateway |
+| `Infer` | server stream | One model call of the session's agent; the gateway streams the answer |
 
 Control and activity are separate streams with separate loops on the worker. A gateway that consumes activity slowly delays only activity acknowledgements, never commands.
 
@@ -120,6 +121,23 @@ The spill file is capped (`-activity-spill-max`). Beyond the cap, display-only e
 
 When a run ends, the worker waits briefly (`-flush-timeout`) for outstanding events to be acknowledged, and writes the rest to the spill file. The next run sends them as a **backlog** for the earlier epoch, alongside its own events.
 
+## Inference
+
+An agent's model calls go to the gateway: Actlet holds no provider SDKs, endpoints or credentials. `Infer` sends one call:
+
+- `model`: an alias from the profile's catalogue, the one assigned to the agent's role (`main`). The gateway resolves it to whatever provider and model it likes.
+- `system`, `messages` and `tools`: a provider-neutral conversation. Messages are `user` or `assistant`, made of text, tool calls (`id`, `name`, JSON `input`) and tool results (`call_id`, `content`, `is_error`). Tools are described by name, description and JSON schema.
+- `continuation`: opaque bytes from the previous answer, passed back unchanged. A gateway can keep provider state in it, such as a response ID or cache keys; the worker never looks inside.
+- `intent_id`: the call's identity. The worker records it in its journal before calling, and uses it again for every retry of that call, including after a crash. The gateway treats it as an idempotency key.
+
+The answer streams text deltas and complete tool calls in the order the model produced them, then `done`: the stop reason (`end_turn`, `tool_use`, `max_tokens`, `refusal`), token usage and the next continuation.
+
+A call is never continued after an interruption. The worker discards what an interrupted attempt received and makes the call again from its last journaled state, with the same intent ID. It retries `UNAVAILABLE`, `RESOURCE_EXHAUSTED`, `ABORTED` and `DEADLINE_EXCEEDED`, and an answer that ends without `done` or goes quiet for five minutes; `NOT_FOUND` makes it register again first. Any other error fails the session with the gateway's message.
+
+`sdk.Options.OnInference` serves calls in Go. The SDK keeps recent answers by intent ID (`InferenceCache`, 256 by default): a repeated call gets the same answer, marked `replayed`, without reaching `OnInference`, and a repeat of a call still running waits for it. The cache is in memory; a gateway with several replicas, or one that restarts, can recognise intent IDs itself. A draining gateway lets running calls finish.
+
+Package `sdk/scripted` is a model that plays a YAML script of turns, for testing agents without a real model; `actlet-devgw -model <script>` serves it.
+
 ## Reconnecting
 
 - Every stream reconnects on its own, with exponential backoff and full jitter, between 200ms and 10s. The transport's own reconnect backoff is held to the same bound.
@@ -138,14 +156,16 @@ The Go package [`sdk`](../sdk) implements the gateway side for embedding in an o
 
 - `sdk.NewServer(sdk.Options{...})` with an `Assign` function that decides each session's profile and task, an optional `Authenticate`, and an `ActivityStore`;
 - `Session.Pause`, `Stop`, `Steer` and `Send` to issue commands and wait for their acknowledgements, with queuing and resending handled;
-- `sdk.MemoryStore` and `sdk.RecordingStore` (one `.actrec` file per session, readable with `actlet-cli replay inspect` and `actlet-cli replay export`).
+- `sdk.MemoryStore` and `sdk.RecordingStore` (one `.actrec` file per session, readable with `actlet-cli replay inspect` and `actlet-cli replay export`);
+- `OnInference` to answer agents' model calls, deduplicated by intent ID.
 
-Gateways in other languages implement the same three calls from the proto file. They must:
+Gateways in other languages implement the same calls from the proto file. They must:
 
 1. accept `Register` and keep a resuming worker's session ID;
 2. send commands with unique IDs, and resend those not yet acknowledged when a worker reconnects;
 3. answer each `PublishActivity` hello with what they hold, store events only in sequence, skip duplicates, and acknowledge only what is stored;
-4. return `NOT_FOUND` on a stream for a session they don't know, so the worker registers again.
+4. return `NOT_FOUND` on a stream or call for a session they don't know, so the worker registers again;
+5. answer a repeated `Infer` intent ID with the earlier answer where they can, and return retryable codes only for failures worth retrying.
 
 ## Trying it locally
 

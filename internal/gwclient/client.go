@@ -60,6 +60,9 @@ type Config struct {
 	AckTimeout time.Duration
 	// Window bounds unacknowledged activity events in flight. Default 1024.
 	Window int
+	// InferenceIdle is how long a model call may go without a response
+	// message before it is retried. Default 5m.
+	InferenceIdle time.Duration
 
 	Logger *slog.Logger
 }
@@ -82,6 +85,9 @@ func (c *Config) setDefaults() {
 	}
 	if c.Window <= 0 {
 		c.Window = 1024
+	}
+	if c.InferenceIdle <= 0 {
+		c.InferenceIdle = 5 * time.Minute
 	}
 	if c.Logger == nil {
 		c.Logger = slog.Default()

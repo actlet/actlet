@@ -452,6 +452,112 @@ func (SessionState) EnumDescriptor() ([]byte, []int) {
 	return file_actlet_gateway_v0_gateway_proto_rawDescGZIP(), []int{7}
 }
 
+type Role int32
+
+const (
+	Role_ROLE_UNSPECIFIED Role = 0
+	Role_ROLE_USER        Role = 1
+	Role_ROLE_ASSISTANT   Role = 2
+)
+
+// Enum value maps for Role.
+var (
+	Role_name = map[int32]string{
+		0: "ROLE_UNSPECIFIED",
+		1: "ROLE_USER",
+		2: "ROLE_ASSISTANT",
+	}
+	Role_value = map[string]int32{
+		"ROLE_UNSPECIFIED": 0,
+		"ROLE_USER":        1,
+		"ROLE_ASSISTANT":   2,
+	}
+)
+
+func (x Role) Enum() *Role {
+	p := new(Role)
+	*p = x
+	return p
+}
+
+func (x Role) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (Role) Descriptor() protoreflect.EnumDescriptor {
+	return file_actlet_gateway_v0_gateway_proto_enumTypes[8].Descriptor()
+}
+
+func (Role) Type() protoreflect.EnumType {
+	return &file_actlet_gateway_v0_gateway_proto_enumTypes[8]
+}
+
+func (x Role) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use Role.Descriptor instead.
+func (Role) EnumDescriptor() ([]byte, []int) {
+	return file_actlet_gateway_v0_gateway_proto_rawDescGZIP(), []int{8}
+}
+
+type StopReason int32
+
+const (
+	StopReason_STOP_REASON_UNSPECIFIED StopReason = 0
+	// The model finished its answer.
+	StopReason_STOP_REASON_END_TURN StopReason = 1
+	// The model wants tool results.
+	StopReason_STOP_REASON_TOOL_USE   StopReason = 2
+	StopReason_STOP_REASON_MAX_TOKENS StopReason = 3
+	StopReason_STOP_REASON_REFUSAL    StopReason = 4
+)
+
+// Enum value maps for StopReason.
+var (
+	StopReason_name = map[int32]string{
+		0: "STOP_REASON_UNSPECIFIED",
+		1: "STOP_REASON_END_TURN",
+		2: "STOP_REASON_TOOL_USE",
+		3: "STOP_REASON_MAX_TOKENS",
+		4: "STOP_REASON_REFUSAL",
+	}
+	StopReason_value = map[string]int32{
+		"STOP_REASON_UNSPECIFIED": 0,
+		"STOP_REASON_END_TURN":    1,
+		"STOP_REASON_TOOL_USE":    2,
+		"STOP_REASON_MAX_TOKENS":  3,
+		"STOP_REASON_REFUSAL":     4,
+	}
+)
+
+func (x StopReason) Enum() *StopReason {
+	p := new(StopReason)
+	*p = x
+	return p
+}
+
+func (x StopReason) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (StopReason) Descriptor() protoreflect.EnumDescriptor {
+	return file_actlet_gateway_v0_gateway_proto_enumTypes[9].Descriptor()
+}
+
+func (StopReason) Type() protoreflect.EnumType {
+	return &file_actlet_gateway_v0_gateway_proto_enumTypes[9]
+}
+
+func (x StopReason) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use StopReason.Descriptor instead.
+func (StopReason) EnumDescriptor() ([]byte, []int) {
+	return file_actlet_gateway_v0_gateway_proto_rawDescGZIP(), []int{9}
+}
+
 type RegisterRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Protocol version the worker speaks: "v0".
@@ -625,12 +731,24 @@ type Profile struct {
 	// Not enforced by v0 workers yet.
 	Budgets []*Budget `protobuf:"bytes,8,rep,name=budgets,proto3" json:"budgets,omitempty"`
 	// The models the session may use, by alias. Workers never see provider
-	// names or credentials. Not used by v0 workers yet.
+	// names or credentials. The agent uses the alias of the "main" role.
 	Models *ModelCatalog `protobuf:"bytes,9,opt,name=models,proto3" json:"models,omitempty"`
-	// The tools the session may use. Not enforced by v0 workers yet.
-	Tools         []*ToolGrant `protobuf:"bytes,10,rep,name=tools,proto3" json:"tools,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	// The local tools the session may use, with their settings. Empty
+	// allows all of them with default settings.
+	Tools []*ToolGrant `protobuf:"bytes,10,rep,name=tools,proto3" json:"tools,omitempty"`
+	// The implementor's instructions to the agent, added to Actlet's base
+	// prompt.
+	Instructions string `protobuf:"bytes,11,opt,name=instructions,proto3" json:"instructions,omitempty"`
+	// Replaces Actlet's base prompt when set.
+	BasePrompt string `protobuf:"bytes,12,opt,name=base_prompt,json=basePrompt,proto3" json:"base_prompt,omitempty"`
+	// Notes on what is installed in the container and how to use it, added
+	// to the agent's prompt along with any manifest in the image.
+	ToolsManifest string `protobuf:"bytes,13,opt,name=tools_manifest,json=toolsManifest,proto3" json:"tools_manifest,omitempty"`
+	// How many model turns pass between execution checkpoints. 0 means
+	// every turn.
+	CheckpointEveryTurns uint32 `protobuf:"varint,14,opt,name=checkpoint_every_turns,json=checkpointEveryTurns,proto3" json:"checkpoint_every_turns,omitempty"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
 }
 
 func (x *Profile) Reset() {
@@ -731,6 +849,34 @@ func (x *Profile) GetTools() []*ToolGrant {
 		return x.Tools
 	}
 	return nil
+}
+
+func (x *Profile) GetInstructions() string {
+	if x != nil {
+		return x.Instructions
+	}
+	return ""
+}
+
+func (x *Profile) GetBasePrompt() string {
+	if x != nil {
+		return x.BasePrompt
+	}
+	return ""
+}
+
+func (x *Profile) GetToolsManifest() string {
+	if x != nil {
+		return x.ToolsManifest
+	}
+	return ""
+}
+
+func (x *Profile) GetCheckpointEveryTurns() uint32 {
+	if x != nil {
+		return x.CheckpointEveryTurns
+	}
+	return 0
 }
 
 type Budget struct {
@@ -2071,6 +2217,10 @@ type ActivityEvent struct {
 	//	*ActivityEvent_Steer
 	//	*ActivityEvent_Text
 	//	*ActivityEvent_Gap
+	//	*ActivityEvent_ModelTurn
+	//	*ActivityEvent_ToolStarted
+	//	*ActivityEvent_ToolFinished
+	//	*ActivityEvent_FileChange
 	Body          isActivityEvent_Body `protobuf_oneof:"body"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -2195,6 +2345,42 @@ func (x *ActivityEvent) GetGap() *Gap {
 	return nil
 }
 
+func (x *ActivityEvent) GetModelTurn() *ModelTurn {
+	if x != nil {
+		if x, ok := x.Body.(*ActivityEvent_ModelTurn); ok {
+			return x.ModelTurn
+		}
+	}
+	return nil
+}
+
+func (x *ActivityEvent) GetToolStarted() *ToolStarted {
+	if x != nil {
+		if x, ok := x.Body.(*ActivityEvent_ToolStarted); ok {
+			return x.ToolStarted
+		}
+	}
+	return nil
+}
+
+func (x *ActivityEvent) GetToolFinished() *ToolFinished {
+	if x != nil {
+		if x, ok := x.Body.(*ActivityEvent_ToolFinished); ok {
+			return x.ToolFinished
+		}
+	}
+	return nil
+}
+
+func (x *ActivityEvent) GetFileChange() *FileChange {
+	if x != nil {
+		if x, ok := x.Body.(*ActivityEvent_FileChange); ok {
+			return x.FileChange
+		}
+	}
+	return nil
+}
+
 type isActivityEvent_Body interface {
 	isActivityEvent_Body()
 }
@@ -2223,6 +2409,22 @@ type ActivityEvent_Gap struct {
 	Gap *Gap `protobuf:"bytes,15,opt,name=gap,proto3,oneof"`
 }
 
+type ActivityEvent_ModelTurn struct {
+	ModelTurn *ModelTurn `protobuf:"bytes,16,opt,name=model_turn,json=modelTurn,proto3,oneof"`
+}
+
+type ActivityEvent_ToolStarted struct {
+	ToolStarted *ToolStarted `protobuf:"bytes,17,opt,name=tool_started,json=toolStarted,proto3,oneof"`
+}
+
+type ActivityEvent_ToolFinished struct {
+	ToolFinished *ToolFinished `protobuf:"bytes,18,opt,name=tool_finished,json=toolFinished,proto3,oneof"`
+}
+
+type ActivityEvent_FileChange struct {
+	FileChange *FileChange `protobuf:"bytes,19,opt,name=file_change,json=fileChange,proto3,oneof"`
+}
+
 func (*ActivityEvent_Started) isActivityEvent_Body() {}
 
 func (*ActivityEvent_State) isActivityEvent_Body() {}
@@ -2234,6 +2436,14 @@ func (*ActivityEvent_Steer) isActivityEvent_Body() {}
 func (*ActivityEvent_Text) isActivityEvent_Body() {}
 
 func (*ActivityEvent_Gap) isActivityEvent_Body() {}
+
+func (*ActivityEvent_ModelTurn) isActivityEvent_Body() {}
+
+func (*ActivityEvent_ToolStarted) isActivityEvent_Body() {}
+
+func (*ActivityEvent_ToolFinished) isActivityEvent_Body() {}
+
+func (*ActivityEvent_FileChange) isActivityEvent_Body() {}
 
 type SessionStarted struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
@@ -2590,6 +2800,1006 @@ func (x *Gap) GetLast() *timestamppb.Timestamp {
 	return nil
 }
 
+// ModelTurn is one completed model call of the agent.
+type ModelTurn struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Turn  uint64                 `protobuf:"varint,1,opt,name=turn,proto3" json:"turn,omitempty"`
+	Model string                 `protobuf:"bytes,2,opt,name=model,proto3" json:"model,omitempty"`
+	// The model's text, possibly cut short.
+	Text string `protobuf:"bytes,3,opt,name=text,proto3" json:"text,omitempty"`
+	// Names of the tools the model called.
+	ToolCalls     []string   `protobuf:"bytes,4,rep,name=tool_calls,json=toolCalls,proto3" json:"tool_calls,omitempty"`
+	StopReason    StopReason `protobuf:"varint,5,opt,name=stop_reason,json=stopReason,proto3,enum=actlet.gateway.v0.StopReason" json:"stop_reason,omitempty"`
+	Usage         *Usage     `protobuf:"bytes,6,opt,name=usage,proto3" json:"usage,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ModelTurn) Reset() {
+	*x = ModelTurn{}
+	mi := &file_actlet_gateway_v0_gateway_proto_msgTypes[30]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ModelTurn) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ModelTurn) ProtoMessage() {}
+
+func (x *ModelTurn) ProtoReflect() protoreflect.Message {
+	mi := &file_actlet_gateway_v0_gateway_proto_msgTypes[30]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ModelTurn.ProtoReflect.Descriptor instead.
+func (*ModelTurn) Descriptor() ([]byte, []int) {
+	return file_actlet_gateway_v0_gateway_proto_rawDescGZIP(), []int{30}
+}
+
+func (x *ModelTurn) GetTurn() uint64 {
+	if x != nil {
+		return x.Turn
+	}
+	return 0
+}
+
+func (x *ModelTurn) GetModel() string {
+	if x != nil {
+		return x.Model
+	}
+	return ""
+}
+
+func (x *ModelTurn) GetText() string {
+	if x != nil {
+		return x.Text
+	}
+	return ""
+}
+
+func (x *ModelTurn) GetToolCalls() []string {
+	if x != nil {
+		return x.ToolCalls
+	}
+	return nil
+}
+
+func (x *ModelTurn) GetStopReason() StopReason {
+	if x != nil {
+		return x.StopReason
+	}
+	return StopReason_STOP_REASON_UNSPECIFIED
+}
+
+func (x *ModelTurn) GetUsage() *Usage {
+	if x != nil {
+		return x.Usage
+	}
+	return nil
+}
+
+// ToolStarted is a tool call the agent is starting.
+type ToolStarted struct {
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	CallId string                 `protobuf:"bytes,1,opt,name=call_id,json=callId,proto3" json:"call_id,omitempty"`
+	Tool   string                 `protobuf:"bytes,2,opt,name=tool,proto3" json:"tool,omitempty"`
+	// The call's JSON input, possibly cut short.
+	Input         string `protobuf:"bytes,3,opt,name=input,proto3" json:"input,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ToolStarted) Reset() {
+	*x = ToolStarted{}
+	mi := &file_actlet_gateway_v0_gateway_proto_msgTypes[31]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ToolStarted) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ToolStarted) ProtoMessage() {}
+
+func (x *ToolStarted) ProtoReflect() protoreflect.Message {
+	mi := &file_actlet_gateway_v0_gateway_proto_msgTypes[31]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ToolStarted.ProtoReflect.Descriptor instead.
+func (*ToolStarted) Descriptor() ([]byte, []int) {
+	return file_actlet_gateway_v0_gateway_proto_rawDescGZIP(), []int{31}
+}
+
+func (x *ToolStarted) GetCallId() string {
+	if x != nil {
+		return x.CallId
+	}
+	return ""
+}
+
+func (x *ToolStarted) GetTool() string {
+	if x != nil {
+		return x.Tool
+	}
+	return ""
+}
+
+func (x *ToolStarted) GetInput() string {
+	if x != nil {
+		return x.Input
+	}
+	return ""
+}
+
+// ToolFinished is the result of a tool call.
+type ToolFinished struct {
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	CallId  string                 `protobuf:"bytes,1,opt,name=call_id,json=callId,proto3" json:"call_id,omitempty"`
+	Tool    string                 `protobuf:"bytes,2,opt,name=tool,proto3" json:"tool,omitempty"`
+	IsError bool                   `protobuf:"varint,3,opt,name=is_error,json=isError,proto3" json:"is_error,omitempty"`
+	// The outcome is unknown: the worker stopped while the call ran.
+	OutcomeUnknown bool `protobuf:"varint,4,opt,name=outcome_unknown,json=outcomeUnknown,proto3" json:"outcome_unknown,omitempty"`
+	// What the model is told, possibly cut short.
+	Output        string               `protobuf:"bytes,5,opt,name=output,proto3" json:"output,omitempty"`
+	Took          *durationpb.Duration `protobuf:"bytes,6,opt,name=took,proto3" json:"took,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ToolFinished) Reset() {
+	*x = ToolFinished{}
+	mi := &file_actlet_gateway_v0_gateway_proto_msgTypes[32]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ToolFinished) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ToolFinished) ProtoMessage() {}
+
+func (x *ToolFinished) ProtoReflect() protoreflect.Message {
+	mi := &file_actlet_gateway_v0_gateway_proto_msgTypes[32]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ToolFinished.ProtoReflect.Descriptor instead.
+func (*ToolFinished) Descriptor() ([]byte, []int) {
+	return file_actlet_gateway_v0_gateway_proto_rawDescGZIP(), []int{32}
+}
+
+func (x *ToolFinished) GetCallId() string {
+	if x != nil {
+		return x.CallId
+	}
+	return ""
+}
+
+func (x *ToolFinished) GetTool() string {
+	if x != nil {
+		return x.Tool
+	}
+	return ""
+}
+
+func (x *ToolFinished) GetIsError() bool {
+	if x != nil {
+		return x.IsError
+	}
+	return false
+}
+
+func (x *ToolFinished) GetOutcomeUnknown() bool {
+	if x != nil {
+		return x.OutcomeUnknown
+	}
+	return false
+}
+
+func (x *ToolFinished) GetOutput() string {
+	if x != nil {
+		return x.Output
+	}
+	return ""
+}
+
+func (x *ToolFinished) GetTook() *durationpb.Duration {
+	if x != nil {
+		return x.Took
+	}
+	return nil
+}
+
+// FileChange is a file a tool changed.
+type FileChange struct {
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	CallId string                 `protobuf:"bytes,1,opt,name=call_id,json=callId,proto3" json:"call_id,omitempty"`
+	// Relative to the workspace when inside it.
+	Path    string `protobuf:"bytes,2,opt,name=path,proto3" json:"path,omitempty"`
+	Created bool   `protobuf:"varint,3,opt,name=created,proto3" json:"created,omitempty"`
+	// A unified diff, possibly cut short.
+	Diff          string `protobuf:"bytes,4,opt,name=diff,proto3" json:"diff,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *FileChange) Reset() {
+	*x = FileChange{}
+	mi := &file_actlet_gateway_v0_gateway_proto_msgTypes[33]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *FileChange) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FileChange) ProtoMessage() {}
+
+func (x *FileChange) ProtoReflect() protoreflect.Message {
+	mi := &file_actlet_gateway_v0_gateway_proto_msgTypes[33]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FileChange.ProtoReflect.Descriptor instead.
+func (*FileChange) Descriptor() ([]byte, []int) {
+	return file_actlet_gateway_v0_gateway_proto_rawDescGZIP(), []int{33}
+}
+
+func (x *FileChange) GetCallId() string {
+	if x != nil {
+		return x.CallId
+	}
+	return ""
+}
+
+func (x *FileChange) GetPath() string {
+	if x != nil {
+		return x.Path
+	}
+	return ""
+}
+
+func (x *FileChange) GetCreated() bool {
+	if x != nil {
+		return x.Created
+	}
+	return false
+}
+
+func (x *FileChange) GetDiff() string {
+	if x != nil {
+		return x.Diff
+	}
+	return ""
+}
+
+// InferenceRequest is one model call. The conversation is provider
+// neutral; the continuation carries whatever provider state the gateway
+// needs between calls.
+type InferenceRequest struct {
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	SessionId string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	Epoch     uint64                 `protobuf:"varint,2,opt,name=epoch,proto3" json:"epoch,omitempty"`
+	// Identifies the call. The worker records it before calling and sends
+	// the same ID when it retries the call, also after a crash, so the
+	// gateway can use it as an idempotency key: a call with an ID the
+	// gateway has already answered should get the same answer.
+	IntentId string `protobuf:"bytes,3,opt,name=intent_id,json=intentId,proto3" json:"intent_id,omitempty"`
+	// The model alias from the profile's catalogue.
+	Model    string      `protobuf:"bytes,4,opt,name=model,proto3" json:"model,omitempty"`
+	System   string      `protobuf:"bytes,5,opt,name=system,proto3" json:"system,omitempty"`
+	Messages []*Message  `protobuf:"bytes,6,rep,name=messages,proto3" json:"messages,omitempty"`
+	Tools    []*ToolSpec `protobuf:"bytes,7,rep,name=tools,proto3" json:"tools,omitempty"`
+	// The continuation of the previous response in this conversation,
+	// passed back unchanged. The worker never interprets it.
+	Continuation []byte `protobuf:"bytes,8,opt,name=continuation,proto3" json:"continuation,omitempty"`
+	// 0 lets the gateway choose.
+	MaxOutputTokens uint32 `protobuf:"varint,9,opt,name=max_output_tokens,json=maxOutputTokens,proto3" json:"max_output_tokens,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *InferenceRequest) Reset() {
+	*x = InferenceRequest{}
+	mi := &file_actlet_gateway_v0_gateway_proto_msgTypes[34]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *InferenceRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*InferenceRequest) ProtoMessage() {}
+
+func (x *InferenceRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_actlet_gateway_v0_gateway_proto_msgTypes[34]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use InferenceRequest.ProtoReflect.Descriptor instead.
+func (*InferenceRequest) Descriptor() ([]byte, []int) {
+	return file_actlet_gateway_v0_gateway_proto_rawDescGZIP(), []int{34}
+}
+
+func (x *InferenceRequest) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
+}
+
+func (x *InferenceRequest) GetEpoch() uint64 {
+	if x != nil {
+		return x.Epoch
+	}
+	return 0
+}
+
+func (x *InferenceRequest) GetIntentId() string {
+	if x != nil {
+		return x.IntentId
+	}
+	return ""
+}
+
+func (x *InferenceRequest) GetModel() string {
+	if x != nil {
+		return x.Model
+	}
+	return ""
+}
+
+func (x *InferenceRequest) GetSystem() string {
+	if x != nil {
+		return x.System
+	}
+	return ""
+}
+
+func (x *InferenceRequest) GetMessages() []*Message {
+	if x != nil {
+		return x.Messages
+	}
+	return nil
+}
+
+func (x *InferenceRequest) GetTools() []*ToolSpec {
+	if x != nil {
+		return x.Tools
+	}
+	return nil
+}
+
+func (x *InferenceRequest) GetContinuation() []byte {
+	if x != nil {
+		return x.Continuation
+	}
+	return nil
+}
+
+func (x *InferenceRequest) GetMaxOutputTokens() uint32 {
+	if x != nil {
+		return x.MaxOutputTokens
+	}
+	return 0
+}
+
+type Message struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Role          Role                   `protobuf:"varint,1,opt,name=role,proto3,enum=actlet.gateway.v0.Role" json:"role,omitempty"`
+	Parts         []*Part                `protobuf:"bytes,2,rep,name=parts,proto3" json:"parts,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Message) Reset() {
+	*x = Message{}
+	mi := &file_actlet_gateway_v0_gateway_proto_msgTypes[35]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Message) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Message) ProtoMessage() {}
+
+func (x *Message) ProtoReflect() protoreflect.Message {
+	mi := &file_actlet_gateway_v0_gateway_proto_msgTypes[35]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Message.ProtoReflect.Descriptor instead.
+func (*Message) Descriptor() ([]byte, []int) {
+	return file_actlet_gateway_v0_gateway_proto_rawDescGZIP(), []int{35}
+}
+
+func (x *Message) GetRole() Role {
+	if x != nil {
+		return x.Role
+	}
+	return Role_ROLE_UNSPECIFIED
+}
+
+func (x *Message) GetParts() []*Part {
+	if x != nil {
+		return x.Parts
+	}
+	return nil
+}
+
+type Part struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Types that are valid to be assigned to Part:
+	//
+	//	*Part_Text
+	//	*Part_ToolCall
+	//	*Part_ToolResult
+	Part          isPart_Part `protobuf_oneof:"part"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Part) Reset() {
+	*x = Part{}
+	mi := &file_actlet_gateway_v0_gateway_proto_msgTypes[36]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Part) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Part) ProtoMessage() {}
+
+func (x *Part) ProtoReflect() protoreflect.Message {
+	mi := &file_actlet_gateway_v0_gateway_proto_msgTypes[36]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Part.ProtoReflect.Descriptor instead.
+func (*Part) Descriptor() ([]byte, []int) {
+	return file_actlet_gateway_v0_gateway_proto_rawDescGZIP(), []int{36}
+}
+
+func (x *Part) GetPart() isPart_Part {
+	if x != nil {
+		return x.Part
+	}
+	return nil
+}
+
+func (x *Part) GetText() string {
+	if x != nil {
+		if x, ok := x.Part.(*Part_Text); ok {
+			return x.Text
+		}
+	}
+	return ""
+}
+
+func (x *Part) GetToolCall() *ToolCall {
+	if x != nil {
+		if x, ok := x.Part.(*Part_ToolCall); ok {
+			return x.ToolCall
+		}
+	}
+	return nil
+}
+
+func (x *Part) GetToolResult() *ToolResult {
+	if x != nil {
+		if x, ok := x.Part.(*Part_ToolResult); ok {
+			return x.ToolResult
+		}
+	}
+	return nil
+}
+
+type isPart_Part interface {
+	isPart_Part()
+}
+
+type Part_Text struct {
+	Text string `protobuf:"bytes,1,opt,name=text,proto3,oneof"`
+}
+
+type Part_ToolCall struct {
+	ToolCall *ToolCall `protobuf:"bytes,2,opt,name=tool_call,json=toolCall,proto3,oneof"`
+}
+
+type Part_ToolResult struct {
+	ToolResult *ToolResult `protobuf:"bytes,3,opt,name=tool_result,json=toolResult,proto3,oneof"`
+}
+
+func (*Part_Text) isPart_Part() {}
+
+func (*Part_ToolCall) isPart_Part() {}
+
+func (*Part_ToolResult) isPart_Part() {}
+
+// ToolCall is the model asking to run a tool.
+type ToolCall struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Unique within the conversation; chosen by the model's provider.
+	Id   string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Name string `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	// The input, a JSON object.
+	Input         string `protobuf:"bytes,3,opt,name=input,proto3" json:"input,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ToolCall) Reset() {
+	*x = ToolCall{}
+	mi := &file_actlet_gateway_v0_gateway_proto_msgTypes[37]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ToolCall) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ToolCall) ProtoMessage() {}
+
+func (x *ToolCall) ProtoReflect() protoreflect.Message {
+	mi := &file_actlet_gateway_v0_gateway_proto_msgTypes[37]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ToolCall.ProtoReflect.Descriptor instead.
+func (*ToolCall) Descriptor() ([]byte, []int) {
+	return file_actlet_gateway_v0_gateway_proto_rawDescGZIP(), []int{37}
+}
+
+func (x *ToolCall) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *ToolCall) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *ToolCall) GetInput() string {
+	if x != nil {
+		return x.Input
+	}
+	return ""
+}
+
+// ToolResult answers a ToolCall, in a user message.
+type ToolResult struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	CallId        string                 `protobuf:"bytes,1,opt,name=call_id,json=callId,proto3" json:"call_id,omitempty"`
+	Content       string                 `protobuf:"bytes,2,opt,name=content,proto3" json:"content,omitempty"`
+	IsError       bool                   `protobuf:"varint,3,opt,name=is_error,json=isError,proto3" json:"is_error,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ToolResult) Reset() {
+	*x = ToolResult{}
+	mi := &file_actlet_gateway_v0_gateway_proto_msgTypes[38]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ToolResult) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ToolResult) ProtoMessage() {}
+
+func (x *ToolResult) ProtoReflect() protoreflect.Message {
+	mi := &file_actlet_gateway_v0_gateway_proto_msgTypes[38]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ToolResult.ProtoReflect.Descriptor instead.
+func (*ToolResult) Descriptor() ([]byte, []int) {
+	return file_actlet_gateway_v0_gateway_proto_rawDescGZIP(), []int{38}
+}
+
+func (x *ToolResult) GetCallId() string {
+	if x != nil {
+		return x.CallId
+	}
+	return ""
+}
+
+func (x *ToolResult) GetContent() string {
+	if x != nil {
+		return x.Content
+	}
+	return ""
+}
+
+func (x *ToolResult) GetIsError() bool {
+	if x != nil {
+		return x.IsError
+	}
+	return false
+}
+
+// ToolSpec describes a tool the model may call.
+type ToolSpec struct {
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	Name        string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Description string                 `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`
+	// The JSON schema of the tool's input.
+	InputSchema   string `protobuf:"bytes,3,opt,name=input_schema,json=inputSchema,proto3" json:"input_schema,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ToolSpec) Reset() {
+	*x = ToolSpec{}
+	mi := &file_actlet_gateway_v0_gateway_proto_msgTypes[39]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ToolSpec) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ToolSpec) ProtoMessage() {}
+
+func (x *ToolSpec) ProtoReflect() protoreflect.Message {
+	mi := &file_actlet_gateway_v0_gateway_proto_msgTypes[39]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ToolSpec.ProtoReflect.Descriptor instead.
+func (*ToolSpec) Descriptor() ([]byte, []int) {
+	return file_actlet_gateway_v0_gateway_proto_rawDescGZIP(), []int{39}
+}
+
+func (x *ToolSpec) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *ToolSpec) GetDescription() string {
+	if x != nil {
+		return x.Description
+	}
+	return ""
+}
+
+func (x *ToolSpec) GetInputSchema() string {
+	if x != nil {
+		return x.InputSchema
+	}
+	return ""
+}
+
+// InferenceResponse streams the answer: text deltas and complete tool
+// calls in the order the model produced them, then Done.
+type InferenceResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Types that are valid to be assigned to Msg:
+	//
+	//	*InferenceResponse_TextDelta
+	//	*InferenceResponse_ToolCall
+	//	*InferenceResponse_Done
+	Msg           isInferenceResponse_Msg `protobuf_oneof:"msg"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *InferenceResponse) Reset() {
+	*x = InferenceResponse{}
+	mi := &file_actlet_gateway_v0_gateway_proto_msgTypes[40]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *InferenceResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*InferenceResponse) ProtoMessage() {}
+
+func (x *InferenceResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_actlet_gateway_v0_gateway_proto_msgTypes[40]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use InferenceResponse.ProtoReflect.Descriptor instead.
+func (*InferenceResponse) Descriptor() ([]byte, []int) {
+	return file_actlet_gateway_v0_gateway_proto_rawDescGZIP(), []int{40}
+}
+
+func (x *InferenceResponse) GetMsg() isInferenceResponse_Msg {
+	if x != nil {
+		return x.Msg
+	}
+	return nil
+}
+
+func (x *InferenceResponse) GetTextDelta() string {
+	if x != nil {
+		if x, ok := x.Msg.(*InferenceResponse_TextDelta); ok {
+			return x.TextDelta
+		}
+	}
+	return ""
+}
+
+func (x *InferenceResponse) GetToolCall() *ToolCall {
+	if x != nil {
+		if x, ok := x.Msg.(*InferenceResponse_ToolCall); ok {
+			return x.ToolCall
+		}
+	}
+	return nil
+}
+
+func (x *InferenceResponse) GetDone() *InferenceDone {
+	if x != nil {
+		if x, ok := x.Msg.(*InferenceResponse_Done); ok {
+			return x.Done
+		}
+	}
+	return nil
+}
+
+type isInferenceResponse_Msg interface {
+	isInferenceResponse_Msg()
+}
+
+type InferenceResponse_TextDelta struct {
+	TextDelta string `protobuf:"bytes,1,opt,name=text_delta,json=textDelta,proto3,oneof"`
+}
+
+type InferenceResponse_ToolCall struct {
+	ToolCall *ToolCall `protobuf:"bytes,2,opt,name=tool_call,json=toolCall,proto3,oneof"`
+}
+
+type InferenceResponse_Done struct {
+	Done *InferenceDone `protobuf:"bytes,3,opt,name=done,proto3,oneof"`
+}
+
+func (*InferenceResponse_TextDelta) isInferenceResponse_Msg() {}
+
+func (*InferenceResponse_ToolCall) isInferenceResponse_Msg() {}
+
+func (*InferenceResponse_Done) isInferenceResponse_Msg() {}
+
+type InferenceDone struct {
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	StopReason StopReason             `protobuf:"varint,1,opt,name=stop_reason,json=stopReason,proto3,enum=actlet.gateway.v0.StopReason" json:"stop_reason,omitempty"`
+	Usage      *Usage                 `protobuf:"bytes,2,opt,name=usage,proto3" json:"usage,omitempty"`
+	// Passed back with the next request of the conversation.
+	Continuation []byte `protobuf:"bytes,3,opt,name=continuation,proto3" json:"continuation,omitempty"`
+	// The gateway answered from an earlier call with the same intent ID.
+	Replayed      bool `protobuf:"varint,4,opt,name=replayed,proto3" json:"replayed,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *InferenceDone) Reset() {
+	*x = InferenceDone{}
+	mi := &file_actlet_gateway_v0_gateway_proto_msgTypes[41]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *InferenceDone) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*InferenceDone) ProtoMessage() {}
+
+func (x *InferenceDone) ProtoReflect() protoreflect.Message {
+	mi := &file_actlet_gateway_v0_gateway_proto_msgTypes[41]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use InferenceDone.ProtoReflect.Descriptor instead.
+func (*InferenceDone) Descriptor() ([]byte, []int) {
+	return file_actlet_gateway_v0_gateway_proto_rawDescGZIP(), []int{41}
+}
+
+func (x *InferenceDone) GetStopReason() StopReason {
+	if x != nil {
+		return x.StopReason
+	}
+	return StopReason_STOP_REASON_UNSPECIFIED
+}
+
+func (x *InferenceDone) GetUsage() *Usage {
+	if x != nil {
+		return x.Usage
+	}
+	return nil
+}
+
+func (x *InferenceDone) GetContinuation() []byte {
+	if x != nil {
+		return x.Continuation
+	}
+	return nil
+}
+
+func (x *InferenceDone) GetReplayed() bool {
+	if x != nil {
+		return x.Replayed
+	}
+	return false
+}
+
+type Usage struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	InputTokens      uint64                 `protobuf:"varint,1,opt,name=input_tokens,json=inputTokens,proto3" json:"input_tokens,omitempty"`
+	OutputTokens     uint64                 `protobuf:"varint,2,opt,name=output_tokens,json=outputTokens,proto3" json:"output_tokens,omitempty"`
+	CacheReadTokens  uint64                 `protobuf:"varint,3,opt,name=cache_read_tokens,json=cacheReadTokens,proto3" json:"cache_read_tokens,omitempty"`
+	CacheWriteTokens uint64                 `protobuf:"varint,4,opt,name=cache_write_tokens,json=cacheWriteTokens,proto3" json:"cache_write_tokens,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *Usage) Reset() {
+	*x = Usage{}
+	mi := &file_actlet_gateway_v0_gateway_proto_msgTypes[42]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Usage) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Usage) ProtoMessage() {}
+
+func (x *Usage) ProtoReflect() protoreflect.Message {
+	mi := &file_actlet_gateway_v0_gateway_proto_msgTypes[42]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Usage.ProtoReflect.Descriptor instead.
+func (*Usage) Descriptor() ([]byte, []int) {
+	return file_actlet_gateway_v0_gateway_proto_rawDescGZIP(), []int{42}
+}
+
+func (x *Usage) GetInputTokens() uint64 {
+	if x != nil {
+		return x.InputTokens
+	}
+	return 0
+}
+
+func (x *Usage) GetOutputTokens() uint64 {
+	if x != nil {
+		return x.OutputTokens
+	}
+	return 0
+}
+
+func (x *Usage) GetCacheReadTokens() uint64 {
+	if x != nil {
+		return x.CacheReadTokens
+	}
+	return 0
+}
+
+func (x *Usage) GetCacheWriteTokens() uint64 {
+	if x != nil {
+		return x.CacheWriteTokens
+	}
+	return 0
+}
+
 var File_actlet_gateway_v0_gateway_proto protoreflect.FileDescriptor
 
 const file_actlet_gateway_v0_gateway_proto_rawDesc = "" +
@@ -2607,7 +3817,7 @@ const file_actlet_gateway_v0_gateway_proto_rawDesc = "" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x124\n" +
 	"\aprofile\x18\x02 \x01(\v2\x1a.actlet.gateway.v0.ProfileR\aprofile\x12+\n" +
-	"\x04task\x18\x03 \x01(\v2\x17.actlet.gateway.v0.TaskR\x04task\"\x87\x04\n" +
+	"\x04task\x18\x03 \x01(\v2\x17.actlet.gateway.v0.TaskR\x04task\"\xa9\x05\n" +
 	"\aProfile\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\tR\aversion\x121\n" +
@@ -2620,7 +3830,12 @@ const file_actlet_gateway_v0_gateway_proto_rawDesc = "" +
 	"\abudgets\x18\b \x03(\v2\x19.actlet.gateway.v0.BudgetR\abudgets\x127\n" +
 	"\x06models\x18\t \x01(\v2\x1f.actlet.gateway.v0.ModelCatalogR\x06models\x122\n" +
 	"\x05tools\x18\n" +
-	" \x03(\v2\x1c.actlet.gateway.v0.ToolGrantR\x05tools\"\x97\x02\n" +
+	" \x03(\v2\x1c.actlet.gateway.v0.ToolGrantR\x05tools\x12\"\n" +
+	"\finstructions\x18\v \x01(\tR\finstructions\x12\x1f\n" +
+	"\vbase_prompt\x18\f \x01(\tR\n" +
+	"basePrompt\x12%\n" +
+	"\x0etools_manifest\x18\r \x01(\tR\rtoolsManifest\x124\n" +
+	"\x16checkpoint_every_turns\x18\x0e \x01(\rR\x14checkpointEveryTurns\"\x97\x02\n" +
 	"\x06Budget\x121\n" +
 	"\x04kind\x18\x01 \x01(\x0e2\x1d.actlet.gateway.v0.BudgetKindR\x04kind\x12\x14\n" +
 	"\x05limit\x18\x02 \x01(\x01R\x05limit\x12\x1a\n" +
@@ -2715,7 +3930,7 @@ const file_actlet_gateway_v0_gateway_proto_rawDesc = "" +
 	"\x06events\x18\x01 \x03(\v2 .actlet.gateway.v0.ActivityEventR\x06events\"@\n" +
 	"\vActivityAck\x12\x14\n" +
 	"\x05epoch\x18\x01 \x01(\x04R\x05epoch\x12\x1b\n" +
-	"\tacked_seq\x18\x02 \x01(\x04R\backedSeq\"\xc7\x03\n" +
+	"\tacked_seq\x18\x02 \x01(\x04R\backedSeq\"\xd5\x05\n" +
 	"\rActivityEvent\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
 	"\x05epoch\x18\x02 \x01(\x04R\x05epoch\x12\x10\n" +
@@ -2727,7 +3942,13 @@ const file_actlet_gateway_v0_gateway_proto_rawDesc = "" +
 	"\acommand\x18\f \x01(\v2\".actlet.gateway.v0.CommandReceivedH\x00R\acommand\x124\n" +
 	"\x05steer\x18\r \x01(\v2\x1c.actlet.gateway.v0.SteerNoteH\x00R\x05steer\x12-\n" +
 	"\x04text\x18\x0e \x01(\v2\x17.actlet.gateway.v0.TextH\x00R\x04text\x12*\n" +
-	"\x03gap\x18\x0f \x01(\v2\x16.actlet.gateway.v0.GapH\x00R\x03gapB\x06\n" +
+	"\x03gap\x18\x0f \x01(\v2\x16.actlet.gateway.v0.GapH\x00R\x03gap\x12=\n" +
+	"\n" +
+	"model_turn\x18\x10 \x01(\v2\x1c.actlet.gateway.v0.ModelTurnH\x00R\tmodelTurn\x12C\n" +
+	"\ftool_started\x18\x11 \x01(\v2\x1e.actlet.gateway.v0.ToolStartedH\x00R\vtoolStarted\x12F\n" +
+	"\rtool_finished\x18\x12 \x01(\v2\x1f.actlet.gateway.v0.ToolFinishedH\x00R\ftoolFinished\x12@\n" +
+	"\vfile_change\x18\x13 \x01(\v2\x1d.actlet.gateway.v0.FileChangeH\x00R\n" +
+	"fileChangeB\x06\n" +
 	"\x04body\"\x88\x01\n" +
 	"\x0eSessionStarted\x12\x14\n" +
 	"\x05epoch\x18\x01 \x01(\x04R\x05epoch\x12\x1d\n" +
@@ -2752,7 +3973,83 @@ const file_actlet_gateway_v0_gateway_proto_rawDesc = "" +
 	"\x03Gap\x12\x18\n" +
 	"\adropped\x18\x01 \x01(\x04R\adropped\x120\n" +
 	"\x05first\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x05first\x12.\n" +
-	"\x04last\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\x04last*\x84\x01\n" +
+	"\x04last\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\x04last\"\xd8\x01\n" +
+	"\tModelTurn\x12\x12\n" +
+	"\x04turn\x18\x01 \x01(\x04R\x04turn\x12\x14\n" +
+	"\x05model\x18\x02 \x01(\tR\x05model\x12\x12\n" +
+	"\x04text\x18\x03 \x01(\tR\x04text\x12\x1d\n" +
+	"\n" +
+	"tool_calls\x18\x04 \x03(\tR\ttoolCalls\x12>\n" +
+	"\vstop_reason\x18\x05 \x01(\x0e2\x1d.actlet.gateway.v0.StopReasonR\n" +
+	"stopReason\x12.\n" +
+	"\x05usage\x18\x06 \x01(\v2\x18.actlet.gateway.v0.UsageR\x05usage\"P\n" +
+	"\vToolStarted\x12\x17\n" +
+	"\acall_id\x18\x01 \x01(\tR\x06callId\x12\x12\n" +
+	"\x04tool\x18\x02 \x01(\tR\x04tool\x12\x14\n" +
+	"\x05input\x18\x03 \x01(\tR\x05input\"\xc6\x01\n" +
+	"\fToolFinished\x12\x17\n" +
+	"\acall_id\x18\x01 \x01(\tR\x06callId\x12\x12\n" +
+	"\x04tool\x18\x02 \x01(\tR\x04tool\x12\x19\n" +
+	"\bis_error\x18\x03 \x01(\bR\aisError\x12'\n" +
+	"\x0foutcome_unknown\x18\x04 \x01(\bR\x0eoutcomeUnknown\x12\x16\n" +
+	"\x06output\x18\x05 \x01(\tR\x06output\x12-\n" +
+	"\x04took\x18\x06 \x01(\v2\x19.google.protobuf.DurationR\x04took\"g\n" +
+	"\n" +
+	"FileChange\x12\x17\n" +
+	"\acall_id\x18\x01 \x01(\tR\x06callId\x12\x12\n" +
+	"\x04path\x18\x02 \x01(\tR\x04path\x12\x18\n" +
+	"\acreated\x18\x03 \x01(\bR\acreated\x12\x12\n" +
+	"\x04diff\x18\x04 \x01(\tR\x04diff\"\xcd\x02\n" +
+	"\x10InferenceRequest\x12\x1d\n" +
+	"\n" +
+	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x14\n" +
+	"\x05epoch\x18\x02 \x01(\x04R\x05epoch\x12\x1b\n" +
+	"\tintent_id\x18\x03 \x01(\tR\bintentId\x12\x14\n" +
+	"\x05model\x18\x04 \x01(\tR\x05model\x12\x16\n" +
+	"\x06system\x18\x05 \x01(\tR\x06system\x126\n" +
+	"\bmessages\x18\x06 \x03(\v2\x1a.actlet.gateway.v0.MessageR\bmessages\x121\n" +
+	"\x05tools\x18\a \x03(\v2\x1b.actlet.gateway.v0.ToolSpecR\x05tools\x12\"\n" +
+	"\fcontinuation\x18\b \x01(\fR\fcontinuation\x12*\n" +
+	"\x11max_output_tokens\x18\t \x01(\rR\x0fmaxOutputTokens\"e\n" +
+	"\aMessage\x12+\n" +
+	"\x04role\x18\x01 \x01(\x0e2\x17.actlet.gateway.v0.RoleR\x04role\x12-\n" +
+	"\x05parts\x18\x02 \x03(\v2\x17.actlet.gateway.v0.PartR\x05parts\"\xa2\x01\n" +
+	"\x04Part\x12\x14\n" +
+	"\x04text\x18\x01 \x01(\tH\x00R\x04text\x12:\n" +
+	"\ttool_call\x18\x02 \x01(\v2\x1b.actlet.gateway.v0.ToolCallH\x00R\btoolCall\x12@\n" +
+	"\vtool_result\x18\x03 \x01(\v2\x1d.actlet.gateway.v0.ToolResultH\x00R\n" +
+	"toolResultB\x06\n" +
+	"\x04part\"D\n" +
+	"\bToolCall\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12\x14\n" +
+	"\x05input\x18\x03 \x01(\tR\x05input\"Z\n" +
+	"\n" +
+	"ToolResult\x12\x17\n" +
+	"\acall_id\x18\x01 \x01(\tR\x06callId\x12\x18\n" +
+	"\acontent\x18\x02 \x01(\tR\acontent\x12\x19\n" +
+	"\bis_error\x18\x03 \x01(\bR\aisError\"c\n" +
+	"\bToolSpec\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
+	"\vdescription\x18\x02 \x01(\tR\vdescription\x12!\n" +
+	"\finput_schema\x18\x03 \x01(\tR\vinputSchema\"\xaf\x01\n" +
+	"\x11InferenceResponse\x12\x1f\n" +
+	"\n" +
+	"text_delta\x18\x01 \x01(\tH\x00R\ttextDelta\x12:\n" +
+	"\ttool_call\x18\x02 \x01(\v2\x1b.actlet.gateway.v0.ToolCallH\x00R\btoolCall\x126\n" +
+	"\x04done\x18\x03 \x01(\v2 .actlet.gateway.v0.InferenceDoneH\x00R\x04doneB\x05\n" +
+	"\x03msg\"\xbf\x01\n" +
+	"\rInferenceDone\x12>\n" +
+	"\vstop_reason\x18\x01 \x01(\x0e2\x1d.actlet.gateway.v0.StopReasonR\n" +
+	"stopReason\x12.\n" +
+	"\x05usage\x18\x02 \x01(\v2\x18.actlet.gateway.v0.UsageR\x05usage\x12\"\n" +
+	"\fcontinuation\x18\x03 \x01(\fR\fcontinuation\x12\x1a\n" +
+	"\breplayed\x18\x04 \x01(\bR\breplayed\"\xa9\x01\n" +
+	"\x05Usage\x12!\n" +
+	"\finput_tokens\x18\x01 \x01(\x04R\vinputTokens\x12#\n" +
+	"\routput_tokens\x18\x02 \x01(\x04R\foutputTokens\x12*\n" +
+	"\x11cache_read_tokens\x18\x03 \x01(\x04R\x0fcacheReadTokens\x12,\n" +
+	"\x12cache_write_tokens\x18\x04 \x01(\x04R\x10cacheWriteTokens*\x84\x01\n" +
 	"\n" +
 	"BudgetKind\x12\x1b\n" +
 	"\x17BUDGET_KIND_UNSPECIFIED\x10\x00\x12\x14\n" +
@@ -2791,11 +4088,23 @@ const file_actlet_gateway_v0_gateway_proto_rawDesc = "" +
 	"\x14SESSION_STATE_PAUSED\x10\x04\x12\x19\n" +
 	"\x15SESSION_STATE_STOPPED\x10\x05\x12\x1b\n" +
 	"\x17SESSION_STATE_COMPLETED\x10\x06\x12\x18\n" +
-	"\x14SESSION_STATE_FAILED\x10\a2\x81\x02\n" +
+	"\x14SESSION_STATE_FAILED\x10\a*?\n" +
+	"\x04Role\x12\x14\n" +
+	"\x10ROLE_UNSPECIFIED\x10\x00\x12\r\n" +
+	"\tROLE_USER\x10\x01\x12\x12\n" +
+	"\x0eROLE_ASSISTANT\x10\x02*\x92\x01\n" +
+	"\n" +
+	"StopReason\x12\x1b\n" +
+	"\x17STOP_REASON_UNSPECIFIED\x10\x00\x12\x18\n" +
+	"\x14STOP_REASON_END_TURN\x10\x01\x12\x18\n" +
+	"\x14STOP_REASON_TOOL_USE\x10\x02\x12\x1a\n" +
+	"\x16STOP_REASON_MAX_TOKENS\x10\x03\x12\x17\n" +
+	"\x13STOP_REASON_REFUSAL\x10\x042\xd7\x02\n" +
 	"\aGateway\x12S\n" +
 	"\bRegister\x12\".actlet.gateway.v0.RegisterRequest\x1a#.actlet.gateway.v0.RegisterResponse\x12K\n" +
 	"\aControl\x12\x1c.actlet.gateway.v0.ControlUp\x1a\x1e.actlet.gateway.v0.ControlDown(\x010\x01\x12T\n" +
-	"\x0fPublishActivity\x12\x1d.actlet.gateway.v0.ActivityUp\x1a\x1e.actlet.gateway.v0.ActivityAck(\x010\x01B<Z:github.com/actlet/actlet/proto/actlet/gateway/v0;gatewayv0b\x06proto3"
+	"\x0fPublishActivity\x12\x1d.actlet.gateway.v0.ActivityUp\x1a\x1e.actlet.gateway.v0.ActivityAck(\x010\x01\x12T\n" +
+	"\x05Infer\x12#.actlet.gateway.v0.InferenceRequest\x1a$.actlet.gateway.v0.InferenceResponse0\x01B<Z:github.com/actlet/actlet/proto/actlet/gateway/v0;gatewayv0b\x06proto3"
 
 var (
 	file_actlet_gateway_v0_gateway_proto_rawDescOnce sync.Once
@@ -2809,8 +4118,8 @@ func file_actlet_gateway_v0_gateway_proto_rawDescGZIP() []byte {
 	return file_actlet_gateway_v0_gateway_proto_rawDescData
 }
 
-var file_actlet_gateway_v0_gateway_proto_enumTypes = make([]protoimpl.EnumInfo, 8)
-var file_actlet_gateway_v0_gateway_proto_msgTypes = make([]protoimpl.MessageInfo, 32)
+var file_actlet_gateway_v0_gateway_proto_enumTypes = make([]protoimpl.EnumInfo, 10)
+var file_actlet_gateway_v0_gateway_proto_msgTypes = make([]protoimpl.MessageInfo, 45)
 var file_actlet_gateway_v0_gateway_proto_goTypes = []any{
 	(BudgetKind)(0),               // 0: actlet.gateway.v0.BudgetKind
 	(BudgetAction)(0),             // 1: actlet.gateway.v0.BudgetAction
@@ -2820,102 +4129,136 @@ var file_actlet_gateway_v0_gateway_proto_goTypes = []any{
 	(PauseMode)(0),                // 5: actlet.gateway.v0.PauseMode
 	(CommandResult)(0),            // 6: actlet.gateway.v0.CommandResult
 	(SessionState)(0),             // 7: actlet.gateway.v0.SessionState
-	(*RegisterRequest)(nil),       // 8: actlet.gateway.v0.RegisterRequest
-	(*RegisterResponse)(nil),      // 9: actlet.gateway.v0.RegisterResponse
-	(*Profile)(nil),               // 10: actlet.gateway.v0.Profile
-	(*Budget)(nil),                // 11: actlet.gateway.v0.Budget
-	(*ModelCatalog)(nil),          // 12: actlet.gateway.v0.ModelCatalog
-	(*ModelAlias)(nil),            // 13: actlet.gateway.v0.ModelAlias
-	(*ToolGrant)(nil),             // 14: actlet.gateway.v0.ToolGrant
-	(*Limits)(nil),                // 15: actlet.gateway.v0.Limits
-	(*Task)(nil),                  // 16: actlet.gateway.v0.Task
-	(*ControlUp)(nil),             // 17: actlet.gateway.v0.ControlUp
-	(*ControlHello)(nil),          // 18: actlet.gateway.v0.ControlHello
-	(*ControlDown)(nil),           // 19: actlet.gateway.v0.ControlDown
-	(*Heartbeat)(nil),             // 20: actlet.gateway.v0.Heartbeat
-	(*Command)(nil),               // 21: actlet.gateway.v0.Command
-	(*Pause)(nil),                 // 22: actlet.gateway.v0.Pause
-	(*Stop)(nil),                  // 23: actlet.gateway.v0.Stop
-	(*Steer)(nil),                 // 24: actlet.gateway.v0.Steer
-	(*CommandAck)(nil),            // 25: actlet.gateway.v0.CommandAck
-	(*Status)(nil),                // 26: actlet.gateway.v0.Status
-	(*ActivityUp)(nil),            // 27: actlet.gateway.v0.ActivityUp
-	(*ActivityHello)(nil),         // 28: actlet.gateway.v0.ActivityHello
-	(*ActivityBatch)(nil),         // 29: actlet.gateway.v0.ActivityBatch
-	(*ActivityAck)(nil),           // 30: actlet.gateway.v0.ActivityAck
-	(*ActivityEvent)(nil),         // 31: actlet.gateway.v0.ActivityEvent
-	(*SessionStarted)(nil),        // 32: actlet.gateway.v0.SessionStarted
-	(*StateChange)(nil),           // 33: actlet.gateway.v0.StateChange
-	(*CommandReceived)(nil),       // 34: actlet.gateway.v0.CommandReceived
-	(*SteerNote)(nil),             // 35: actlet.gateway.v0.SteerNote
-	(*Text)(nil),                  // 36: actlet.gateway.v0.Text
-	(*Gap)(nil),                   // 37: actlet.gateway.v0.Gap
-	nil,                           // 38: actlet.gateway.v0.ModelCatalog.RolesEntry
-	nil,                           // 39: actlet.gateway.v0.ToolGrant.SettingsEntry
-	(*durationpb.Duration)(nil),   // 40: google.protobuf.Duration
-	(*timestamppb.Timestamp)(nil), // 41: google.protobuf.Timestamp
+	(Role)(0),                     // 8: actlet.gateway.v0.Role
+	(StopReason)(0),               // 9: actlet.gateway.v0.StopReason
+	(*RegisterRequest)(nil),       // 10: actlet.gateway.v0.RegisterRequest
+	(*RegisterResponse)(nil),      // 11: actlet.gateway.v0.RegisterResponse
+	(*Profile)(nil),               // 12: actlet.gateway.v0.Profile
+	(*Budget)(nil),                // 13: actlet.gateway.v0.Budget
+	(*ModelCatalog)(nil),          // 14: actlet.gateway.v0.ModelCatalog
+	(*ModelAlias)(nil),            // 15: actlet.gateway.v0.ModelAlias
+	(*ToolGrant)(nil),             // 16: actlet.gateway.v0.ToolGrant
+	(*Limits)(nil),                // 17: actlet.gateway.v0.Limits
+	(*Task)(nil),                  // 18: actlet.gateway.v0.Task
+	(*ControlUp)(nil),             // 19: actlet.gateway.v0.ControlUp
+	(*ControlHello)(nil),          // 20: actlet.gateway.v0.ControlHello
+	(*ControlDown)(nil),           // 21: actlet.gateway.v0.ControlDown
+	(*Heartbeat)(nil),             // 22: actlet.gateway.v0.Heartbeat
+	(*Command)(nil),               // 23: actlet.gateway.v0.Command
+	(*Pause)(nil),                 // 24: actlet.gateway.v0.Pause
+	(*Stop)(nil),                  // 25: actlet.gateway.v0.Stop
+	(*Steer)(nil),                 // 26: actlet.gateway.v0.Steer
+	(*CommandAck)(nil),            // 27: actlet.gateway.v0.CommandAck
+	(*Status)(nil),                // 28: actlet.gateway.v0.Status
+	(*ActivityUp)(nil),            // 29: actlet.gateway.v0.ActivityUp
+	(*ActivityHello)(nil),         // 30: actlet.gateway.v0.ActivityHello
+	(*ActivityBatch)(nil),         // 31: actlet.gateway.v0.ActivityBatch
+	(*ActivityAck)(nil),           // 32: actlet.gateway.v0.ActivityAck
+	(*ActivityEvent)(nil),         // 33: actlet.gateway.v0.ActivityEvent
+	(*SessionStarted)(nil),        // 34: actlet.gateway.v0.SessionStarted
+	(*StateChange)(nil),           // 35: actlet.gateway.v0.StateChange
+	(*CommandReceived)(nil),       // 36: actlet.gateway.v0.CommandReceived
+	(*SteerNote)(nil),             // 37: actlet.gateway.v0.SteerNote
+	(*Text)(nil),                  // 38: actlet.gateway.v0.Text
+	(*Gap)(nil),                   // 39: actlet.gateway.v0.Gap
+	(*ModelTurn)(nil),             // 40: actlet.gateway.v0.ModelTurn
+	(*ToolStarted)(nil),           // 41: actlet.gateway.v0.ToolStarted
+	(*ToolFinished)(nil),          // 42: actlet.gateway.v0.ToolFinished
+	(*FileChange)(nil),            // 43: actlet.gateway.v0.FileChange
+	(*InferenceRequest)(nil),      // 44: actlet.gateway.v0.InferenceRequest
+	(*Message)(nil),               // 45: actlet.gateway.v0.Message
+	(*Part)(nil),                  // 46: actlet.gateway.v0.Part
+	(*ToolCall)(nil),              // 47: actlet.gateway.v0.ToolCall
+	(*ToolResult)(nil),            // 48: actlet.gateway.v0.ToolResult
+	(*ToolSpec)(nil),              // 49: actlet.gateway.v0.ToolSpec
+	(*InferenceResponse)(nil),     // 50: actlet.gateway.v0.InferenceResponse
+	(*InferenceDone)(nil),         // 51: actlet.gateway.v0.InferenceDone
+	(*Usage)(nil),                 // 52: actlet.gateway.v0.Usage
+	nil,                           // 53: actlet.gateway.v0.ModelCatalog.RolesEntry
+	nil,                           // 54: actlet.gateway.v0.ToolGrant.SettingsEntry
+	(*durationpb.Duration)(nil),   // 55: google.protobuf.Duration
+	(*timestamppb.Timestamp)(nil), // 56: google.protobuf.Timestamp
 }
 var file_actlet_gateway_v0_gateway_proto_depIdxs = []int32{
-	10, // 0: actlet.gateway.v0.RegisterResponse.profile:type_name -> actlet.gateway.v0.Profile
-	16, // 1: actlet.gateway.v0.RegisterResponse.task:type_name -> actlet.gateway.v0.Task
-	15, // 2: actlet.gateway.v0.Profile.limits:type_name -> actlet.gateway.v0.Limits
+	12, // 0: actlet.gateway.v0.RegisterResponse.profile:type_name -> actlet.gateway.v0.Profile
+	18, // 1: actlet.gateway.v0.RegisterResponse.task:type_name -> actlet.gateway.v0.Task
+	17, // 2: actlet.gateway.v0.Profile.limits:type_name -> actlet.gateway.v0.Limits
 	5,  // 3: actlet.gateway.v0.Profile.default_pause_mode:type_name -> actlet.gateway.v0.PauseMode
-	40, // 4: actlet.gateway.v0.Profile.stop_grace:type_name -> google.protobuf.Duration
+	55, // 4: actlet.gateway.v0.Profile.stop_grace:type_name -> google.protobuf.Duration
 	3,  // 5: actlet.gateway.v0.Profile.on_disconnect:type_name -> actlet.gateway.v0.DisconnectBehavior
-	11, // 6: actlet.gateway.v0.Profile.budgets:type_name -> actlet.gateway.v0.Budget
-	12, // 7: actlet.gateway.v0.Profile.models:type_name -> actlet.gateway.v0.ModelCatalog
-	14, // 8: actlet.gateway.v0.Profile.tools:type_name -> actlet.gateway.v0.ToolGrant
+	13, // 6: actlet.gateway.v0.Profile.budgets:type_name -> actlet.gateway.v0.Budget
+	14, // 7: actlet.gateway.v0.Profile.models:type_name -> actlet.gateway.v0.ModelCatalog
+	16, // 8: actlet.gateway.v0.Profile.tools:type_name -> actlet.gateway.v0.ToolGrant
 	0,  // 9: actlet.gateway.v0.Budget.kind:type_name -> actlet.gateway.v0.BudgetKind
 	1,  // 10: actlet.gateway.v0.Budget.on_exhaust:type_name -> actlet.gateway.v0.BudgetAction
 	2,  // 11: actlet.gateway.v0.Budget.wait_mode:type_name -> actlet.gateway.v0.BudgetWaitMode
-	13, // 12: actlet.gateway.v0.ModelCatalog.aliases:type_name -> actlet.gateway.v0.ModelAlias
-	38, // 13: actlet.gateway.v0.ModelCatalog.roles:type_name -> actlet.gateway.v0.ModelCatalog.RolesEntry
-	39, // 14: actlet.gateway.v0.ToolGrant.settings:type_name -> actlet.gateway.v0.ToolGrant.SettingsEntry
-	18, // 15: actlet.gateway.v0.ControlUp.hello:type_name -> actlet.gateway.v0.ControlHello
-	25, // 16: actlet.gateway.v0.ControlUp.ack:type_name -> actlet.gateway.v0.CommandAck
-	26, // 17: actlet.gateway.v0.ControlUp.status:type_name -> actlet.gateway.v0.Status
+	15, // 12: actlet.gateway.v0.ModelCatalog.aliases:type_name -> actlet.gateway.v0.ModelAlias
+	53, // 13: actlet.gateway.v0.ModelCatalog.roles:type_name -> actlet.gateway.v0.ModelCatalog.RolesEntry
+	54, // 14: actlet.gateway.v0.ToolGrant.settings:type_name -> actlet.gateway.v0.ToolGrant.SettingsEntry
+	20, // 15: actlet.gateway.v0.ControlUp.hello:type_name -> actlet.gateway.v0.ControlHello
+	27, // 16: actlet.gateway.v0.ControlUp.ack:type_name -> actlet.gateway.v0.CommandAck
+	28, // 17: actlet.gateway.v0.ControlUp.status:type_name -> actlet.gateway.v0.Status
 	7,  // 18: actlet.gateway.v0.ControlHello.state:type_name -> actlet.gateway.v0.SessionState
-	21, // 19: actlet.gateway.v0.ControlDown.command:type_name -> actlet.gateway.v0.Command
-	20, // 20: actlet.gateway.v0.ControlDown.heartbeat:type_name -> actlet.gateway.v0.Heartbeat
-	41, // 21: actlet.gateway.v0.Heartbeat.time:type_name -> google.protobuf.Timestamp
+	23, // 19: actlet.gateway.v0.ControlDown.command:type_name -> actlet.gateway.v0.Command
+	22, // 20: actlet.gateway.v0.ControlDown.heartbeat:type_name -> actlet.gateway.v0.Heartbeat
+	56, // 21: actlet.gateway.v0.Heartbeat.time:type_name -> google.protobuf.Timestamp
 	4,  // 22: actlet.gateway.v0.Command.origin:type_name -> actlet.gateway.v0.Origin
-	22, // 23: actlet.gateway.v0.Command.pause:type_name -> actlet.gateway.v0.Pause
-	23, // 24: actlet.gateway.v0.Command.stop:type_name -> actlet.gateway.v0.Stop
-	24, // 25: actlet.gateway.v0.Command.steer:type_name -> actlet.gateway.v0.Steer
+	24, // 23: actlet.gateway.v0.Command.pause:type_name -> actlet.gateway.v0.Pause
+	25, // 24: actlet.gateway.v0.Command.stop:type_name -> actlet.gateway.v0.Stop
+	26, // 25: actlet.gateway.v0.Command.steer:type_name -> actlet.gateway.v0.Steer
 	5,  // 26: actlet.gateway.v0.Pause.mode:type_name -> actlet.gateway.v0.PauseMode
-	40, // 27: actlet.gateway.v0.Stop.grace:type_name -> google.protobuf.Duration
+	55, // 27: actlet.gateway.v0.Stop.grace:type_name -> google.protobuf.Duration
 	6,  // 28: actlet.gateway.v0.CommandAck.result:type_name -> actlet.gateway.v0.CommandResult
 	7,  // 29: actlet.gateway.v0.CommandAck.state:type_name -> actlet.gateway.v0.SessionState
 	7,  // 30: actlet.gateway.v0.Status.state:type_name -> actlet.gateway.v0.SessionState
-	41, // 31: actlet.gateway.v0.Status.time:type_name -> google.protobuf.Timestamp
-	28, // 32: actlet.gateway.v0.ActivityUp.hello:type_name -> actlet.gateway.v0.ActivityHello
-	29, // 33: actlet.gateway.v0.ActivityUp.batch:type_name -> actlet.gateway.v0.ActivityBatch
-	31, // 34: actlet.gateway.v0.ActivityBatch.events:type_name -> actlet.gateway.v0.ActivityEvent
-	41, // 35: actlet.gateway.v0.ActivityEvent.time:type_name -> google.protobuf.Timestamp
-	32, // 36: actlet.gateway.v0.ActivityEvent.started:type_name -> actlet.gateway.v0.SessionStarted
-	33, // 37: actlet.gateway.v0.ActivityEvent.state:type_name -> actlet.gateway.v0.StateChange
-	34, // 38: actlet.gateway.v0.ActivityEvent.command:type_name -> actlet.gateway.v0.CommandReceived
-	35, // 39: actlet.gateway.v0.ActivityEvent.steer:type_name -> actlet.gateway.v0.SteerNote
-	36, // 40: actlet.gateway.v0.ActivityEvent.text:type_name -> actlet.gateway.v0.Text
-	37, // 41: actlet.gateway.v0.ActivityEvent.gap:type_name -> actlet.gateway.v0.Gap
-	7,  // 42: actlet.gateway.v0.StateChange.from:type_name -> actlet.gateway.v0.SessionState
-	7,  // 43: actlet.gateway.v0.StateChange.to:type_name -> actlet.gateway.v0.SessionState
-	21, // 44: actlet.gateway.v0.CommandReceived.command:type_name -> actlet.gateway.v0.Command
-	6,  // 45: actlet.gateway.v0.CommandReceived.result:type_name -> actlet.gateway.v0.CommandResult
-	4,  // 46: actlet.gateway.v0.SteerNote.origin:type_name -> actlet.gateway.v0.Origin
-	41, // 47: actlet.gateway.v0.Gap.first:type_name -> google.protobuf.Timestamp
-	41, // 48: actlet.gateway.v0.Gap.last:type_name -> google.protobuf.Timestamp
-	8,  // 49: actlet.gateway.v0.Gateway.Register:input_type -> actlet.gateway.v0.RegisterRequest
-	17, // 50: actlet.gateway.v0.Gateway.Control:input_type -> actlet.gateway.v0.ControlUp
-	27, // 51: actlet.gateway.v0.Gateway.PublishActivity:input_type -> actlet.gateway.v0.ActivityUp
-	9,  // 52: actlet.gateway.v0.Gateway.Register:output_type -> actlet.gateway.v0.RegisterResponse
-	19, // 53: actlet.gateway.v0.Gateway.Control:output_type -> actlet.gateway.v0.ControlDown
-	30, // 54: actlet.gateway.v0.Gateway.PublishActivity:output_type -> actlet.gateway.v0.ActivityAck
-	52, // [52:55] is the sub-list for method output_type
-	49, // [49:52] is the sub-list for method input_type
-	49, // [49:49] is the sub-list for extension type_name
-	49, // [49:49] is the sub-list for extension extendee
-	0,  // [0:49] is the sub-list for field type_name
+	56, // 31: actlet.gateway.v0.Status.time:type_name -> google.protobuf.Timestamp
+	30, // 32: actlet.gateway.v0.ActivityUp.hello:type_name -> actlet.gateway.v0.ActivityHello
+	31, // 33: actlet.gateway.v0.ActivityUp.batch:type_name -> actlet.gateway.v0.ActivityBatch
+	33, // 34: actlet.gateway.v0.ActivityBatch.events:type_name -> actlet.gateway.v0.ActivityEvent
+	56, // 35: actlet.gateway.v0.ActivityEvent.time:type_name -> google.protobuf.Timestamp
+	34, // 36: actlet.gateway.v0.ActivityEvent.started:type_name -> actlet.gateway.v0.SessionStarted
+	35, // 37: actlet.gateway.v0.ActivityEvent.state:type_name -> actlet.gateway.v0.StateChange
+	36, // 38: actlet.gateway.v0.ActivityEvent.command:type_name -> actlet.gateway.v0.CommandReceived
+	37, // 39: actlet.gateway.v0.ActivityEvent.steer:type_name -> actlet.gateway.v0.SteerNote
+	38, // 40: actlet.gateway.v0.ActivityEvent.text:type_name -> actlet.gateway.v0.Text
+	39, // 41: actlet.gateway.v0.ActivityEvent.gap:type_name -> actlet.gateway.v0.Gap
+	40, // 42: actlet.gateway.v0.ActivityEvent.model_turn:type_name -> actlet.gateway.v0.ModelTurn
+	41, // 43: actlet.gateway.v0.ActivityEvent.tool_started:type_name -> actlet.gateway.v0.ToolStarted
+	42, // 44: actlet.gateway.v0.ActivityEvent.tool_finished:type_name -> actlet.gateway.v0.ToolFinished
+	43, // 45: actlet.gateway.v0.ActivityEvent.file_change:type_name -> actlet.gateway.v0.FileChange
+	7,  // 46: actlet.gateway.v0.StateChange.from:type_name -> actlet.gateway.v0.SessionState
+	7,  // 47: actlet.gateway.v0.StateChange.to:type_name -> actlet.gateway.v0.SessionState
+	23, // 48: actlet.gateway.v0.CommandReceived.command:type_name -> actlet.gateway.v0.Command
+	6,  // 49: actlet.gateway.v0.CommandReceived.result:type_name -> actlet.gateway.v0.CommandResult
+	4,  // 50: actlet.gateway.v0.SteerNote.origin:type_name -> actlet.gateway.v0.Origin
+	56, // 51: actlet.gateway.v0.Gap.first:type_name -> google.protobuf.Timestamp
+	56, // 52: actlet.gateway.v0.Gap.last:type_name -> google.protobuf.Timestamp
+	9,  // 53: actlet.gateway.v0.ModelTurn.stop_reason:type_name -> actlet.gateway.v0.StopReason
+	52, // 54: actlet.gateway.v0.ModelTurn.usage:type_name -> actlet.gateway.v0.Usage
+	55, // 55: actlet.gateway.v0.ToolFinished.took:type_name -> google.protobuf.Duration
+	45, // 56: actlet.gateway.v0.InferenceRequest.messages:type_name -> actlet.gateway.v0.Message
+	49, // 57: actlet.gateway.v0.InferenceRequest.tools:type_name -> actlet.gateway.v0.ToolSpec
+	8,  // 58: actlet.gateway.v0.Message.role:type_name -> actlet.gateway.v0.Role
+	46, // 59: actlet.gateway.v0.Message.parts:type_name -> actlet.gateway.v0.Part
+	47, // 60: actlet.gateway.v0.Part.tool_call:type_name -> actlet.gateway.v0.ToolCall
+	48, // 61: actlet.gateway.v0.Part.tool_result:type_name -> actlet.gateway.v0.ToolResult
+	47, // 62: actlet.gateway.v0.InferenceResponse.tool_call:type_name -> actlet.gateway.v0.ToolCall
+	51, // 63: actlet.gateway.v0.InferenceResponse.done:type_name -> actlet.gateway.v0.InferenceDone
+	9,  // 64: actlet.gateway.v0.InferenceDone.stop_reason:type_name -> actlet.gateway.v0.StopReason
+	52, // 65: actlet.gateway.v0.InferenceDone.usage:type_name -> actlet.gateway.v0.Usage
+	10, // 66: actlet.gateway.v0.Gateway.Register:input_type -> actlet.gateway.v0.RegisterRequest
+	19, // 67: actlet.gateway.v0.Gateway.Control:input_type -> actlet.gateway.v0.ControlUp
+	29, // 68: actlet.gateway.v0.Gateway.PublishActivity:input_type -> actlet.gateway.v0.ActivityUp
+	44, // 69: actlet.gateway.v0.Gateway.Infer:input_type -> actlet.gateway.v0.InferenceRequest
+	11, // 70: actlet.gateway.v0.Gateway.Register:output_type -> actlet.gateway.v0.RegisterResponse
+	21, // 71: actlet.gateway.v0.Gateway.Control:output_type -> actlet.gateway.v0.ControlDown
+	32, // 72: actlet.gateway.v0.Gateway.PublishActivity:output_type -> actlet.gateway.v0.ActivityAck
+	50, // 73: actlet.gateway.v0.Gateway.Infer:output_type -> actlet.gateway.v0.InferenceResponse
+	70, // [70:74] is the sub-list for method output_type
+	66, // [66:70] is the sub-list for method input_type
+	66, // [66:66] is the sub-list for extension type_name
+	66, // [66:66] is the sub-list for extension extendee
+	0,  // [0:66] is the sub-list for field type_name
 }
 
 func init() { file_actlet_gateway_v0_gateway_proto_init() }
@@ -2948,14 +4291,28 @@ func file_actlet_gateway_v0_gateway_proto_init() {
 		(*ActivityEvent_Steer)(nil),
 		(*ActivityEvent_Text)(nil),
 		(*ActivityEvent_Gap)(nil),
+		(*ActivityEvent_ModelTurn)(nil),
+		(*ActivityEvent_ToolStarted)(nil),
+		(*ActivityEvent_ToolFinished)(nil),
+		(*ActivityEvent_FileChange)(nil),
+	}
+	file_actlet_gateway_v0_gateway_proto_msgTypes[36].OneofWrappers = []any{
+		(*Part_Text)(nil),
+		(*Part_ToolCall)(nil),
+		(*Part_ToolResult)(nil),
+	}
+	file_actlet_gateway_v0_gateway_proto_msgTypes[40].OneofWrappers = []any{
+		(*InferenceResponse_TextDelta)(nil),
+		(*InferenceResponse_ToolCall)(nil),
+		(*InferenceResponse_Done)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_actlet_gateway_v0_gateway_proto_rawDesc), len(file_actlet_gateway_v0_gateway_proto_rawDesc)),
-			NumEnums:      8,
-			NumMessages:   32,
+			NumEnums:      10,
+			NumMessages:   45,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

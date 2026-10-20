@@ -29,6 +29,7 @@ import (
 	"github.com/actlet/actlet/internal/buildinfo"
 	gatewayv0 "github.com/actlet/actlet/proto/actlet/gateway/v0"
 	"github.com/actlet/actlet/sdk"
+	"github.com/actlet/actlet/sdk/scripted"
 )
 
 const usage = `Usage: actlet-devgw [flags]
@@ -68,6 +69,7 @@ type config struct {
 	cmdTimeout   time.Duration
 	drainTimeout time.Duration
 	heartbeat    time.Duration
+	modelScript  string
 }
 
 func main() {
@@ -97,6 +99,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	fs.StringVar(&cfg.taskFile, "task", "", "task file to assign, in the task.json format (default: a demo task)")
 	fs.StringVar(&cfg.demoDef, "demo", `{"steps":5,"step":"2s","ticks":2}`, "definition of the default demo task")
 	fs.StringVar(&cfg.demoInput, "demo-input", `{"message":"hello from actlet-devgw"}`, "input of the default demo task")
+	fs.StringVar(&cfg.modelScript, "model", "", "serve model calls from this script of turns, YAML or JSON (default: no model)")
 	fs.StringVar(&cfg.profile, "profile", "", "profile file to assign, JSON or YAML (default: built from the flags below)")
 	fs.StringVar(&cfg.profileID, "profile-id", "dev", "ID of the default profile")
 	fs.StringVar(&cfg.pauseMode, "pause-mode", "drain", "default profile's pause mode on SIGTERM: drain or interrupt")
@@ -215,6 +218,21 @@ func newGateway(cfg config, out io.Writer, log *slog.Logger) (*gateway, error) {
 	}
 	if cfg.token != "" {
 		opts.Authenticate = sdk.StaticToken(cfg.token)
+	}
+	if cfg.modelScript != "" {
+		model, err := scripted.Load(cfg.modelScript)
+		if err != nil {
+			return nil, err
+		}
+		opts.OnInference = func(ctx context.Context, call *sdk.InferenceCall) error {
+			req := call.Request
+			g.printf("[%s] model call %s (%s, %d messages)", short(req.GetSessionId()), short(req.GetIntentId()), req.GetModel(), len(req.GetMessages()))
+			err := model.Serve(ctx, call)
+			if err != nil {
+				g.printf("[%s] model call %s failed: %v", short(req.GetSessionId()), short(req.GetIntentId()), err)
+			}
+			return err
+		}
 	}
 	g.srv, err = sdk.NewServer(opts)
 	if err != nil {

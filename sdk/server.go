@@ -64,6 +64,18 @@ type Options struct {
 	// disconnects.
 	OnControl func(s *Session, connected bool)
 
+	// OnInference answers the model calls of workers' agents; see
+	// InferenceCall. An error is returned to the worker as the call's
+	// status: the worker retries codes.Unavailable, ResourceExhausted,
+	// Aborted and DeadlineExceeded with the same intent ID, and fails the
+	// session on others. Nil makes the gateway serve no models.
+	OnInference func(ctx context.Context, call *InferenceCall) error
+	// InferenceCache is how many answered calls the server keeps to answer
+	// repeated intent IDs. Zero means DefaultInferenceCache. Calls are kept
+	// in memory: a call repeated to another replica, or after a restart,
+	// runs again unless OnInference recognises its intent ID itself.
+	InferenceCache int
+
 	// Heartbeat is how often the server sends a heartbeat on each control
 	// stream, so that proxies don't cut a stream that is idle in the
 	// gateway-to-worker direction. Zero means DefaultHeartbeat; a negative
@@ -117,6 +129,9 @@ type Server struct {
 	// publishing counts the open activity streams per session, for
 	// ActivityReleaser stores.
 	publishing map[string]*publishers
+	// Model calls by intent ID, and the answered ones, oldest first.
+	inferences map[inferenceKey]*inference
+	answered   []inferenceKey
 
 	// Draining: set once by Shutdown; streams watch drain and end.
 	drainOnce sync.Once
@@ -148,12 +163,16 @@ func NewServer(opts Options) (*Server, error) {
 	if opts.Heartbeat == 0 {
 		opts.Heartbeat = DefaultHeartbeat
 	}
+	if opts.InferenceCache <= 0 {
+		opts.InferenceCache = DefaultInferenceCache
+	}
 	return &Server{
 		opts:       opts,
 		log:        opts.Logger,
 		sessions:   map[string]*Session{},
 		intake:     map[intakeKey]*sync.Mutex{},
 		publishing: map[string]*publishers{},
+		inferences: map[inferenceKey]*inference{},
 		drain:      make(chan struct{}),
 	}, nil
 }
