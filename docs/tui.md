@@ -1,9 +1,10 @@
 # Watching a session
 
-Actlet runs headless; a terminal viewer is something you add when you want to look. The same viewer shows three things:
+Actlet runs headless; a terminal viewer is something you add when you want to look. The same viewer shows:
 
 - a box running somewhere else on the machine: `actlet attach -session <dir>`;
 - the run in your own terminal: `actlet run -tui` runs the session and shows it;
+- a session running anywhere, through its orchestrator or straight from the box: `actlet-cli attach` ([attaching from elsewhere](#attaching-from-elsewhere));
 - a recording: `actlet-cli replay play <file.actrec>` plays a gateway's recording back, offline.
 
 Whichever it shows, the viewer is only a viewer. Quitting it (`q`) detaches: the session carries on. If a viewer reads too slowly, the box skips events for it and says how many, rather than wait for it or buffer without bound; a viewer that crashes or is killed doesn't affect the run either.
@@ -44,7 +45,7 @@ The **status line** keeps to what matters at a glance: the session's state, the 
 | Tools | the tools and their recovery policies, the profile's grants, the tools manifest |
 | Events | every event as one line, for debugging |
 
-Figures Actlet doesn't have show as `n/a`: cost needs a gateway that reports it with each model call, context percentages need a context window in the profile's model catalogue, and the box's figures come only from a running box. Budgets aren't enforced yet; the viewer shows how much of each has been used.
+Figures Actlet doesn't have show as `n/a`: cost needs a gateway that reports it with each model call, context percentages need a context window in the profile's model catalogue, and the box's figures come only from a running box seen directly, not through the orchestrator. Budgets aren't enforced yet; the viewer shows how much of each has been used.
 
 ## Keys and mouse
 
@@ -67,7 +68,7 @@ The mouse works too: click a tab, click a tool call to select it and again to ex
 
 ## Notes, and what a viewer may do
 
-A note typed into the viewer goes to the agent like any steer note: it reaches the agent at its next turn boundary, exactly once, and it is recorded with origin `local` and the viewer's user name. Pausing and stopping are the orchestrator's business, so a local viewer may only send notes unless the profile allows more:
+A note typed into the viewer goes to the agent like any steer note: it reaches the agent at its next turn boundary, exactly once, and it is recorded with the viewer's user name and origin `local`, or `remote` for a viewer attached from elsewhere. Pausing and stopping are the orchestrator's business, so a viewer may only send notes unless the profile allows more:
 
 ```yaml
 local_attach:
@@ -75,15 +76,55 @@ local_attach:
   # disabled: true           # no local attach at all
 ```
 
-A refused command shows in the status line, and the session isn't touched.
+A refused command shows in the status line, and the session isn't touched. The same setting governs viewers attached to the box's port, and, unless the orchestrator decides otherwise, viewers attached through it.
 
 ## How it attaches
 
 A running box listens on a Unix socket in its session folder, `.actlet/attach.sock`, readable only by its own user. When the folder's path is too long for a socket, the socket goes in the temporary directory instead and `.actlet/attach.addr` names it. Windows 10 and later have Unix sockets too, so it works the same there. `-no-attach` (or `ACTLET_NO_ATTACH=true`) turns it off. Once the session ends the socket goes away; a viewer still open on the same machine then reads files from the session folder itself, by the same rules.
 
-The socket serves the attach protocol, [`proto/actlet/attach/v0`](../proto/actlet/attach/v0/attach.proto), over gRPC: `Info` describes the session and the box's figures, `Watch` streams the run's activity from a position (what the box still holds, then live events), and `Command` sends a note or, when allowed, a pause or stop. The box keeps the last few thousand events, plus the run's start, state changes and subagent starts and ends, so a late viewer still sees the run's shape; a viewer told it missed events shows that in the Session tab. Remote viewers will use the same protocol.
+The socket serves the attach protocol, [`proto/actlet/attach/v0`](../proto/actlet/attach/v0/attach.proto), over gRPC: `Info` describes the session and the box's figures, `Watch` streams the run's activity from a position (what the box still holds, then live events), and `Command` sends a note or, when allowed, a pause or stop. The box keeps the last few thousand events, plus the run's start, state changes and subagent starts and ends, so a late viewer still sees the run's shape; a viewer told it missed events shows that in the Session tab. Viewers elsewhere use the same protocol.
 
 `actlet attach -dump` and `actlet-cli replay play -dump` print a screen as text and exit, without a terminal: handy for scripts and bug reports. `-tab` picks the tab and `-width` and `-height` the size.
+
+## Attaching from elsewhere
+
+`actlet-cli attach` opens the same viewer on a session that runs elsewhere, over the network, through the attach protocol rather than a shell. The status line says what it is connected to.
+
+**Through the orchestrator**, the usual way:
+
+```sh
+ACTLET_ATTACH_TOKEN=<token> actlet-cli attach -gateway orchestrator.example:7400 [-session <id>]
+```
+
+The orchestrator relays the session's activity (what it has recorded, then live events), the commands the viewer may send, and file reads, which it asks the box for over the box's own connection. Without `-session` it lists the sessions to pick from. The status line reads `orchestrator <address> · session <id>`. Which token lets a viewer in, and which sessions it may see, is the orchestrator's decision ([implementing a gateway](gateway-protocol.md#implementing-a-gateway)). `actlet-devgw` accepts its `-token`:
+
+```sh
+ACTLET_ATTACH_TOKEN=dev bin/actlet-cli attach -gateway 127.0.0.1:7400
+```
+
+**Directly to a box**, when the deployment opens the box's attach port. It is off unless `actlet run` is given an address, and then needs a token:
+
+```sh
+ACTLET_ATTACH_TOKEN=<token> actlet run -attach-listen 127.0.0.1:7600 ...
+```
+
+The port listens on loopback only, so nothing outside the box's network namespace reaches it. In Kubernetes, forward it to your machine and attach to the forwarded port:
+
+```sh
+kubectl port-forward pod/<pod> 7600:7600
+ACTLET_ATTACH_TOKEN=<token> actlet-cli attach -direct 127.0.0.1:7600
+```
+
+The status line reads `box <address>`. The port speaks the same protocol as the session folder's socket, and shows the box's own figures.
+
+Security notes:
+
+- Every remote call needs the token; one without it, or with the wrong one, is refused.
+- Pass the token in `ACTLET_ATTACH_TOKEN` rather than `-token`, which other users can see in the process list. Actlet removes every `ACTLET_` variable from the tools' environment, so the agent never sees the token, and no token is ever recorded in the activity or the journal.
+- `-attach-allow-remote` (`ACTLET_ATTACH_ALLOW_REMOTE=true`) lets the port listen on another address, with a warning. Anyone who can reach it and has the token can then watch the session and read its files. The connection is plaintext: keep it on a trusted network, or tunnel it.
+- Through the orchestrator, `-tls` (and `-tls-ca`) connect with TLS.
+- A remote viewer reads only `inputs/`, `workspace/` and `output/`, as a local one does, and the box answers a few file reads at a time.
+- Remote viewers are bounded like local ones: a slow viewer skips events, and neither a slow nor a crashed viewer affects the run.
 
 ## Untrusted text
 

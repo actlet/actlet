@@ -60,7 +60,7 @@ Registration is retried with backoff while the gateway is unreachable. Errors th
 The gateway sends `Command`s down the control stream. Each has:
 
 - an **ID**, chosen by the gateway and unique within the session;
-- an **origin** (orchestrator or local) and an **actor** (for example an operator name), both recorded;
+- an **origin** (the orchestrator, a `local` viewer on the box's machine, or a `remote` viewer attached through the orchestrator or to the box's port) and an **actor** (for example an operator name), both recorded;
 - one **action**.
 
 | Action | Effect |
@@ -74,6 +74,10 @@ The worker writes every command to its journal, together with whether it accepte
 Commands are idempotent by ID. A worker that receives an ID it has seen before, in this run or an earlier one, acknowledges it again with `duplicate: true` and doesn't apply it a second time. A gateway can therefore always resend a command it hasn't seen acknowledged. The SDK does this automatically after a reconnect.
 
 A command with an action the worker doesn't know is rejected rather than ignored. A newer gateway talking to an older worker learns that the action wasn't applied.
+
+### File reads
+
+For viewers attached through the orchestrator ([attaching from elsewhere](tui.md#attaching-from-elsewhere)), the gateway asks the worker for files on the control stream: a `FileRequest` with an ID and a path relative to `workspace/`, answered by a `FileResponse` with the same ID. A worker that announces the `attach.files` capability serves files in `inputs/`, `workspace/` and `output/` only, never through symbolic links out of them, cuts large files short (256 KiB) and reports binary files without their content. It serves a few at a time on goroutines of its own, so file reads never delay commands, and refuses more. A file read isn't a command: it isn't recorded or acknowledged, and it isn't sent again after a reconnect.
 
 ### Status
 
@@ -159,7 +163,8 @@ The Go package [`sdk`](../sdk) implements the gateway side for embedding in an o
 - `sdk.NewServer(sdk.Options{...})` with an `Assign` function that decides each session's profile and task, an optional `Authenticate`, and an `ActivityStore`;
 - `Session.Pause`, `Stop`, `Steer` and `Send` to issue commands and wait for their acknowledgements, with queuing and resending handled;
 - `sdk.MemoryStore` and `sdk.RecordingStore` (one `.actrec` file per session, readable with `actlet-cli replay inspect` and `actlet-cli replay export`);
-- `OnInference` to answer agents' model calls, deduplicated by intent ID.
+- `OnInference` to answer agents' model calls, deduplicated by intent ID;
+- `Server.RegisterAttach` to serve the [attach protocol](../proto/actlet/attach/v0/attach.proto) to viewers such as `actlet-cli attach`. A viewer names its session in the `actlet-session` request metadata. Viewers are authenticated with `Authenticate`, like workers (`grpc.Method` tells their calls apart); `AuthorizeAttach` decides which sessions each may attach to, and `AttachCommands` what it may send, by default what the session's profile lets local viewers send. A viewer gets the session's earlier activity when the store is an `ActivityReader`, as both stores are, then live events; the server keeps a bounded backlog per watched session, and a slow viewer skips events rather than slowing the session's activity down.
 
 Gateways in other languages implement the same calls from the proto file. They must:
 
@@ -178,4 +183,4 @@ ACTLET_GATEWAY=127.0.0.1:7400 ACTLET_TOKEN=dev \
   bin/actlet run -session ./demo-session
 ```
 
-`actlet-devgw` assigns a demo task (or `-task <file>`) with a default profile (or `-profile <file>`), prints the activity it receives and records it under `devgw-data/`. Read recordings with `actlet-cli replay inspect|export`. `make image-devgw` builds it as a container image. Type commands on its standard input: `sessions`, `pause drain`, `pause interrupt`, `stop 5s`, `stop kill`, `steer <note>`, `use <session>`. After a pause, run the same `actlet run` command again to resume.
+`actlet-devgw` assigns a demo task (or `-task <file>`) with a default profile (or `-profile <file>`), prints the activity it receives, records it under `devgw-data/`, and lets viewers attach with its token (`ACTLET_ATTACH_TOKEN=dev bin/actlet-cli attach -gateway 127.0.0.1:7400`). Read recordings with `actlet-cli replay inspect|export`. `make image-devgw` builds it as a container image. Type commands on its standard input: `sessions`, `pause drain`, `pause interrupt`, `stop 5s`, `stop kill`, `steer <note>`, `use <session>`. After a pause, run the same `actlet run` command again to resume.

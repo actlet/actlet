@@ -76,6 +76,7 @@ A gateway must enforce a keepalive minimum no stricter than the worker's 20s pin
 - Keep the session folder on a PersistentVolumeClaim so a paused session can resume in a new Pod.
 - Set `terminationGracePeriodSeconds` above the worker's `-signal-deadline` (default 8s), so a Pod deletion pauses cleanly (exit code 3).
 - Use `restartPolicy: Never` or a Job, and let the orchestrator decide when to resume.
+- To watch a box directly, give it `-attach-listen 127.0.0.1:7600` and an `ACTLET_ATTACH_TOKEN`, and reach it with `kubectl port-forward` ([attaching from elsewhere](tui.md#attaching-from-elsewhere)). Attaching through the orchestrator needs no port at all.
 
 ## Running the test
 

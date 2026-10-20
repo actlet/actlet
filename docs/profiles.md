@@ -55,7 +55,7 @@ instructions: |                 # the implementor's layer of the agent's prompt
 tools_manifest: |               # what is installed, for the agent
   Go 1.27, Node 22 and jq are installed.
 checkpoint_every_turns: 1       # model turns between checkpoints
-local_attach:                   # what a viewer attached to the box may do
+local_attach:                   # what a viewer attached to the box, or by default through the orchestrator, may do
   commands: [steer]             # steer, pause and stop; [none] allows nothing
 ```
 
@@ -75,7 +75,7 @@ All problems are reported at once.
 
 ### Required features
 
-`required_features` names capabilities the worker announces when it registers. Today those are `control.pause`, `control.stop`, `control.steer`, `activity.v0`, `task.demo`, `task.agent`, `inference.v0` and `tools.local`. A gateway built on the SDK refuses to register a worker that lacks any of them, and the worker refuses such a profile itself too. An older worker therefore never runs a profile it only half understands: it exits with code 1 and names the missing features.
+`required_features` names capabilities the worker announces when it registers. Today those are `control.pause`, `control.stop`, `control.steer`, `activity.v0`, `task.demo`, `task.agent`, `inference.v0`, `tools.local` and `attach.files`. A gateway built on the SDK refuses to register a worker that lacks any of them, and the worker refuses such a profile itself too. An older worker therefore never runs a profile it only half understands: it exits with code 1 and names the missing features.
 
 ## Using profiles from Go
 
