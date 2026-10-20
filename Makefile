@@ -60,20 +60,25 @@ run: build ## Build and run actlet (pass arguments with ARGS="...")
 	./$(BINARY) $(ARGS)
 
 FUZZ_TARGETS := FuzzScan FuzzOpen
-FUZZ_PKG     := ./internal/journal
+JOURNAL_PKG  := ./internal/journal
 FUZZTIME     ?= 2m
 
 .PHONY: test
 test: ## Run tests with the race detector, plus a short fuzz run
 	go test -race ./...
 	@for t in $(FUZZ_TARGETS); do \
-		go test -run '^$$' -fuzz "^$$t$$" -fuzztime 5s $(FUZZ_PKG) || exit 1; \
+		go test -run '^$$' -fuzz "^$$t$$" -fuzztime 5s $(JOURNAL_PKG) || exit 1; \
 	done
+
+.PHONY: test-docker
+test-docker: ## Kill a writer container and recover from its volume (needs Docker)
+	@if ! docker info >/dev/null 2>&1; then echo "test-docker: Docker isn't available, skipping"; exit 0; fi; \
+		$(MAKE) image && ACTLET_IMAGE=$(IMAGE) go test -tags dockertest -run '^TestDocker' -count=1 -v $(JOURNAL_PKG)
 
 .PHONY: fuzz
 fuzz: ## Fuzz the journal reader (FUZZTIME per target, default 2m)
 	@for t in $(FUZZ_TARGETS); do \
-		go test -run '^$$' -fuzz "^$$t$$" -fuzztime $(FUZZTIME) $(FUZZ_PKG) || exit 1; \
+		go test -run '^$$' -fuzz "^$$t$$" -fuzztime $(FUZZTIME) $(JOURNAL_PKG) || exit 1; \
 	done
 
 .PHONY: bench

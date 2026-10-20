@@ -1,5 +1,10 @@
 version: "2"
 
+run:
+  # Lint the Docker-only tests too.
+  build-tags:
+    - dockertest
+
 linters:
   # The standard set (errcheck, govet, ineffassign, staticcheck, unused) plus a
   # few cheap linters that catch real bugs. Style is left to gofmt/goimports.
