@@ -133,8 +133,18 @@ func (w *worker) runTools(st *agentpb.WorkerState) error {
 		// Take the call's place in the lock queue, in call order, by what
 		// its input says it writes. It is planned once it holds its lock,
 		// after the calls it waited for have changed what they change.
+		// A call takes a concurrency slot only once it holds its lock, so
+		// that no call waits for a lock while holding a slot the call it
+		// waits for needs.
 		ticket := b.locks.Enqueue(b.tools.Writes(call.GetName(), json.RawMessage(call.GetInput())))
 		wg.Go(func() {
+			ctx, cancel := stopContext(b)
+			defer cancel()
+			release, err := ticket.Wait(ctx)
+			if err != nil {
+				return // stopping before it started
+			}
+			defer release()
 			select {
 			case sem <- struct{}{}:
 			case <-b.env.Stopping:
@@ -143,11 +153,6 @@ func (w *worker) runTools(st *agentpb.WorkerState) error {
 				return
 			}
 			defer func() { <-sem }()
-			release, err := ticket.Wait(stopContext(b))
-			if err != nil {
-				return // stopping before it started
-			}
-			defer release()
 			if err := w.runTool(call, prev); err != nil {
 				fail(err)
 			}
@@ -171,18 +176,19 @@ func (w *worker) runTools(st *agentpb.WorkerState) error {
 	return nil
 }
 
-// stopContext ends when the box is stopping.
-func stopContext(b *box) context.Context {
+// stopContext ends when the box is stopping, or when cancelled.
+func stopContext(b *box) (context.Context, context.CancelFunc) {
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() {
 		select {
 		case <-b.env.Stopping:
 		case <-b.stopAll:
 		case <-b.env.Hard.Done():
+		case <-ctx.Done():
 		}
 		cancel()
 	}()
-	return ctx
+	return ctx, cancel
 }
 
 // runTool runs one tool call and records its outcome. A call with an

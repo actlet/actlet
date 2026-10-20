@@ -636,3 +636,30 @@ func TestAgentEnds(t *testing.T) {
 		})
 	}
 }
+
+// With one tool call at a time, calls that wait for each other's writes
+// still run: a call takes its turn to run only once it holds its lock.
+func TestConflictingCallsOneAtATime(t *testing.T) {
+	if !hasShell() {
+		t.Skip("no shell")
+	}
+	s := newSandbox(t,
+		turn{calls: [][2]string{
+			{"edit_file", `{"path":"r.md","old_string":"TBD","new_string":"12"}`},
+			{"write_file", `{"path":"r.md","content":"Total: TBD\n"}`},
+			{"shell", `{"command":"cat r.md"}`},
+		}},
+		turn{text: "done"},
+	)
+	s.settings.MaxToolConcurrency = 1
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		s.mustFinish()
+	}()
+	select {
+	case <-done:
+	case <-time.After(20 * time.Second):
+		t.Fatal("the calls deadlocked")
+	}
+}
