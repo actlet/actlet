@@ -1,0 +1,53 @@
+# The demo's profile: every field the TUI shows has something in it.
+schema: v0
+id: demo
+version: "1"
+limits:
+  max_workers: 4
+  max_tool_concurrency: 4
+  max_subagent_depth: 1
+  max_subagents: 3
+default_pause_mode: drain
+stop_grace: 10s
+budgets:
+  - kind: money
+    limit: 2
+    currency: EUR
+    on_exhaust: kill
+  - kind: tokens
+    limit: 400000
+    on_exhaust: kill
+  - kind: time
+    limit: 1800
+    on_exhaust: wait
+    wait_mode: pause
+models:
+  aliases:
+    - alias: large
+      description: the strongest model the orchestrator offers
+      capabilities: [tools]
+      context_window: 200000
+    - alias: fast
+      description: a quick, cheap model for subtasks
+      capabilities: [tools]
+      context_window: 128000
+  roles:
+    main: large
+    subagent: fast
+  selectable: [fast, large]
+tools:
+  - name: read_file
+  - name: write_file
+  - name: edit_file
+  - name: glob
+  - name: grep
+  - name: shell
+    settings:
+      timeout: 2m
+  - name: python
+instructions: |
+  Write reports in plain English, with the figures in EUR.
+tools_manifest: |
+  python3 with the standard library; awk, sed and ripgrep.
+local_attach:
+  commands: [steer, pause]

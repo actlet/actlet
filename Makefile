@@ -93,6 +93,14 @@ test-k8s: ## Run the Kubernetes path test in a throwaway kind cluster (needs Doc
 		$(MAKE) image image-devgw && \
 		ACTLET_IMAGE=$(IMAGE) ACTLET_DEVGW_IMAGE=$(DEVGW_IMAGE) go test -tags k8stest -run TestKubernetesPath -count=1 -v -timeout 30m ./test/k8s
 
+.PHONY: demo-tui
+demo-tui: build ## Try the TUI: a scripted demo session with the viewer in the foreground
+	@examples/demo/demo.sh tui
+
+.PHONY: demo-attach
+demo-attach: build ## Attach the TUI to the running demo, from a second terminal (or start one)
+	@examples/demo/demo.sh attach
+
 .PHONY: fuzz
 fuzz: ## Fuzz the journal reader (FUZZTIME per target, default 2m)
 	@for t in $(FUZZ_TARGETS); do \

@@ -1,0 +1,10 @@
+region,month,product,units,revenue_eur
+north,2026-07,widget,120,3600
+north,2026-08,widget,135,4050
+north,2026-09,gadget,60,4200
+south,2026-07,widget,80,2400
+south,2026-08,gadget,95,6650
+south,2026-09,gadget,110,7700
+west,2026-07,widget,150,4500
+west,2026-08,widget,140,4200
+west,2026-09,gizmo,40,6000

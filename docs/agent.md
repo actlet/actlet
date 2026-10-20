@@ -99,7 +99,7 @@ The next run carries on from where the session paused: remaining tool calls run,
 
 ## Steer notes
 
-An operator's `steer` note reaches the agent (the root worker) at its next turn boundary: it is added to the message before the next model call as `[Operator note from <who>, sent while you worked; take it into account] <note>`. Each note is journaled when it joins the conversation, so it is given exactly once, also across crashes and pauses; a note sent just before a pause reaches the agent when the session resumes. Subagents don't get notes; the agent can pass them on.
+An operator's `steer` note, from the orchestrator or typed into a [local viewer](tui.md), reaches the agent (the root worker) at its next turn boundary: it is added to the message before the next model call as `[Operator note from <who>, sent while you worked; take it into account] <note>`. Each note is journaled when it joins the conversation, so it is given exactly once, also across crashes and pauses; a note sent just before a pause reaches the agent when the session resumes. Subagents don't get notes; the agent can pass them on.
 
 ## Trying it
 

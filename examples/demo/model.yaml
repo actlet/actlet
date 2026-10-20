@@ -1,0 +1,199 @@
+# A scripted model for the TUI demo: a few minutes of an agent at work,
+# with fake but plausible usage and cost, so that every part of the TUI
+# has something to show. actlet-devgw -model plays it; see the README.
+price: {currency: EUR, input: 3, output: 15}
+turns:
+  - text: Let me see what I've been given first.
+    delay: 4s
+    usage: {input: 3200, output: 120}
+    tool_calls:
+      - name: read_file
+        input: {path: ../inputs/notes.md}
+      - name: glob
+        input: {pattern: "*", path: ../inputs}
+
+  - text: Now the sales data, and where Q3's new product shows up.
+    delay: 5s
+    usage: {input: 4100, output: 140}
+    tool_calls:
+      - name: read_file
+        input: {path: ../inputs/sales.csv}
+      - name: grep
+        input: {pattern: gadget, path: ../inputs}
+
+  - text: |-
+      Three regions with different stories. I'll give each region to a
+      subagent so they can work in parallel, and total things up myself.
+    delay: 6s
+    usage: {input: 6900, output: 610}
+    tool_calls:
+      - name: spawn_subagent
+        input: {task: "Region north: summarise the north's Q3 sales from ../inputs/sales.csv in analysis/north.md, with units and revenue per month.", model: fast}
+      - name: spawn_subagent
+        input: {task: "Region south: summarise the south's Q3 sales from ../inputs/sales.csv in analysis/south.md, with units and revenue per month.", model: fast}
+      - name: spawn_subagent
+        input: {task: "Region west: summarise the west's Q3 sales from ../inputs/sales.csv in analysis/west.md, with units and revenue per month.", model: fast}
+
+  - text: While the regions are written up, I'll compute the totals.
+    delay: 5s
+    usage: {input: 12800, output: 420}
+    tool_calls:
+      - name: python
+        input:
+          code: |
+            import csv
+            totals = {}
+            for row in csv.DictReader(open("../inputs/sales.csv")):
+                totals[row["region"]] += int(row["revenue_eur"])
+            print(totals)
+
+  - text: "A KeyError: I forgot to start each region at zero. Fixing it."
+    delay: 5s
+    usage: {input: 13600, output: 380}
+    tool_calls:
+      - name: write_file
+        input:
+          path: totals.py
+          content: |
+            import csv
+            from collections import defaultdict
+
+            totals = defaultdict(int)
+            for row in csv.DictReader(open("../inputs/sales.csv")):
+                totals[row["region"]] += int(row["revenue_eur"])
+            for region, revenue in sorted(totals.items()):
+                print(f"{region}: {revenue} EUR")
+            print(f"total: {sum(totals.values())} EUR")
+      - name: python
+        input: {path: totals.py}
+
+  - text: The totals check out. I'll build the report site while the draft takes shape.
+    delay: 4s
+    usage: {input: 15200, output: 520}
+    tool_calls:
+      - name: shell
+        input: {command: "echo building the report site; for step in 1 2 3 4 5 6 7 8 9; do sleep 5; echo step $step of 9 done; done", writes: [site]}
+      - name: write_file
+        input:
+          path: ../output/report.md
+          content: |
+            # Q3 sales review
+
+            Total revenue: TBD
+
+            ## Regions
+
+            See analysis/ for each region.
+  - text: Filling in the total and the regional figures.
+    delay: 5s
+    usage: {input: 17900, output: 640}
+    tool_calls:
+      - name: edit_file
+        input:
+          path: ../output/report.md
+          old_string: "Total revenue: TBD"
+          new_string: "Total revenue: 43300 EUR (north 11850, south 16750, west 14700)."
+      - name: edit_file
+        input:
+          path: ../output/report.md
+          old_string: "See analysis/ for each region."
+          new_string: |-
+            - North: steady widget sales; the gadget arrived in September.
+            - South: the gadget launch in August more than doubled revenue.
+            - West: a July widget promotion, then the gizmo in September.
+
+  - text: Let me check the report reads well.
+    delay: 4s
+    usage: {input: 19400, output: 210}
+    tool_calls:
+      - name: read_file
+        input: {path: ../output/report.md}
+
+  - text: |-
+      The Q3 review is in output/report.md: 43300 EUR in all, with the
+      south's August gadget launch as the biggest mover. Each region's
+      write-up is in workspace/analysis/.
+    delay: 4s
+    usage: {input: 20100, output: 160}
+
+subagents:
+  - match: "Region north"
+    turns:
+      - text: Reading the north's rows.
+        delay: 4s
+        usage: {input: 2100, output: 90}
+        tool_calls:
+          - name: shell
+            input: {command: "grep '^north' ../inputs/sales.csv", writes: []}
+      - text: Writing it up.
+        delay: 6s
+        usage: {input: 2600, output: 300}
+        tool_calls:
+          - name: write_file
+            input:
+              path: analysis/north.md
+              content: |
+                # North, Q3
+
+                | month   | product | units | revenue |
+                |---------|---------|-------|---------|
+                | July    | widget  | 120   | 3600    |
+                | August  | widget  | 135   | 4050    |
+                | September | gadget | 60   | 4200    |
+
+                Revenue: 11850 EUR.
+      - text: North done; 11850 EUR, gadget sales started in September.
+        delay: 3s
+        usage: {input: 3000, output: 40}
+
+  - match: "Region south"
+    turns:
+      - text: Reading the south's rows.
+        delay: 5s
+        usage: {input: 2100, output: 90}
+        tool_calls:
+          - name: shell
+            input: {command: "grep '^south' ../inputs/sales.csv", writes: []}
+      - text: The gadget launch shows clearly. Writing it up.
+        delay: 7s
+        usage: {input: 2700, output: 320}
+        tool_calls:
+          - name: write_file
+            input:
+              path: analysis/south.md
+              content: |
+                # South, Q3
+
+                The gadget launched in August and outsold the widget at
+                once.
+
+                Revenue: 16750 EUR (July 2400, August 6650, September 7700).
+      - text: South done; 16750 EUR, driven by the August gadget launch.
+        delay: 3s
+        usage: {input: 3100, output: 40}
+
+  - match: "Region west"
+    turns:
+      - text: Reading the west's rows.
+        delay: 3s
+        usage: {input: 2100, output: 90}
+        tool_calls:
+          - name: grep
+            input: {pattern: "^west", path: ../inputs/sales.csv}
+      - text: Writing it up.
+        delay: 8s
+        usage: {input: 2500, output: 280}
+        tool_calls:
+          - name: write_file
+            input:
+              path: analysis/west.md
+              content: |
+                # West, Q3
+
+                Widget sales peaked with the July promotion; the gizmo
+                brought 6000 EUR in September.
+
+                Revenue: 14700 EUR.
+      - text: West done; 14700 EUR.
+        delay: 3s
+        usage: {input: 2900, output: 40}

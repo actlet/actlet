@@ -1,0 +1,7 @@
+{
+  "schema": "v0",
+  "id": "q3-sales-review",
+  "kind": "agent",
+  "definition": {"max_turns": 30},
+  "input": "Review the Q3 sales in inputs/sales.csv region by region, using the notes in inputs/notes.md, and write a short report with the totals to output/report.md."
+}

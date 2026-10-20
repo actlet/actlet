@@ -103,7 +103,7 @@ The folder's `.actlet/status` file holds the same state as text, for tools that 
 
 Activity events are numbered per epoch: sequence numbers start at 1 in every run and have no gaps. An event's ID is `<epoch>.<seq>`, unique within the session. Because each run is a new epoch, a restarted worker never reuses an ID the gateway has already seen.
 
-Event kinds in v0: session started, state change, command received, steer note, text output and gap; and for agent tasks, model turn, tool started and finished, file change (with a diff), and subagent started and finished. Events are small: activity describes what happened, and larger content belongs in the session folder.
+Event kinds in v0: session started, state change, command received, steer note, text output and gap; for agent tasks, model turn, tool started and finished, file change (with a diff), and subagent started and finished; and `session_info`, sent once at the start of each run, which describes the task, the effective configuration, budgets, models and tools for viewers. Events are small: activity describes what happened, and larger content belongs in the session folder.
 
 An agent's events name the worker they are about in `worker`: `root` for the session's agent, `root.1` for its first subagent, and so on (see [the agent](agent.md#subagents)). Events about the session itself have none.
 
@@ -132,7 +132,7 @@ An agent's model calls go to the gateway: Actlet holds no provider SDKs, endpoin
 - `continuation`: opaque bytes from the previous answer, passed back unchanged. A gateway can keep provider state in it, such as a response ID or cache keys; the worker never looks inside.
 - `intent_id`: the call's identity. The worker records it in its journal before calling, and uses it again for every retry of that call, including after a crash. The gateway treats it as an idempotency key.
 
-The answer streams text deltas and complete tool calls in the order the model produced them, then `done`: the stop reason (`end_turn`, `tool_use`, `max_tokens`, `refusal`), token usage and the next continuation.
+The answer streams text deltas and complete tool calls in the order the model produced them, then `done`: the stop reason (`end_turn`, `tool_use`, `max_tokens`, `refusal`), token usage (with the call's `cost` and `currency` when the gateway knows them) and the next continuation.
 
 A call is never continued after an interruption. The worker discards what an interrupted attempt received and makes the call again from its last journaled state, with the same intent ID. It retries `UNAVAILABLE`, `RESOURCE_EXHAUSTED`, `ABORTED` and `DEADLINE_EXCEEDED`, and an answer that ends without `done` or goes quiet for five minutes; `NOT_FOUND` makes it register again first. Any other error fails the session with the gateway's message.
 

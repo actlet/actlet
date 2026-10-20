@@ -11,6 +11,7 @@ Early development. What works today:
 - `actlet run` connects to a gateway, registers its session, and runs its task. It takes pause, stop and steer commands, streams activity, and recovers from its journal. See the [gateway protocol](docs/gateway-protocol.md).
 - [The agent](docs/agent.md) runs `agent` tasks: it calls the model through the gateway and works with local tools (files, search, shell, Python), runs tool calls and subagents in parallel, and takes operators' steer notes. It journals every call, so that recovery never repeats a side effect. A built-in `demo` task needs no model.
 - `actlet-devgw` is a development gateway to run it against, built on the orchestrator SDK in [`sdk/`](sdk). It can answer model calls from a script.
+- A terminal viewer [shows a session](docs/tui.md) as it runs (`actlet attach`, or `actlet run -tui`) or from a recording (`actlet-cli replay play`).
 - `actlet-cli` holds the offline tools for journals and recordings; it never runs a session.
 - The session journal is the crash-recoverable record each session keeps ([format and guarantees](docs/journal-format.md)). `actlet-cli journal inspect|export` reads journals and `actlet-cli replay inspect|export` reads activity recordings.
 
@@ -35,6 +36,22 @@ workspace/    the working directory
 output/       deliverables
 .actlet/      the journal, a status marker and the activity spill
 ```
+
+## Try the TUI
+
+The demo runs a scripted session of about two minutes, with no real model: an agent hands three regions of a sales review to subagents, runs shell commands and Python (one script fails and is fixed), edits a report, and gets an operator's note half-way. Every part of the viewer has something to show.
+
+```sh
+make demo-tui      # run the demo with the viewer in the foreground
+```
+
+In a second terminal, while it runs:
+
+```sh
+make demo-attach   # attach another viewer to the same box
+```
+
+Select a tool call with `↑` `↓` (or click it) and press `enter` to expand it; switch tabs with `tab` or a click; press `i` to send the agent a note, `?` for the keys and `q` to quit. Quitting detaches: in `make demo-tui` the session carries on until it ends or you press Ctrl-C, which pauses it. `make demo-attach` on its own starts a demo in the background and stops it when you quit. Replay the demo afterwards with the command it prints. See [watching a session](docs/tui.md).
 
 ## Building and testing
 

@@ -36,6 +36,7 @@ models:
   aliases:                      # names the orchestrator resolves: real models or tiers
     - alias: large
       capabilities: [tools, vision]
+      context_window: 200000    # tokens; viewers show how full it is
     - alias: fast
   roles:                        # which alias each role uses
     main: large
@@ -54,6 +55,8 @@ instructions: |                 # the implementor's layer of the agent's prompt
 tools_manifest: |               # what is installed, for the agent
   Go 1.27, Node 22 and jq are installed.
 checkpoint_every_turns: 1       # model turns between checkpoints
+local_attach:                   # what a viewer attached to the box may do
+  commands: [steer]             # steer, pause and stop; [none] allows nothing
 ```
 
 The same document as JSON has the same field names. Durations are strings such as `"30s"` in both formats.

@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -18,6 +19,7 @@ import (
 	"github.com/actlet/actlet/internal/runner"
 	"github.com/actlet/actlet/internal/session"
 	"github.com/actlet/actlet/sdk"
+	"github.com/actlet/actlet/sdk/scripted"
 )
 
 // syncBuffer is a bytes.Buffer safe for concurrent use.
@@ -178,4 +180,27 @@ func TestStdinEndKeepsServing(t *testing.T) {
 	if !g.admin(t.Context(), strings.NewReader("sessions\nquit\nsessions\n")) {
 		t.Error("quit not recognised")
 	}
+}
+
+// The example scripts, profiles and tasks load.
+func TestExamplesLoad(t *testing.T) {
+	for _, dir := range []string{"agent", "demo"} {
+		root := filepath.Join("..", "..", "examples", dir)
+		if _, err := scripted.Load(filepath.Join(root, "model.yaml")); err != nil {
+			t.Errorf("%s: %v", dir, err)
+		}
+		if _, err := loadTask(config{taskFile: filepath.Join(root, "task.json")}); err != nil {
+			t.Errorf("%s: %v", dir, err)
+		}
+		if p := filepath.Join(root, "profile.yaml"); fileExists(p) {
+			if _, err := loadProfile(config{profile: p}); err != nil {
+				t.Errorf("%s: %v", dir, err)
+			}
+		}
+	}
+}
+
+func fileExists(p string) bool {
+	_, err := os.Stat(p)
+	return err == nil
 }
