@@ -315,3 +315,30 @@ func TestNoSyncSkipsBatchSyncs(t *testing.T) {
 	mustClose(t, w) // syncs once
 	checkRecords(t, readAll(t, path), 3)
 }
+
+func TestAppendBatch(t *testing.T) {
+	path := tempJournal(t)
+	opts := testOptions()
+	opts.Batch = BatchPolicy{MaxRecords: 4}
+	w := mustCreate(t, path, opts)
+	appendN(t, w, 1)
+
+	recs := make([]Record, 10)
+	for i := range recs {
+		recs[i] = Record{Kind: "test.record", Data: recordData(uint64(i + 2))}
+	}
+	first, err := w.AppendBatch(context.Background(), recs)
+	if err != nil || first != 2 {
+		t.Fatalf("AppendBatch = %d, %v; want 2, nil", first, err)
+	}
+	// 10 records with at most 4 per batch: 3 batches, plus the first append.
+	if s := w.Stats(); s.Batches != 4 || s.Records != 11 {
+		t.Errorf("Stats = %+v, want 4 batches of 11 records", s)
+	}
+	mustClose(t, w)
+	checkRecords(t, readAll(t, path), 11)
+
+	if _, err := w.AppendBatch(context.Background(), nil); err == nil {
+		t.Error("empty AppendBatch succeeded")
+	}
+}

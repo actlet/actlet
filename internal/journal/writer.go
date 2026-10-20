@@ -153,13 +153,16 @@ type Writer struct {
 	frame   []byte
 }
 
+// appendReq is one or more records to append together, in order, in one
+// batch.
 type appendReq struct {
-	rec  Record
+	recs []Record
+	size int // encoded size bound of recs
 	done chan appendResult
 }
 
 type appendResult struct {
-	seq uint64
+	seq uint64 // of the first record
 	err error
 }
 
@@ -353,22 +356,76 @@ func (w *Writer) Err() error {
 // may still be present after reopening. This includes ctx ending after the
 // record was handed to the writer.
 func (w *Writer) Append(ctx context.Context, kind string, data []byte) (uint64, error) {
+	rec := Record{Kind: kind, Data: data}
+	if err := w.checkRecord(&rec); err != nil {
+		return 0, err
+	}
+	return w.submit(ctx, []Record{rec})
+}
+
+// AppendBatch adds records in order, numbered consecutively, and returns
+// the sequence number of the first. Records that fit the batch policy go
+// into a single batch and share one sync; more are split into consecutive
+// batches. Data is copied.
+//
+// If a later batch fails, the records of earlier batches are already
+// durable; the error says the rest are not.
+func (w *Writer) AppendBatch(ctx context.Context, recs []Record) (uint64, error) {
+	if len(recs) == 0 {
+		return 0, errors.New("journal: empty batch")
+	}
+	for i := range recs {
+		if err := w.checkRecord(&recs[i]); err != nil {
+			return 0, err
+		}
+	}
+	p := w.opts.Batch
+	var first uint64
+	for start := 0; start < len(recs); {
+		end, size := start, 0
+		for end < len(recs) && end-start < p.MaxRecords {
+			n := recs[end].encodedSizeBound()
+			if end > start && size+n > p.MaxBytes {
+				break
+			}
+			size += n
+			end++
+		}
+		seq, err := w.submit(ctx, recs[start:end])
+		if err != nil {
+			return 0, err
+		}
+		if start == 0 {
+			first = seq
+		}
+		start = end
+	}
+	return first, nil
+}
+
+func (w *Writer) checkRecord(r *Record) error {
 	l := w.opts.Limits
 	switch {
-	case kind == "":
-		return 0, errors.New("journal: empty record kind")
-	case len(kind) > l.MaxKindLen:
-		return 0, fmt.Errorf("%w: record kind is %d bytes, max %d", ErrLimit, len(kind), l.MaxKindLen)
-	case len(data) > l.MaxRecordData:
-		return 0, fmt.Errorf("%w: record data is %d bytes, max %d", ErrLimit, len(data), l.MaxRecordData)
+	case r.Kind == "":
+		return errors.New("journal: empty record kind")
+	case len(r.Kind) > l.MaxKindLen:
+		return fmt.Errorf("%w: record kind is %d bytes, max %d", ErrLimit, len(r.Kind), l.MaxKindLen)
+	case len(r.Data) > l.MaxRecordData:
+		return fmt.Errorf("%w: record data is %d bytes, max %d", ErrLimit, len(r.Data), l.MaxRecordData)
 	}
+	return nil
+}
+
+// submit hands records to the writer goroutine and waits for them to be
+// durable. They have been checked against the limits.
+func (w *Writer) submit(ctx context.Context, recs []Record) (uint64, error) {
 	if err := w.Err(); err != nil {
 		return 0, err
 	}
-
-	req := &appendReq{
-		rec:  Record{Kind: kind, Data: bytes.Clone(data)},
-		done: make(chan appendResult, 1),
+	req := &appendReq{recs: make([]Record, len(recs)), done: make(chan appendResult, 1)}
+	for i, r := range recs {
+		req.recs[i] = Record{Kind: r.Kind, Data: bytes.Clone(r.Data)}
+		req.size += req.recs[i].encodedSizeBound()
 	}
 	w.mu.RLock()
 	if w.closed {
@@ -436,7 +493,7 @@ func (w *Writer) loop() {
 			first = r
 		}
 		batch = append(batch[:0], first)
-		size := first.rec.encodedSizeBound()
+		count, size := len(first.recs), first.size
 
 		var timer *time.Timer
 		var timeout <-chan time.Time
@@ -445,7 +502,7 @@ func (w *Writer) loop() {
 			timeout = timer.C
 		}
 	gather:
-		for len(batch) < p.MaxRecords {
+		for count < p.MaxRecords {
 			var r *appendReq
 			var ok bool
 			if timeout == nil {
@@ -464,12 +521,12 @@ func (w *Writer) loop() {
 			if !ok {
 				break
 			}
-			if n := r.rec.encodedSizeBound(); size+n > p.MaxBytes {
+			if count+len(r.recs) > p.MaxRecords || size+r.size > p.MaxBytes {
 				carry = r
 				break
-			} else {
-				size += n
 			}
+			count += len(r.recs)
+			size += r.size
 			batch = append(batch, r)
 		}
 		if timer != nil {
@@ -493,10 +550,12 @@ func (w *Writer) commit(batch []*appendReq) {
 
 	now := time.Now()
 	w.recs = w.recs[:0]
-	for i, r := range batch {
-		r.rec.Seq = w.nextSeq + uint64(i)
-		r.rec.Time = now
-		w.recs = append(w.recs, r.rec)
+	for _, r := range batch {
+		for _, rec := range r.recs {
+			rec.Seq = w.nextSeq + uint64(len(w.recs))
+			rec.Time = now
+			w.recs = append(w.recs, rec)
+		}
 	}
 	raw, err := marshalBatch(w.raw, w.recs)
 	if err != nil {
@@ -522,7 +581,7 @@ func (w *Writer) commit(batch []*appendReq) {
 		codec:     codecID,
 		checksum:  ChecksumCRC32C,
 		firstSeq:  w.nextSeq,
-		count:     uint32(len(batch)),
+		count:     uint32(len(w.recs)),
 		storedLen: uint32(len(w.stored)),
 		rawLen:    uint32(len(raw)),
 	}
@@ -551,18 +610,20 @@ func (w *Writer) commit(batch []*appendReq) {
 	}
 
 	w.off += int64(n)
-	w.nextSeq += uint64(len(batch))
+	w.nextSeq += uint64(len(w.recs))
 	w.statMu.Lock()
 	w.lastSeq = h.lastSeq()
 	w.stats.Batches++
-	w.stats.Records += uint64(len(batch))
+	w.stats.Records += uint64(len(w.recs))
 	w.stats.RawBytes += uint64(len(raw))
 	w.stats.StoredBytes += uint64(n)
 	w.stats.SyncTime += syncTime
 	w.statMu.Unlock()
 
-	for i, r := range batch {
-		r.done <- appendResult{seq: h.firstSeq + uint64(i)}
+	seq := h.firstSeq
+	for _, r := range batch {
+		r.done <- appendResult{seq: seq}
+		seq += uint64(len(r.recs))
 	}
 }
 
