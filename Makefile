@@ -22,6 +22,8 @@ GOLANGCI_LINT         ?= golangci-lint
 GOLANGCI_LINT_VERSION ?= v2.15.0
 PROTOC_GEN_GO_VERSION      ?= v1.36.12
 PROTOC_GEN_GO_GRPC_VERSION ?= v1.6.2
+GOVULNCHECK_VERSION        ?= v1.9.0
+GOVULNCHECK                ?= govulncheck
 # Public contracts live under proto/ and are imported by their path below
 # it; internal schemas are generated from the repository root.
 PUBLIC_PROTOS   := $(shell find proto -name '*.proto')
@@ -43,6 +45,7 @@ setup: ## Download modules and install development tools
 	go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
 	go install google.golang.org/protobuf/cmd/protoc-gen-go@$(PROTOC_GEN_GO_VERSION)
 	go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@$(PROTOC_GEN_GO_GRPC_VERSION)
+	go install golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION)
 
 ##@ Development
 
@@ -134,13 +137,20 @@ generate: ## Regenerate protobuf and gRPC code (needs protoc)
 	protoc -I . -I proto --go_out=. --go_opt=module=github.com/actlet/actlet $(INTERNAL_PROTOS)
 
 .PHONY: check
-check: ## Check formatting, vet, lint and go.mod tidiness
+check: ## Check formatting, vet, lint, go.mod tidiness and known vulnerabilities
 	@unformatted="$$(gofmt -l .)"; \
 		if [ -n "$$unformatted" ]; then echo "gofmt needed for:"; echo "$$unformatted"; exit 1; fi
 	go vet ./...
 	GOOS=windows go vet ./...  # keep the code portable to platforms without flock
 	$(GOLANGCI_LINT) run
 	go mod tidy -diff
+	@$(MAKE) --no-print-directory vulncheck
+
+.PHONY: vulncheck
+vulncheck: ## Look for known vulnerabilities the code reaches (needs the network; VULNCHECK=0 skips it)
+	@if [ "$(VULNCHECK)" = "0" ]; then echo "vulncheck: skipped (VULNCHECK=0)"; exit 0; fi; \
+		if ! command -v $(GOVULNCHECK) >/dev/null; then echo "vulncheck: govulncheck isn't installed (make setup), skipping"; exit 0; fi; \
+		$(GOVULNCHECK) ./...
 
 .PHONY: clean
 clean: ## Remove build and test output
