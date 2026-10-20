@@ -14,7 +14,7 @@
 1.13   root     tool_started shell c2: {"command":"sleep 5"}                                        
 1.14   root     progress 60%: adding up the totals                                                  
 1.15   root     feedback (problem): the input has no header row                                     
-1.16   session  budget_status (alert): money 0.082/5 ok, disk 921600/1.048576e+06 alerted           
+1.16   session  budget_status (alert): money 0.082/5 ok, disk 921600/1048576 alerted                
                                                                                                     
                                                                                                     
                                                                                                     

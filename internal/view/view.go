@@ -729,6 +729,15 @@ func (s *Session) ContextWindow(model string) uint64 {
 	return 0
 }
 
+// amount writes a budget figure briefly: whole from 1000 up, else to four
+// significant digits.
+func amount(v float64) string {
+	if v >= 1000 || v <= -1000 {
+		return fmt.Sprintf("%.0f", v)
+	}
+	return fmt.Sprintf("%.4g", v)
+}
+
 // BudgetName is a budget kind in lower case, such as "money".
 func BudgetName(k gatewayv0.BudgetKind) string {
 	return strings.ToLower(strings.TrimPrefix(k.String(), "BUDGET_KIND_"))
@@ -807,7 +816,7 @@ func Describe(ev *gatewayv0.ActivityEvent) string {
 	case *gatewayv0.ActivityEvent_BudgetStatus:
 		var parts []string
 		for _, u := range b.BudgetStatus.GetBudgets() {
-			parts = append(parts, fmt.Sprintf("%s %g/%g %s", BudgetName(u.GetKind()), u.GetUsed(), u.GetLimit(), u.GetState()))
+			parts = append(parts, fmt.Sprintf("%s %s/%s %s", BudgetName(u.GetKind()), amount(u.GetUsed()), amount(u.GetLimit()), u.GetState()))
 		}
 		return fmt.Sprintf("budget_status (%s): %s", b.BudgetStatus.GetReason(), strings.Join(parts, ", "))
 	}
