@@ -13,7 +13,7 @@ Early development. What works today:
 - `actlet-devgw` is a development gateway to run it against, built on the orchestrator SDK in [`sdk/`](sdk). It can answer model calls from a script, or with real providers through the SDK's [adapters](docs/providers.md) for Anthropic, OpenAI and compatible endpoints, nexos.ai, and typesafe.ai for decisions.
 - A terminal viewer [shows a session](docs/tui.md) as it runs (`actlet attach`, or `actlet run -tui`), from anywhere through the orchestrator or the box's optional attach port (`actlet-cli attach`), or from a recording (`actlet-cli replay play`).
 - `actlet-cli` holds the tools for journals and recordings and attaches to running sessions; it never runs a session.
-- The session journal is the crash-recoverable record each session keeps ([format and guarantees](docs/journal-format.md)). `actlet-cli journal inspect|export` reads journals and `actlet-cli replay inspect|export` reads activity recordings.
+- The session journal is the crash-recoverable record each session keeps ([format and guarantees](docs/journal-format.md)). `actlet-cli journal inspect|export` reads journals and `actlet-cli replay inspect|export|view` reads activity recordings.
 
 All protocols and formats are experimental (v0).
 

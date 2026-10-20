@@ -4,6 +4,8 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/json"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -222,5 +224,53 @@ func TestReplayAgentEvents(t *testing.T) {
 		if !strings.Contains(stdout.String(), want) {
 			t.Errorf("export lacks %s", want)
 		}
+	}
+}
+
+// replay view writes the same view from a recording and from its events
+// exported as JSON Lines.
+func TestReplayView(t *testing.T) {
+	path := writeRecording(t)
+	var fromRec, exported, fromJSONL, stderr bytes.Buffer
+	if code := run([]string{"replay", "view", "--json", path}, &fromRec, &stderr); code != 0 {
+		t.Fatalf("exit %d: %s", code, stderr.String())
+	}
+	if code := run([]string{"replay", "export", "--jsonl", path}, &exported, &stderr); code != 0 {
+		t.Fatalf("export: exit %d: %s", code, stderr.String())
+	}
+	jsonl := filepath.Join(t.TempDir(), "events.jsonl")
+	if err := os.WriteFile(jsonl, exported.Bytes(), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if code := run([]string{"replay", "view", "--json", jsonl}, &fromJSONL, &stderr); code != 0 {
+		t.Fatalf("from JSON Lines: exit %d: %s", code, stderr.String())
+	}
+	if fromRec.String() != fromJSONL.String() {
+		t.Errorf("from the recording:\n%s\nfrom its export:\n%s", fromRec.String(), fromJSONL.String())
+	}
+	var st struct {
+		Version int    `json:"version"`
+		Epoch   uint64 `json:"epoch"`
+		Events  uint64 `json:"events"`
+		Skipped uint64 `json:"skipped"`
+		Info    any    `json:"info"`
+	}
+	if err := json.Unmarshal(fromRec.Bytes(), &st); err != nil {
+		t.Fatal(err)
+	}
+	if st.Version != 1 || st.Epoch != 2 || st.Events != 6 || st.Skipped != 7 || st.Info != nil {
+		t.Errorf("view %+v", st)
+	}
+
+	if code := run([]string{"replay", "view", path}, &fromRec, &stderr); code != 2 {
+		t.Errorf("without --json: exit %d", code)
+	}
+	bad := filepath.Join(t.TempDir(), "bad.jsonl")
+	if err := os.WriteFile(bad, append(exported.Bytes(), "{nope\n"...), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	stderr.Reset()
+	if code := run([]string{"replay", "view", "--json", bad}, io.Discard, &stderr); code != 1 || !strings.Contains(stderr.String(), "line 7") {
+		t.Errorf("a bad line: exit %d: %s", code, stderr.String())
 	}
 }

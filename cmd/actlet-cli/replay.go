@@ -24,6 +24,7 @@ Commands:
   inspect    Summarise an activity recording: epochs, event kinds, gaps
   export     Export its events
   play       Play it back in a terminal viewer
+  view       Write the session's view at the end as JSON
 
 Activity recordings (.actrec) are written by gateways, and by a worker that
 spills activity to its session folder while the gateway is unreachable.
@@ -42,6 +43,8 @@ func runReplay(args []string, stdout, stderr io.Writer) int {
 		return runReplayExport(rest, stdout, stderr)
 	case "play":
 		return runReplayPlay(rest, stdout, stderr)
+	case "view":
+		return runReplayView(rest, stdout, stderr)
 	case "help", "-h", "-help", "--help":
 		fmt.Fprint(stdout, replayUsage)
 		return 0

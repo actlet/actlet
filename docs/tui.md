@@ -86,6 +86,8 @@ The socket serves the attach protocol, [`proto/actlet/attach/v0`](../proto/actle
 
 `actlet attach -dump` and `actlet-cli replay play -dump` print a screen as text and exit, without a terminal: handy for scripts and bug reports. `-tab` picks the tab and `-width` and `-height` the size.
 
+`actlet-cli replay view --json <file>` writes what the viewer knows at the end of a recording, or of its events as `replay export --jsonl` writes them, as JSON: the session, its workers and their turns and tool calls, changed files, budgets and the event log. It is in the form a web viewer reads, so that a viewer written in another language can check that it folds the same events into the same view.
+
 ## Attaching from elsewhere
 
 `actlet-cli attach` opens the same viewer on a session that runs elsewhere, over the network, through the attach protocol rather than a shell. The status line says what it is connected to.
