@@ -68,6 +68,7 @@ The gateway sends `Command`s down the control stream. Each has:
 | `pause` | Stop starting new work, persist, and **end the process**. `mode` is required: `drain` lets running work finish, `interrupt` signals it to stop now. A pause without a mode is rejected |
 | `stop` | Cancel the task: signal running work, kill it after `grace` (default from the profile), or at once with `kill`. Persist and **end the process**. A stopped session doesn't resume |
 | `steer` | Pass an operator note to the session. It is recorded and published as activity |
+| `profile_update` | Change some of the profile: the fields it names, which must be among `limits.max_workers`, `limits.max_tool_concurrency`, `limits.max_subagents`, `budgets` and `local_attach`, and budgets to reset. An update naming any other field is rejected. See [updating a running session](profiles.md#updating-a-running-session) |
 
 The worker writes every command to its journal, together with whether it accepted it, **before** acknowledging it. A `CommandAck` therefore means the command is durable on the worker's side. If the worker can't record a command, it doesn't acknowledge it.
 
@@ -107,7 +108,7 @@ The folder's `.actlet/status` file holds the same state as text, for tools that 
 
 Activity events are numbered per epoch: sequence numbers start at 1 in every run and have no gaps. An event's ID is `<epoch>.<seq>`, unique within the session. Because each run is a new epoch, a restarted worker never reuses an ID the gateway has already seen.
 
-Event kinds in v0: session started, state change, command received, steer note, text output and gap; for agent tasks, model turn, tool started and finished, file change (with a diff), and subagent started and finished; and `session_info`, sent once at the start of each run, which describes the task, the effective configuration, budgets, models and tools for viewers. Events are small: activity describes what happened, and larger content belongs in the session folder.
+Event kinds in v0: session started, state change, command received, steer note, text output and gap; for agent tasks, model turn, tool started and finished (with the usage of calls through the gateway), file change (with a diff), subagent started and finished, and the agent's `progress` reports and `feedback`; `budget_status`, the budgets' use, at the start of each run, at alerts and limits, and when they change; and `session_info`, sent once at the start of each run, which describes the task, the effective configuration, budgets, models and tools for viewers. Events are small: activity describes what happened, and larger content belongs in the session folder.
 
 An agent's events name the worker they are about in `worker`: `root` for the session's agent, `root.1` for its first subagent, and so on (see [the agent](agent.md#subagents)). Events about the session itself have none.
 
@@ -131,7 +132,8 @@ When a run ends, the worker waits briefly (`-flush-timeout`) for outstanding eve
 
 An agent's model calls go to the gateway: Actlet holds no provider SDKs, endpoints or credentials. `Infer` sends one call:
 
-- `model`: an alias from the profile's catalogue, the one assigned to the agent's role (`main`). The gateway resolves it to whatever provider and model it likes.
+- `model`: an alias from the profile's catalogue, the one assigned to the worker's role (`main` or `subagent`), or one it may choose. The gateway resolves it to whatever provider and model it likes.
+- `purpose`: `agent` for a worker's turn, `llm` for the agent's `llm` tool (a one-off call with no tools); `worker` names the worker.
 - `system`, `messages` and `tools`: a provider-neutral conversation. Messages are `user` or `assistant`, made of text, tool calls (`id`, `name`, JSON `input`) and tool results (`call_id`, `content`, `is_error`). Tools are described by name, description and JSON schema.
 - `continuation`: opaque bytes from the previous answer, passed back unchanged. A gateway can keep provider state in it, such as a response ID or cache keys; the worker never looks inside.
 - `intent_id`: the call's identity. The worker records it in its journal before calling, and uses it again for every retry of that call, including after a crash. The gateway treats it as an idempotency key.
@@ -142,7 +144,13 @@ A call is never continued after an interruption. The worker discards what an int
 
 `sdk.Options.OnInference` serves calls in Go. The SDK keeps recent answers by intent ID (`InferenceCache`, 256 by default): a repeated call gets the same answer, marked `replayed`, without reaching `OnInference`, and a repeat of a call still running waits for it. The cache is in memory; a gateway with several replicas, or one that restarts, can recognise intent IDs itself. A draining gateway lets running calls finish.
 
-Package `sdk/scripted` is a model that plays a YAML script of turns, for testing agents without a real model; `actlet-devgw -model <script>` serves it.
+Package `sdk/scripted` is a model that plays a YAML script of turns, for testing agents without a real model; `actlet-devgw -model <script>` serves it. A script can also answer `llm` calls, by their prompt, and `decide` calls, by their question, and set what each call costs.
+
+## Bridged tools
+
+Some of the agent's [standard tools](agent.md#standard-tools) are implemented by the orchestrator: today `decide`. The worker calls `CallTool` with the tool's name, its JSON input, the worker and an `intent_id`, recorded in its journal before the call, and gets the JSON output, whether it failed, and what it used (counted towards the budgets). A call may wait as long as the orchestrator takes, such as for a person to decide. The worker asks again with the same intent ID after a pause, a crash or a lost connection, and retries the same codes as model calls, so the gateway should answer an intent ID once.
+
+`sdk.Options.OnDecide` answers `decide` calls in Go, with a typed question and decision; `OnTool` answers other bridged tools, and `decide` too when there is no `OnDecide`. The SDK keeps answered calls by intent ID, like model calls. A gateway that provides neither answers `UNIMPLEMENTED`, and the agent is told the tool isn't available.
 
 ## Reconnecting
 
@@ -163,7 +171,8 @@ The Go package [`sdk`](../sdk) implements the gateway side for embedding in an o
 - `sdk.NewServer(sdk.Options{...})` with an `Assign` function that decides each session's profile and task, an optional `Authenticate`, and an `ActivityStore`;
 - `Session.Pause`, `Stop`, `Steer` and `Send` to issue commands and wait for their acknowledgements, with queuing and resending handled;
 - `sdk.MemoryStore` and `sdk.RecordingStore` (one `.actrec` file per session, readable with `actlet-cli replay inspect` and `actlet-cli replay export`);
-- `OnInference` to answer agents' model calls, deduplicated by intent ID;
+- `OnInference` to answer agents' model calls, deduplicated by intent ID, and `OnDecide` and `OnTool` to answer [bridged tools](#bridged-tools);
+- `Session.UpdateProfile` to change a running session's profile, which the SDK also applies when the worker registers again;
 - `Server.RegisterAttach` to serve the [attach protocol](../proto/actlet/attach/v0/attach.proto) to viewers such as `actlet-cli attach`. A viewer names its session in the `actlet-session` request metadata. Viewers are authenticated with `Authenticate`, like workers (`grpc.Method` tells their calls apart); `AuthorizeAttach` decides which sessions each may attach to, and `AttachCommands` what it may send, by default what the session's profile lets local viewers send. A viewer gets the session's earlier activity when the store is an `ActivityReader`, as both stores are, then live events; the server keeps a bounded backlog per watched session, and a slow viewer skips events rather than slowing the session's activity down.
 
 Gateways in other languages implement the same calls from the proto file. They must:

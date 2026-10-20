@@ -50,7 +50,21 @@ The model is the alias the profile assigns to the `main` role (`models.roles.mai
 - `python` is offered only when `python3` or `python` is installed. An uncaught exception comes back with its type, message and the traceback's files, lines and code, with hints for a missing module or file.
 - Every file change is published as a `file_change` activity event with a unified diff.
 
-A profile's `tools` list restricts the tools to those named, with settings: `shell` takes `shell`, `timeout`, `max_timeout` and `output_cap`, and `python` takes `interpreter`. Without a list, all tools are offered.
+A profile's `tools` list restricts the tools to those named, with settings: `shell` takes `shell`, `timeout`, `max_timeout` and `output_cap`, and `python` takes `interpreter`. Without a list, all the local tools are offered.
+
+### Standard tools
+
+Actlet also has standard tools, offered only when the profile's `tools` list names them:
+
+| Tool | What it does | Recovery |
+|---|---|---|
+| `report_progress` | Tells the people watching how the task goes: a message and, if the agent can tell, a percentage. Published as a `progress` event | run again |
+| `send_feedback` | Sends the orchestrator a `problem`, `suggestion`, `question` or `other` note about the task or its setup. Published as a `feedback` event | run again |
+| `budget_status` | Tells the agent how much of each budget is used | run again |
+| `decide` | Asks for a decision: a question, options and context, which the orchestrator puts to a person or a system that decides. Its answer is the call's result | ask again |
+| `llm` | Calls another model for side work, such as summarising, with a prompt and no tools: the profile's `llm` role alias (or its `processing` one), or one the agent picks from `models.selectable`. Not offered when there is neither | ask again |
+
+`decide` and `llm` go through the gateway: `decide` with the `CallTool` call, which the orchestrator implements, and `llm` as a model call with purpose `llm`. Both carry the tool call's intent ID. A `decide` call can wait a long time: a pause or stop ends the wait without an outcome, and the next run asks again with the same intent ID, also after a crash, so the orchestrator answers it once. What both use counts towards the session's [budgets](profiles.md#budgets), and both wait while a budget holds work back.
 
 ### Calls in parallel
 
@@ -70,7 +84,7 @@ What a call writes is taken from its input, so an edit of a file that an earlier
 - Its model is the profile's `subagent` role alias (or the agent's own), or one the call picks from the profile's `models.selectable`.
 - A parent's task isn't done until all its subagents have finished and delivered their results: the call blocks until then, so there are no orphans, and `actlet run` exits 0 only when the whole tree has finished.
 - Limits, from the profile: `limits.max_subagent_depth` (how deep subagents may nest, default 2), `limits.max_subagents` (how many a session creates, default 8) and `limits.max_workers` (how many workers run at once, the agent included). A spawn beyond a limit fails with an error saying which, so the model can do the work itself. A worker waiting for its subagents gives up its place while it waits, and waiting workers start in order.
-- The call's `budget_share` is recorded; budgets aren't enforced yet.
+- The call's `budget_share` is recorded but not enforced: [budgets](profiles.md#budgets) are the session's, subagents included.
 - Workers are named after their parent: `root` is the agent, `root.1` its first subagent, `root.1.2` that one's second. Every activity event and journal record names its worker, and `subagent_spawned` and `subagent_finished` events mark a subagent's start and end.
 - A subagent that fails, for example by using up its turns, returns the failure as the call's error result; the parent carries on. A panic ends only its own worker.
 
@@ -99,7 +113,9 @@ The next run carries on from where the session paused: remaining tool calls run,
 
 ## Steer notes
 
-An operator's `steer` note, from the orchestrator or typed into a [local viewer](tui.md), reaches the agent (the root worker) at its next turn boundary: it is added to the message before the next model call as `[Operator note from <who>, sent while you worked; take it into account] <note>`. Each note is journaled when it joins the conversation, so it is given exactly once, also across crashes and pauses; a note sent just before a pause reaches the agent when the session resumes. Subagents don't get notes; the agent can pass them on.
+An operator's `steer` note, from the orchestrator or typed into a [viewer](tui.md), reaches the agent (the root worker) at its next turn boundary: it is added to the message before the next model call as `[Operator note from <who>, sent while you worked; take it into account] <note>`. Each note is journaled when it joins the conversation, so it is given exactly once, also across crashes and pauses; a note sent just before a pause reaches the agent when the session resumes. Subagents don't get notes; the agent can pass them on.
+
+Actlet's own notices reach the agent the same way, as `[Notice from Actlet] <notice>`: today, that a budget has reached its alert threshold.
 
 ## Trying it
 

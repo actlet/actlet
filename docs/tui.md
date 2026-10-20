@@ -9,7 +9,7 @@ Actlet runs headless; a terminal viewer is something you add when you want to lo
 
 Whichever it shows, the viewer is only a viewer. Quitting it (`q`) detaches: the session carries on. If a viewer reads too slowly, the box skips events for it and says how many, rather than wait for it or buffer without bound; a viewer that crashes or is killed doesn't affect the run either.
 
-Try it with the demo, a scripted session of about two minutes with subagents, tool calls, a failing script and an operator's note:
+Try it with the demo, a scripted session of about two minutes with subagents, tool calls, a failing script, an operator's note and a budget alert:
 
 ```sh
 make demo-tui      # the session with the viewer in the foreground
@@ -39,13 +39,13 @@ The **status line** keeps to what matters at a glance: the session's state, the 
 
 | Tab | Shows |
 |---|---|
-| Session | state, the box's folder and output sizes, memory, CPU, the gateway connection, token use and cost per worker, budgets |
+| Session | state, the agent's latest progress report, the box's folder and output sizes, memory, CPU, the gateway connection, token use and cost per worker, each budget's use and whether it is past its alert or used up, and the agent's feedback |
 | Task | `task.json` and the worker tree, with each subagent's task and result |
 | Profile | the effective configuration, the models and their context windows, budgets, what local viewers may do |
 | Tools | the tools and their recovery policies, the profile's grants, the tools manifest |
 | Events | every event as one line, for debugging |
 
-Figures Actlet doesn't have show as `n/a`: cost needs a gateway that reports it with each model call, context percentages need a context window in the profile's model catalogue, and the box's figures come only from a running box seen directly, not through the orchestrator. Budgets aren't enforced yet; the viewer shows how much of each has been used.
+Figures Actlet doesn't have show as `n/a`: cost needs a gateway that reports it with each model call, context percentages need a context window in the profile's model catalogue, and the box's figures come only from a running box seen directly, not through the orchestrator. A budget that is used up also shows in the status line.
 
 ## Keys and mouse
 

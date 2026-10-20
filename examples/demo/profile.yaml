@@ -10,10 +10,14 @@ limits:
 default_pause_mode: drain
 stop_grace: 10s
 budgets:
+  # The demo costs about 0.48 EUR: half-way, the agent is told it has used
+  # half of its money, and the TUI shows the budget past its alert.
   - kind: money
-    limit: 2
+    limit: 0.6
     currency: EUR
-    on_exhaust: kill
+    alert_at_percent: 50
+    on_exhaust: wait
+    wait_mode: idle
   - kind: tokens
     limit: 400000
     on_exhaust: kill

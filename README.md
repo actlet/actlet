@@ -9,7 +9,7 @@ Actlet is deliberately not a web app, a model-provider gateway, a sandbox manage
 Early development. What works today:
 
 - `actlet run` connects to a gateway, registers its session, and runs its task. It takes pause, stop and steer commands, streams activity, and recovers from its journal. See the [gateway protocol](docs/gateway-protocol.md).
-- [The agent](docs/agent.md) runs `agent` tasks: it calls the model through the gateway and works with local tools (files, search, shell, Python), runs tool calls and subagents in parallel, and takes operators' steer notes. It journals every call, so that recovery never repeats a side effect. A built-in `demo` task needs no model.
+- [The agent](docs/agent.md) runs `agent` tasks: it calls the model through the gateway and works with local tools (files, search, shell, Python) and standard ones (progress reports, feedback, decisions, side calls to other models), runs tool calls and subagents in parallel, and takes operators' steer notes. [Budgets](docs/profiles.md#budgets) limit a session's time, cost, tokens and disk space, and the orchestrator can change limits and budgets while it runs. It journals every call, so that recovery never repeats a side effect. A built-in `demo` task needs no model.
 - `actlet-devgw` is a development gateway to run it against, built on the orchestrator SDK in [`sdk/`](sdk). It can answer model calls from a script.
 - A terminal viewer [shows a session](docs/tui.md) as it runs (`actlet attach`, or `actlet run -tui`), from anywhere through the orchestrator or the box's optional attach port (`actlet-cli attach`), or from a recording (`actlet-cli replay play`).
 - `actlet-cli` holds the tools for journals and recordings and attaches to running sessions; it never runs a session.
@@ -39,7 +39,7 @@ output/       deliverables
 
 ## Try the TUI
 
-The demo runs a scripted session of about two minutes, with no real model: an agent hands three regions of a sales review to subagents, runs shell commands and Python (one script fails and is fixed), edits a report, and gets an operator's note half-way. Every part of the viewer has something to show.
+The demo runs a scripted session of about two minutes, with no real model: an agent hands three regions of a sales review to subagents, runs shell commands and Python (one script fails and is fixed), edits a report, and gets an operator's note and a budget alert half-way. Every part of the viewer has something to show.
 
 ```sh
 make demo-tui      # run the demo with the viewer in the foreground

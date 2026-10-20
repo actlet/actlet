@@ -1,6 +1,6 @@
 # Profiles
 
-A **profile** is what the orchestrator lets a session do: limits, how it pauses and stops, which features it needs from the worker, its models and tools, what the agent is told, and later its budgets. The gateway hands one to every worker when it registers. The worker applies it within the ceilings of its own deployment (`actlet run -h` lists them) and records the effective configuration in the session journal.
+A **profile** is what the orchestrator lets a session do: limits, how it pauses and stops, which features it needs from the worker, its budgets, its models and tools, and what the agent is told. The gateway hands one to every worker when it registers. The worker applies it within the ceilings of its own deployment (`actlet run -h` lists them) and records the effective configuration in the session journal.
 
 The schema is versioned (`schema: v0`) and **experimental**. The SDK reads it from Go structs or from JSON or YAML files; all three describe the same fields.
 
@@ -21,7 +21,6 @@ limits:
 default_pause_mode: interrupt   # drain (default) or interrupt: pausing on SIGTERM
 stop_grace: 45s                 # grace period of a stop that gives none
 
-# Schema only for now: workers don't enforce these yet.
 budgets:
   - kind: time                  # time, money, tokens or disk
     limit: 3600                 # seconds, currency units, tokens or bytes
@@ -43,13 +42,12 @@ models:
     subagent: fast
     llm: fast
   selectable: [fast]            # aliases the agent may choose itself, such as for a subagent
-tools:                          # the local tools to offer; omit for all of them
+tools:                          # the tools to offer; omit for all the local ones
   - name: shell
     settings:
       timeout: 5m
+  - name: report_progress       # standard tools are offered only when named
   - name: decide
-    settings:
-      route: humans
 instructions: |                 # the implementor's layer of the agent's prompt
   Follow the repository's CONTRIBUTING.md.
 tools_manifest: |               # what is installed, for the agent
@@ -77,6 +75,40 @@ All problems are reported at once.
 
 `required_features` names capabilities the worker announces when it registers. Today those are `control.pause`, `control.stop`, `control.steer`, `activity.v0`, `task.demo`, `task.agent`, `inference.v0`, `tools.local` and `attach.files`. A gateway built on the SDK refuses to register a worker that lacks any of them, and the worker refuses such a profile itself too. An older worker therefore never runs a profile it only half understands: it exits with code 1 and names the missing features.
 
+## Budgets
+
+A budget limits what the session uses over all its runs:
+
+| Kind | Counts | Unit |
+|---|---|---|
+| `time` | active run time: time inside `actlet run`, not while paused or exited | seconds |
+| `money` | the cost the gateway reports with each model call and bridged tool call, in the budget's currency; costs in another currency don't count | currency units |
+| `tokens` | the models' input and output tokens, the agent's, its subagents' and the `llm` tool's | tokens |
+| `disk` | the session folder's size, looked at every 15 seconds and shortly after each tool call | bytes |
+
+At `alert_at_percent`, the agent is told once, in a notice before its next model call, how much it has used and what happens when the budget runs out, so it can plan to finish. When the budget runs out, `on_exhaust` decides:
+
+- `kill` stops the session, with the profile's `stop_grace`; it exits 4.
+- `wait` with `wait_mode: pause` pauses it; it exits 3. A new run with the same budget pauses again at once; once the orchestrator raises the budget, a new run carries on.
+- `wait` with `wait_mode: idle` keeps the session running but holds model calls and bridged tool calls back until a [profile update](#updating-a-running-session) raises or resets the budget. Running tool calls finish.
+
+Usage is checked as it is reported, before budget-consuming work starts, so a budget can be overshot by the one call that crosses it. Alerts and limits reached are recorded in the session journal before Actlet acts on them, and `budget_status` activity events report the budgets at the start of a run, at alerts and limits, and when they change. Viewers show each budget's use; the agent can ask with the `budget_status` tool.
+
+## Updating a running session
+
+The orchestrator can change some of a running session's profile with a `profile_update` command, `Session.UpdateProfile` in the SDK, or `profile-update <file>` in `actlet-devgw`. It names the fields it changes, and only these may change: `limits.max_workers`, `limits.max_tool_concurrency`, `limits.max_subagents`, `budgets` and `local_attach`. An update naming any other field, such as `instructions`, is refused as a whole. It can also reset budgets, which then count from zero again, such as at the start of a billing period (not `disk`, which is the folder's size).
+
+```yaml
+# profile-update.yaml: a partial profile; the fields present change.
+limits:
+  max_workers: 4
+budgets:
+  - {kind: money, limit: 5, currency: EUR, on_exhaust: wait, wait_mode: idle}
+reset_budgets: [money]
+```
+
+The worker records the new configuration in the session journal before it takes effect. The worker limit and the tool concurrency apply as workers and tool calls start, within the deployment's ceilings. When the box registers again, such as to resume after a pause, the SDK applies its updates to the profile `Assign` returns, so the box starts with them; resets aren't applied again.
+
 ## Using profiles from Go
 
 ```go
@@ -93,8 +125,8 @@ wire, err := p.Proto() // validates, then converts for RegisterResponse.Profile
 
 ## Models
 
-Workers never see provider names, endpoints or credentials. They see only the aliases the orchestrator defines, and which alias each role (`main`, `subagent`, `llm`) uses. The orchestrator resolves an alias when the worker asks for a model. The agent uses the `main` role's alias, or `main` when the profile has no models. Subagents use the `subagent` role's alias, or the agent's; the agent may pick one of `selectable` for a subagent instead. `selectable` must name defined aliases.
+Workers never see provider names, endpoints or credentials. They see only the aliases the orchestrator defines, and which alias each role (`main`, `subagent`, `llm`) uses; the `llm` tool uses the `llm` role, or `processing`. The orchestrator resolves an alias when the worker asks for a model. The agent uses the `main` role's alias, or `main` when the profile has no models. Subagents use the `subagent` role's alias, or the agent's; the agent may pick one of `selectable` for a subagent instead. `selectable` must name defined aliases.
 
 ## The agent
 
-`instructions`, `base_prompt` (which replaces Actlet's own) and `tools_manifest` make up the agent's prompt, and `tools` selects and configures its local tools. See [the agent](agent.md).
+`instructions`, `base_prompt` (which replaces Actlet's own) and `tools_manifest` make up the agent's prompt, and `tools` selects and configures its tools, local and [standard](agent.md#standard-tools). See [the agent](agent.md).
