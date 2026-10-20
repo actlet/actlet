@@ -137,3 +137,25 @@ func TestUsesOnlyTheSDK(t *testing.T) {
 		}
 	}
 }
+
+func TestProfileFlag(t *testing.T) {
+	dir := t.TempDir()
+	good := dir + "/p.yaml"
+	if err := os.WriteFile(good, []byte("schema: v0\nid: from-file\nstop_grace: 3s\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	p, err := loadProfile(config{profile: good})
+	if err != nil || p.GetId() != "from-file" || p.GetStopGrace().AsDuration() != 3*time.Second {
+		t.Fatalf("profile %v, %v", p, err)
+	}
+	bad := dir + "/bad.json"
+	if err := os.WriteFile(bad, []byte(`{"schema":"v0","id":"x","surprise":true}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := loadProfile(config{profile: bad}); err == nil {
+		t.Error("accepted a profile with an unknown field")
+	}
+	if _, err := loadProfile(config{profileID: "dev", pauseMode: "sleep"}); err == nil {
+		t.Error("accepted pause mode sleep")
+	}
+}

@@ -24,7 +24,6 @@ import (
 	"time"
 
 	"google.golang.org/grpc"
-	"google.golang.org/protobuf/types/known/durationpb"
 
 	gatewayv0 "github.com/actlet/actlet/proto/actlet/gateway/v0"
 	"github.com/actlet/actlet/sdk"
@@ -57,6 +56,7 @@ type config struct {
 	token      string
 	dataDir    string
 	taskFile   string
+	profile    string
 	profileID  string
 	pauseMode  string
 	stopGrace  time.Duration
@@ -90,9 +90,10 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	fs.StringVar(&cfg.taskFile, "task", "", "task file to assign, in the task.json format (default: a demo task)")
 	fs.StringVar(&cfg.demoDef, "demo", `{"steps":5,"step":"2s","ticks":2}`, "definition of the default demo task")
 	fs.StringVar(&cfg.demoInput, "demo-input", `{"message":"hello from actlet-devgw"}`, "input of the default demo task")
-	fs.StringVar(&cfg.profileID, "profile", "dev", "profile ID to assign")
-	fs.StringVar(&cfg.pauseMode, "pause-mode", "drain", "profile's default pause mode on SIGTERM: drain or interrupt")
-	fs.DurationVar(&cfg.stopGrace, "stop-grace", 10*time.Second, "profile's default stop grace period")
+	fs.StringVar(&cfg.profile, "profile", "", "profile file to assign, JSON or YAML (default: built from the flags below)")
+	fs.StringVar(&cfg.profileID, "profile-id", "dev", "ID of the default profile")
+	fs.StringVar(&cfg.pauseMode, "pause-mode", "drain", "default profile's pause mode on SIGTERM: drain or interrupt")
+	fs.DurationVar(&cfg.stopGrace, "stop-grace", 10*time.Second, "default profile's stop grace period")
 	fs.DurationVar(&cfg.cmdTimeout, "command-timeout", time.Minute, "how long a command waits for the worker's acknowledgement")
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
@@ -150,13 +151,9 @@ func newGateway(cfg config, out io.Writer, log *slog.Logger) (*gateway, error) {
 	if err != nil {
 		return nil, err
 	}
-	mode := gatewayv0.PauseMode_PAUSE_MODE_DRAIN
-	switch cfg.pauseMode {
-	case "drain":
-	case "interrupt":
-		mode = gatewayv0.PauseMode_PAUSE_MODE_INTERRUPT
-	default:
-		return nil, fmt.Errorf("pause mode %q: use drain or interrupt", cfg.pauseMode)
+	profile, err := loadProfile(cfg)
+	if err != nil {
+		return nil, err
 	}
 	store, err := sdk.NewRecordingStore(cfg.dataDir)
 	if err != nil {
@@ -174,15 +171,7 @@ func newGateway(cfg config, out io.Writer, log *slog.Logger) (*gateway, error) {
 			g.mu.Lock()
 			g.current = id
 			g.mu.Unlock()
-			return &gatewayv0.RegisterResponse{
-				SessionId: id,
-				Profile: &gatewayv0.Profile{
-					Id: cfg.profileID, Version: "1",
-					DefaultPauseMode: mode,
-					StopGrace:        durationpb.New(cfg.stopGrace),
-				},
-				Task: task,
-			}, nil
+			return &gatewayv0.RegisterResponse{SessionId: id, Profile: profile, Task: task}, nil
 		},
 		OnActivity: g.printEvent,
 		OnControl: func(s *sdk.Session, connected bool) {
@@ -202,6 +191,22 @@ func newGateway(cfg config, out io.Writer, log *slog.Logger) (*gateway, error) {
 		return nil, err
 	}
 	return g, nil
+}
+
+// loadProfile reads the profile file, or builds the default profile from
+// the flags.
+func loadProfile(cfg config) (*gatewayv0.Profile, error) {
+	p := &sdk.Profile{
+		Schema: sdk.ProfileSchema, ID: cfg.profileID, Version: "1",
+		DefaultPauseMode: cfg.pauseMode, StopGrace: sdk.Duration(cfg.stopGrace),
+	}
+	if cfg.profile != "" {
+		var err error
+		if p, err = sdk.LoadProfile(cfg.profile); err != nil {
+			return nil, err
+		}
+	}
+	return p.Proto()
 }
 
 // loadTask reads the task file, or builds the demo task.

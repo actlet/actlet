@@ -1,0 +1,35 @@
+# A complete profile. Budgets, models and tools are schema only for now.
+schema: v0
+id: coding-default
+version: "3"
+required_features: [control.pause, control.stop, activity.v0]
+limits:
+  max_workers: 2
+  max_tool_concurrency: 4
+default_pause_mode: interrupt
+stop_grace: 45s
+budgets:
+  - kind: time
+    limit: 3600
+    alert_at_percent: 80
+    on_exhaust: wait
+    wait_mode: pause
+  - kind: money
+    limit: 12.5
+    currency: EUR
+    on_exhaust: kill
+models:
+  aliases:
+    - alias: large
+      description: the strongest model available
+      capabilities: [tools, vision]
+    - alias: fast
+  roles:
+    main: large
+    subagent: fast
+    llm: fast
+tools:
+  - name: shell
+  - name: decide
+    settings:
+      route: humans
