@@ -86,8 +86,8 @@ func main() {
 		if err != nil {
 			fail(err)
 		}
-		kb, _ := strconv.Atoi(strings.TrimSpace(string(out)))
-		rss = append(rss, kb)
+		kib, _ := strconv.Atoi(strings.TrimSpace(string(out)))
+		rss = append(rss, kib)
 		_ = cmd.Process.Signal(syscall.SIGTERM)
 		_ = cmd.Wait()
 	}
