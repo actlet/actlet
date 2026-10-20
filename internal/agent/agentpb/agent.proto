@@ -1,8 +1,9 @@
-// Records the agent writes to the session journal. Every model call and
-// every tool call is recorded as an intent before it starts and an outcome
-// when it ends; checkpoints hold the whole conversation at model-turn
-// boundaries. Recovery starts from the latest checkpoint and replays the
-// records after it.
+// Records the agent writes to the session journal. A session's agent is a
+// tree of workers: the root worker and the subagents it spawns, which
+// share the journal. Every model call and every tool call is recorded as
+// an intent before it starts and an outcome when it ends, and checkpoints
+// hold the state of all workers. Recovery starts from the latest
+// checkpoint and replays the records after it.
 //
 // EXPERIMENTAL (v0): this schema may change incompatibly.
 
@@ -14,27 +15,52 @@ import "actlet/gateway/v0/gateway.proto";
 
 option go_package = "github.com/actlet/actlet/internal/agent/agentpb";
 
-// Checkpoint is the agent's execution state at a model-turn boundary:
-// everything needed for the next model call (kind "agent.checkpoint").
+// Checkpoint is the state of every worker (kind "agent.checkpoint").
 message Checkpoint {
-  // Model turns completed.
-  uint64 turn = 1;
-  string model = 2;
-  string system = 3;
-  repeated actlet.gateway.v0.Message messages = 4;
-  bytes continuation = 5;
-  // Usage of all turns so far.
-  actlet.gateway.v0.Usage usage = 6;
-  // The version of Actlet's base prompt in system, or "custom".
-  string prompt_version = 7;
+  repeated WorkerState workers = 1;
+  // Steer notes already given to the agent, by command ID.
+  repeated string steers_delivered = 2;
+  // Subagents created so far.
+  uint32 spawned = 3;
 }
 
-// InferenceIntent is a model call about to be made with the conversation
-// as it stands (kind "agent.inference.intent").
+// WorkerState is one worker's execution state.
+message WorkerState {
+  string worker_id = 1;
+  string parent_id = 2;
+  // The spawn_subagent call in the parent that waits for this worker.
+  string parent_call_id = 3;
+  uint32 depth = 4;
+  // Model turns completed.
+  uint64 turn = 5;
+  string model = 6;
+  string system = 7;
+  repeated actlet.gateway.v0.Message messages = 8;
+  bytes continuation = 9;
+  actlet.gateway.v0.Usage usage = 10;
+  // The version of Actlet's base prompt in system, or "custom".
+  string prompt_version = 11;
+  // A model call with an intent but no outcome.
+  InferenceIntent inference = 12;
+  // The latest answer while its tool calls run, with their intents and
+  // outcomes so far.
+  actlet.gateway.v0.Message pending = 13;
+  repeated ToolIntent intents = 14;
+  repeated ToolOutcome results = 15;
+  // The latest answer ended the worker's task, or was a refusal.
+  bool ended = 16;
+  bool refused = 17;
+  // Set when the worker has finished.
+  WorkerDone done = 18;
+}
+
+// InferenceIntent is a model call about to be made with the worker's
+// conversation as it stands (kind "agent.inference.intent").
 message InferenceIntent {
   string intent_id = 1;
   // The turn the call makes, from 1.
   uint64 turn = 2;
+  string worker_id = 3;
 }
 
 // InferenceOutcome is the model's answer (kind "agent.inference.outcome").
@@ -43,6 +69,7 @@ message InferenceOutcome {
   actlet.gateway.v0.Message message = 2;
   actlet.gateway.v0.InferenceDone done = 3;
   uint32 attempts = 4;
+  string worker_id = 5;
 }
 
 // ToolIntent is a tool call about to run (kind "tool.intent").
@@ -56,9 +83,11 @@ message ToolIntent {
   bytes check = 5;
   // The tool's recovery policy: "retry", "reconcile" or "never".
   string policy = 6;
+  string worker_id = 7;
 }
 
-// ToolOutcome is a tool call's result (kind "tool.outcome").
+// ToolOutcome is a tool call's result (kind "tool.outcome"). For a
+// spawn_subagent call it delivers the subagent's result to the parent.
 message ToolOutcome {
   // Empty for a call refused before it ran.
   string intent_id = 1;
@@ -68,4 +97,37 @@ message ToolOutcome {
   bool outcome_unknown = 5;
   // Decided by recovery rather than by running the call.
   bool recovered = 6;
+  string worker_id = 7;
+}
+
+// Spawn creates a subagent for a parent's spawn_subagent call (kind
+// "agent.spawn"). It is also the call's intent: recovery waits for the
+// subagent rather than creating another.
+message Spawn {
+  string intent_id = 1;
+  string parent_id = 2;
+  string call_id = 3;
+  // The subagent, with its prompt and first message.
+  WorkerState worker = 4;
+  // The share of the session's budget the parent gave it. Not enforced
+  // yet.
+  double budget_share = 5;
+}
+
+// WorkerDone is a subagent finishing (kind "agent.worker.done"). Its
+// result is delivered to the parent by the parent's ToolOutcome.
+message WorkerDone {
+  string worker_id = 1;
+  string result = 2;
+  bool is_error = 3;
+}
+
+// SteerDelivered puts an operator's steer note into a worker's
+// conversation, in the message before its next model call (kind
+// "agent.steer").
+message SteerDelivered {
+  string worker_id = 1;
+  string command_id = 2;
+  // The text added to the conversation.
+  string text = 3;
 }

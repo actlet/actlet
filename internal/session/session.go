@@ -14,6 +14,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"slices"
 	"sync"
 	"time"
 
@@ -95,6 +96,16 @@ type Recovered struct {
 	Config *sessionpb.Config
 	// Agent are the agent's records from its latest checkpoint on.
 	Agent []journal.Record
+	// Steers are the accepted steer notes, in the order they arrived.
+	Steers []agent.Steer
+}
+
+func steerOf(c *sessionpb.Command) agent.Steer {
+	from := c.GetActor()
+	if from == "" {
+		from = c.GetOrigin()
+	}
+	return agent.Steer{CommandID: c.GetId(), Note: c.GetNote(), From: from}
 }
 
 // Resumable reports whether a new run may continue the session: it hasn't
@@ -179,6 +190,9 @@ func (r *Recovered) apply(jr journal.Record) error {
 			return err
 		}
 		r.Commands[m.GetId()] = &m
+		if m.GetAction() == "steer" && m.GetAccepted() {
+			r.Steers = append(r.Steers, steerOf(&m))
+		}
 	case kindStep:
 		var m sessionpb.StepDone
 		if err := proto.Unmarshal(jr.Data, &m); err != nil {
@@ -224,12 +238,14 @@ type Session struct {
 
 	cmdMu    sync.Mutex // serialises commands
 	commands map[string]*sessionpb.Command
+	steers   []agent.Steer // accepted steer notes, in order
 
 	mu         sync.Mutex
 	state      gatewayv0.SessionState
 	target     gatewayv0.SessionState // PAUSED or STOPPED once requested
 	reason     string
 	noNewWork  bool
+	stopping   chan struct{} // closed when noNewWork is set
 	signalled  int
 	softCancel context.CancelFunc // asks running work to stop
 	hardCancel context.CancelFunc // kills running work
@@ -273,12 +289,14 @@ func Start(p Params) (*Session, error) {
 		commands: map[string]*sessionpb.Command{},
 		state:    gatewayv0.SessionState_SESSION_STATE_RUNNING,
 		done:     make(chan struct{}),
+		stopping: make(chan struct{}),
 	}
 	nextStep := uint64(1)
 	if p.Recovered != nil {
 		for id, c := range p.Recovered.Commands {
 			s.commands[id] = c
 		}
+		s.steers = p.Recovered.Steers
 		nextStep = p.Recovered.NextStep
 	}
 	s.soft, s.softCancel = context.WithCancel(context.Background())
@@ -383,6 +401,7 @@ func (s *Session) Apply(ctx context.Context, cmd *gatewayv0.Command) (*gatewayv0
 				rec.Message = msg
 			}
 		case *gatewayv0.Command_Steer:
+			s.steers = append(s.steers, steerOf(rec))
 			s.p.Emit(&gatewayv0.ActivityEvent{Body: &gatewayv0.ActivityEvent_Steer{Steer: &gatewayv0.SteerNote{
 				Note: rec.Note, Origin: cmd.GetOrigin(), Actor: cmd.GetActor(),
 			}}})
@@ -495,7 +514,8 @@ func (s *Session) requestPause(mode gatewayv0.PauseMode, reason string) string {
 	switch s.state {
 	case gatewayv0.SessionState_SESSION_STATE_RUNNING:
 		s.setStateLocked(gatewayv0.SessionState_SESSION_STATE_PAUSING, reason)
-		s.target, s.reason, s.noNewWork = gatewayv0.SessionState_SESSION_STATE_PAUSED, reason, true
+		s.target, s.reason = gatewayv0.SessionState_SESSION_STATE_PAUSED, reason
+		s.stopNewWorkLocked()
 		if mode == gatewayv0.PauseMode_PAUSE_MODE_INTERRUPT {
 			s.softCancel()
 		}
@@ -521,7 +541,8 @@ func (s *Session) requestStop(grace time.Duration, kill bool, reason string) str
 		msg = "already stopping"
 	} else {
 		s.setStateLocked(gatewayv0.SessionState_SESSION_STATE_STOPPING, reason)
-		s.target, s.reason, s.noNewWork = gatewayv0.SessionState_SESSION_STATE_STOPPED, reason, true
+		s.target, s.reason = gatewayv0.SessionState_SESSION_STATE_STOPPED, reason
+		s.stopNewWorkLocked()
 	}
 	s.softCancel()
 	if kill {
@@ -560,6 +581,21 @@ func (s *Session) setStateLocked(to gatewayv0.SessionState, reason string) {
 	from := s.state
 	s.state = to
 	s.emitState(from, to, reason)
+}
+
+// steerNotes returns the accepted steer notes so far.
+func (s *Session) steerNotes() []agent.Steer {
+	s.cmdMu.Lock()
+	defer s.cmdMu.Unlock()
+	return slices.Clone(s.steers)
+}
+
+// stopNewWorkLocked stops new work from starting. The caller holds s.mu.
+func (s *Session) stopNewWorkLocked() {
+	if !s.noNewWork {
+		s.noNewWork = true
+		close(s.stopping)
+	}
 }
 
 // wantsStop reports whether new work must not start.
@@ -633,7 +669,7 @@ func (s *Session) runAgent() Outcome {
 	done, err := agent.Run(agent.Env{
 		Settings: s.p.Agent, Folder: s.p.Folder, Task: s.p.Task, SessionID: s.p.SessionID, Epoch: s.p.Epoch,
 		Records: records, Record: s.record, Emit: s.p.Emit, Infer: s.p.Infer,
-		Soft: s.soft, Hard: s.hard, WantsStop: s.wantsStop, Logger: s.log,
+		Soft: s.soft, Hard: s.hard, Stopping: s.stopping, Steers: s.steerNotes, Logger: s.log,
 	})
 	switch {
 	case err != nil:

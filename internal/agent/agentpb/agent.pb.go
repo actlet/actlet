@@ -1,8 +1,9 @@
-// Records the agent writes to the session journal. Every model call and
-// every tool call is recorded as an intent before it starts and an outcome
-// when it ends; checkpoints hold the whole conversation at model-turn
-// boundaries. Recovery starts from the latest checkpoint and replays the
-// records after it.
+// Records the agent writes to the session journal. A session's agent is a
+// tree of workers: the root worker and the subagents it spawns, which
+// share the journal. Every model call and every tool call is recorded as
+// an intent before it starts and an outcome when it ends, and checkpoints
+// hold the state of all workers. Recovery starts from the latest
+// checkpoint and replays the records after it.
 //
 // EXPERIMENTAL (v0): this schema may change incompatibly.
 
@@ -30,20 +31,14 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// Checkpoint is the agent's execution state at a model-turn boundary:
-// everything needed for the next model call (kind "agent.checkpoint").
+// Checkpoint is the state of every worker (kind "agent.checkpoint").
 type Checkpoint struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Model turns completed.
-	Turn         uint64        `protobuf:"varint,1,opt,name=turn,proto3" json:"turn,omitempty"`
-	Model        string        `protobuf:"bytes,2,opt,name=model,proto3" json:"model,omitempty"`
-	System       string        `protobuf:"bytes,3,opt,name=system,proto3" json:"system,omitempty"`
-	Messages     []*v0.Message `protobuf:"bytes,4,rep,name=messages,proto3" json:"messages,omitempty"`
-	Continuation []byte        `protobuf:"bytes,5,opt,name=continuation,proto3" json:"continuation,omitempty"`
-	// Usage of all turns so far.
-	Usage *v0.Usage `protobuf:"bytes,6,opt,name=usage,proto3" json:"usage,omitempty"`
-	// The version of Actlet's base prompt in system, or "custom".
-	PromptVersion string `protobuf:"bytes,7,opt,name=prompt_version,json=promptVersion,proto3" json:"prompt_version,omitempty"`
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Workers []*WorkerState         `protobuf:"bytes,1,rep,name=workers,proto3" json:"workers,omitempty"`
+	// Steer notes already given to the agent, by command ID.
+	SteersDelivered []string `protobuf:"bytes,2,rep,name=steers_delivered,json=steersDelivered,proto3" json:"steers_delivered,omitempty"`
+	// Subagents created so far.
+	Spawned       uint32 `protobuf:"varint,3,opt,name=spawned,proto3" json:"spawned,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -78,69 +73,231 @@ func (*Checkpoint) Descriptor() ([]byte, []int) {
 	return file_internal_agent_agentpb_agent_proto_rawDescGZIP(), []int{0}
 }
 
-func (x *Checkpoint) GetTurn() uint64 {
+func (x *Checkpoint) GetWorkers() []*WorkerState {
+	if x != nil {
+		return x.Workers
+	}
+	return nil
+}
+
+func (x *Checkpoint) GetSteersDelivered() []string {
+	if x != nil {
+		return x.SteersDelivered
+	}
+	return nil
+}
+
+func (x *Checkpoint) GetSpawned() uint32 {
+	if x != nil {
+		return x.Spawned
+	}
+	return 0
+}
+
+// WorkerState is one worker's execution state.
+type WorkerState struct {
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	WorkerId string                 `protobuf:"bytes,1,opt,name=worker_id,json=workerId,proto3" json:"worker_id,omitempty"`
+	ParentId string                 `protobuf:"bytes,2,opt,name=parent_id,json=parentId,proto3" json:"parent_id,omitempty"`
+	// The spawn_subagent call in the parent that waits for this worker.
+	ParentCallId string `protobuf:"bytes,3,opt,name=parent_call_id,json=parentCallId,proto3" json:"parent_call_id,omitempty"`
+	Depth        uint32 `protobuf:"varint,4,opt,name=depth,proto3" json:"depth,omitempty"`
+	// Model turns completed.
+	Turn         uint64        `protobuf:"varint,5,opt,name=turn,proto3" json:"turn,omitempty"`
+	Model        string        `protobuf:"bytes,6,opt,name=model,proto3" json:"model,omitempty"`
+	System       string        `protobuf:"bytes,7,opt,name=system,proto3" json:"system,omitempty"`
+	Messages     []*v0.Message `protobuf:"bytes,8,rep,name=messages,proto3" json:"messages,omitempty"`
+	Continuation []byte        `protobuf:"bytes,9,opt,name=continuation,proto3" json:"continuation,omitempty"`
+	Usage        *v0.Usage     `protobuf:"bytes,10,opt,name=usage,proto3" json:"usage,omitempty"`
+	// The version of Actlet's base prompt in system, or "custom".
+	PromptVersion string `protobuf:"bytes,11,opt,name=prompt_version,json=promptVersion,proto3" json:"prompt_version,omitempty"`
+	// A model call with an intent but no outcome.
+	Inference *InferenceIntent `protobuf:"bytes,12,opt,name=inference,proto3" json:"inference,omitempty"`
+	// The latest answer while its tool calls run, with their intents and
+	// outcomes so far.
+	Pending *v0.Message    `protobuf:"bytes,13,opt,name=pending,proto3" json:"pending,omitempty"`
+	Intents []*ToolIntent  `protobuf:"bytes,14,rep,name=intents,proto3" json:"intents,omitempty"`
+	Results []*ToolOutcome `protobuf:"bytes,15,rep,name=results,proto3" json:"results,omitempty"`
+	// The latest answer ended the worker's task, or was a refusal.
+	Ended   bool `protobuf:"varint,16,opt,name=ended,proto3" json:"ended,omitempty"`
+	Refused bool `protobuf:"varint,17,opt,name=refused,proto3" json:"refused,omitempty"`
+	// Set when the worker has finished.
+	Done          *WorkerDone `protobuf:"bytes,18,opt,name=done,proto3" json:"done,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WorkerState) Reset() {
+	*x = WorkerState{}
+	mi := &file_internal_agent_agentpb_agent_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WorkerState) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WorkerState) ProtoMessage() {}
+
+func (x *WorkerState) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_agent_agentpb_agent_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WorkerState.ProtoReflect.Descriptor instead.
+func (*WorkerState) Descriptor() ([]byte, []int) {
+	return file_internal_agent_agentpb_agent_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *WorkerState) GetWorkerId() string {
+	if x != nil {
+		return x.WorkerId
+	}
+	return ""
+}
+
+func (x *WorkerState) GetParentId() string {
+	if x != nil {
+		return x.ParentId
+	}
+	return ""
+}
+
+func (x *WorkerState) GetParentCallId() string {
+	if x != nil {
+		return x.ParentCallId
+	}
+	return ""
+}
+
+func (x *WorkerState) GetDepth() uint32 {
+	if x != nil {
+		return x.Depth
+	}
+	return 0
+}
+
+func (x *WorkerState) GetTurn() uint64 {
 	if x != nil {
 		return x.Turn
 	}
 	return 0
 }
 
-func (x *Checkpoint) GetModel() string {
+func (x *WorkerState) GetModel() string {
 	if x != nil {
 		return x.Model
 	}
 	return ""
 }
 
-func (x *Checkpoint) GetSystem() string {
+func (x *WorkerState) GetSystem() string {
 	if x != nil {
 		return x.System
 	}
 	return ""
 }
 
-func (x *Checkpoint) GetMessages() []*v0.Message {
+func (x *WorkerState) GetMessages() []*v0.Message {
 	if x != nil {
 		return x.Messages
 	}
 	return nil
 }
 
-func (x *Checkpoint) GetContinuation() []byte {
+func (x *WorkerState) GetContinuation() []byte {
 	if x != nil {
 		return x.Continuation
 	}
 	return nil
 }
 
-func (x *Checkpoint) GetUsage() *v0.Usage {
+func (x *WorkerState) GetUsage() *v0.Usage {
 	if x != nil {
 		return x.Usage
 	}
 	return nil
 }
 
-func (x *Checkpoint) GetPromptVersion() string {
+func (x *WorkerState) GetPromptVersion() string {
 	if x != nil {
 		return x.PromptVersion
 	}
 	return ""
 }
 
-// InferenceIntent is a model call about to be made with the conversation
-// as it stands (kind "agent.inference.intent").
+func (x *WorkerState) GetInference() *InferenceIntent {
+	if x != nil {
+		return x.Inference
+	}
+	return nil
+}
+
+func (x *WorkerState) GetPending() *v0.Message {
+	if x != nil {
+		return x.Pending
+	}
+	return nil
+}
+
+func (x *WorkerState) GetIntents() []*ToolIntent {
+	if x != nil {
+		return x.Intents
+	}
+	return nil
+}
+
+func (x *WorkerState) GetResults() []*ToolOutcome {
+	if x != nil {
+		return x.Results
+	}
+	return nil
+}
+
+func (x *WorkerState) GetEnded() bool {
+	if x != nil {
+		return x.Ended
+	}
+	return false
+}
+
+func (x *WorkerState) GetRefused() bool {
+	if x != nil {
+		return x.Refused
+	}
+	return false
+}
+
+func (x *WorkerState) GetDone() *WorkerDone {
+	if x != nil {
+		return x.Done
+	}
+	return nil
+}
+
+// InferenceIntent is a model call about to be made with the worker's
+// conversation as it stands (kind "agent.inference.intent").
 type InferenceIntent struct {
 	state    protoimpl.MessageState `protogen:"open.v1"`
 	IntentId string                 `protobuf:"bytes,1,opt,name=intent_id,json=intentId,proto3" json:"intent_id,omitempty"`
 	// The turn the call makes, from 1.
 	Turn          uint64 `protobuf:"varint,2,opt,name=turn,proto3" json:"turn,omitempty"`
+	WorkerId      string `protobuf:"bytes,3,opt,name=worker_id,json=workerId,proto3" json:"worker_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *InferenceIntent) Reset() {
 	*x = InferenceIntent{}
-	mi := &file_internal_agent_agentpb_agent_proto_msgTypes[1]
+	mi := &file_internal_agent_agentpb_agent_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -152,7 +309,7 @@ func (x *InferenceIntent) String() string {
 func (*InferenceIntent) ProtoMessage() {}
 
 func (x *InferenceIntent) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_agent_agentpb_agent_proto_msgTypes[1]
+	mi := &file_internal_agent_agentpb_agent_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -165,7 +322,7 @@ func (x *InferenceIntent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InferenceIntent.ProtoReflect.Descriptor instead.
 func (*InferenceIntent) Descriptor() ([]byte, []int) {
-	return file_internal_agent_agentpb_agent_proto_rawDescGZIP(), []int{1}
+	return file_internal_agent_agentpb_agent_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *InferenceIntent) GetIntentId() string {
@@ -182,6 +339,13 @@ func (x *InferenceIntent) GetTurn() uint64 {
 	return 0
 }
 
+func (x *InferenceIntent) GetWorkerId() string {
+	if x != nil {
+		return x.WorkerId
+	}
+	return ""
+}
+
 // InferenceOutcome is the model's answer (kind "agent.inference.outcome").
 type InferenceOutcome struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -189,13 +353,14 @@ type InferenceOutcome struct {
 	Message       *v0.Message            `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
 	Done          *v0.InferenceDone      `protobuf:"bytes,3,opt,name=done,proto3" json:"done,omitempty"`
 	Attempts      uint32                 `protobuf:"varint,4,opt,name=attempts,proto3" json:"attempts,omitempty"`
+	WorkerId      string                 `protobuf:"bytes,5,opt,name=worker_id,json=workerId,proto3" json:"worker_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *InferenceOutcome) Reset() {
 	*x = InferenceOutcome{}
-	mi := &file_internal_agent_agentpb_agent_proto_msgTypes[2]
+	mi := &file_internal_agent_agentpb_agent_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -207,7 +372,7 @@ func (x *InferenceOutcome) String() string {
 func (*InferenceOutcome) ProtoMessage() {}
 
 func (x *InferenceOutcome) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_agent_agentpb_agent_proto_msgTypes[2]
+	mi := &file_internal_agent_agentpb_agent_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -220,7 +385,7 @@ func (x *InferenceOutcome) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InferenceOutcome.ProtoReflect.Descriptor instead.
 func (*InferenceOutcome) Descriptor() ([]byte, []int) {
-	return file_internal_agent_agentpb_agent_proto_rawDescGZIP(), []int{2}
+	return file_internal_agent_agentpb_agent_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *InferenceOutcome) GetIntentId() string {
@@ -251,6 +416,13 @@ func (x *InferenceOutcome) GetAttempts() uint32 {
 	return 0
 }
 
+func (x *InferenceOutcome) GetWorkerId() string {
+	if x != nil {
+		return x.WorkerId
+	}
+	return ""
+}
+
 // ToolIntent is a tool call about to run (kind "tool.intent").
 type ToolIntent struct {
 	state    protoimpl.MessageState `protogen:"open.v1"`
@@ -263,13 +435,14 @@ type ToolIntent struct {
 	Check []byte `protobuf:"bytes,5,opt,name=check,proto3" json:"check,omitempty"`
 	// The tool's recovery policy: "retry", "reconcile" or "never".
 	Policy        string `protobuf:"bytes,6,opt,name=policy,proto3" json:"policy,omitempty"`
+	WorkerId      string `protobuf:"bytes,7,opt,name=worker_id,json=workerId,proto3" json:"worker_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ToolIntent) Reset() {
 	*x = ToolIntent{}
-	mi := &file_internal_agent_agentpb_agent_proto_msgTypes[3]
+	mi := &file_internal_agent_agentpb_agent_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -281,7 +454,7 @@ func (x *ToolIntent) String() string {
 func (*ToolIntent) ProtoMessage() {}
 
 func (x *ToolIntent) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_agent_agentpb_agent_proto_msgTypes[3]
+	mi := &file_internal_agent_agentpb_agent_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -294,7 +467,7 @@ func (x *ToolIntent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ToolIntent.ProtoReflect.Descriptor instead.
 func (*ToolIntent) Descriptor() ([]byte, []int) {
-	return file_internal_agent_agentpb_agent_proto_rawDescGZIP(), []int{3}
+	return file_internal_agent_agentpb_agent_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *ToolIntent) GetIntentId() string {
@@ -339,7 +512,15 @@ func (x *ToolIntent) GetPolicy() string {
 	return ""
 }
 
-// ToolOutcome is a tool call's result (kind "tool.outcome").
+func (x *ToolIntent) GetWorkerId() string {
+	if x != nil {
+		return x.WorkerId
+	}
+	return ""
+}
+
+// ToolOutcome is a tool call's result (kind "tool.outcome"). For a
+// spawn_subagent call it delivers the subagent's result to the parent.
 type ToolOutcome struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Empty for a call refused before it ran.
@@ -349,14 +530,15 @@ type ToolOutcome struct {
 	IsError        bool   `protobuf:"varint,4,opt,name=is_error,json=isError,proto3" json:"is_error,omitempty"`
 	OutcomeUnknown bool   `protobuf:"varint,5,opt,name=outcome_unknown,json=outcomeUnknown,proto3" json:"outcome_unknown,omitempty"`
 	// Decided by recovery rather than by running the call.
-	Recovered     bool `protobuf:"varint,6,opt,name=recovered,proto3" json:"recovered,omitempty"`
+	Recovered     bool   `protobuf:"varint,6,opt,name=recovered,proto3" json:"recovered,omitempty"`
+	WorkerId      string `protobuf:"bytes,7,opt,name=worker_id,json=workerId,proto3" json:"worker_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ToolOutcome) Reset() {
 	*x = ToolOutcome{}
-	mi := &file_internal_agent_agentpb_agent_proto_msgTypes[4]
+	mi := &file_internal_agent_agentpb_agent_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -368,7 +550,7 @@ func (x *ToolOutcome) String() string {
 func (*ToolOutcome) ProtoMessage() {}
 
 func (x *ToolOutcome) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_agent_agentpb_agent_proto_msgTypes[4]
+	mi := &file_internal_agent_agentpb_agent_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -381,7 +563,7 @@ func (x *ToolOutcome) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ToolOutcome.ProtoReflect.Descriptor instead.
 func (*ToolOutcome) Descriptor() ([]byte, []int) {
-	return file_internal_agent_agentpb_agent_proto_rawDescGZIP(), []int{4}
+	return file_internal_agent_agentpb_agent_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *ToolOutcome) GetIntentId() string {
@@ -426,28 +608,261 @@ func (x *ToolOutcome) GetRecovered() bool {
 	return false
 }
 
+func (x *ToolOutcome) GetWorkerId() string {
+	if x != nil {
+		return x.WorkerId
+	}
+	return ""
+}
+
+// Spawn creates a subagent for a parent's spawn_subagent call (kind
+// "agent.spawn"). It is also the call's intent: recovery waits for the
+// subagent rather than creating another.
+type Spawn struct {
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	IntentId string                 `protobuf:"bytes,1,opt,name=intent_id,json=intentId,proto3" json:"intent_id,omitempty"`
+	ParentId string                 `protobuf:"bytes,2,opt,name=parent_id,json=parentId,proto3" json:"parent_id,omitempty"`
+	CallId   string                 `protobuf:"bytes,3,opt,name=call_id,json=callId,proto3" json:"call_id,omitempty"`
+	// The subagent, with its prompt and first message.
+	Worker *WorkerState `protobuf:"bytes,4,opt,name=worker,proto3" json:"worker,omitempty"`
+	// The share of the session's budget the parent gave it. Not enforced
+	// yet.
+	BudgetShare   float64 `protobuf:"fixed64,5,opt,name=budget_share,json=budgetShare,proto3" json:"budget_share,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Spawn) Reset() {
+	*x = Spawn{}
+	mi := &file_internal_agent_agentpb_agent_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Spawn) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Spawn) ProtoMessage() {}
+
+func (x *Spawn) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_agent_agentpb_agent_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Spawn.ProtoReflect.Descriptor instead.
+func (*Spawn) Descriptor() ([]byte, []int) {
+	return file_internal_agent_agentpb_agent_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *Spawn) GetIntentId() string {
+	if x != nil {
+		return x.IntentId
+	}
+	return ""
+}
+
+func (x *Spawn) GetParentId() string {
+	if x != nil {
+		return x.ParentId
+	}
+	return ""
+}
+
+func (x *Spawn) GetCallId() string {
+	if x != nil {
+		return x.CallId
+	}
+	return ""
+}
+
+func (x *Spawn) GetWorker() *WorkerState {
+	if x != nil {
+		return x.Worker
+	}
+	return nil
+}
+
+func (x *Spawn) GetBudgetShare() float64 {
+	if x != nil {
+		return x.BudgetShare
+	}
+	return 0
+}
+
+// WorkerDone is a subagent finishing (kind "agent.worker.done"). Its
+// result is delivered to the parent by the parent's ToolOutcome.
+type WorkerDone struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	WorkerId      string                 `protobuf:"bytes,1,opt,name=worker_id,json=workerId,proto3" json:"worker_id,omitempty"`
+	Result        string                 `protobuf:"bytes,2,opt,name=result,proto3" json:"result,omitempty"`
+	IsError       bool                   `protobuf:"varint,3,opt,name=is_error,json=isError,proto3" json:"is_error,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WorkerDone) Reset() {
+	*x = WorkerDone{}
+	mi := &file_internal_agent_agentpb_agent_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WorkerDone) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WorkerDone) ProtoMessage() {}
+
+func (x *WorkerDone) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_agent_agentpb_agent_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WorkerDone.ProtoReflect.Descriptor instead.
+func (*WorkerDone) Descriptor() ([]byte, []int) {
+	return file_internal_agent_agentpb_agent_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *WorkerDone) GetWorkerId() string {
+	if x != nil {
+		return x.WorkerId
+	}
+	return ""
+}
+
+func (x *WorkerDone) GetResult() string {
+	if x != nil {
+		return x.Result
+	}
+	return ""
+}
+
+func (x *WorkerDone) GetIsError() bool {
+	if x != nil {
+		return x.IsError
+	}
+	return false
+}
+
+// SteerDelivered puts an operator's steer note into a worker's
+// conversation, in the message before its next model call (kind
+// "agent.steer").
+type SteerDelivered struct {
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	WorkerId  string                 `protobuf:"bytes,1,opt,name=worker_id,json=workerId,proto3" json:"worker_id,omitempty"`
+	CommandId string                 `protobuf:"bytes,2,opt,name=command_id,json=commandId,proto3" json:"command_id,omitempty"`
+	// The text added to the conversation.
+	Text          string `protobuf:"bytes,3,opt,name=text,proto3" json:"text,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SteerDelivered) Reset() {
+	*x = SteerDelivered{}
+	mi := &file_internal_agent_agentpb_agent_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SteerDelivered) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SteerDelivered) ProtoMessage() {}
+
+func (x *SteerDelivered) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_agent_agentpb_agent_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SteerDelivered.ProtoReflect.Descriptor instead.
+func (*SteerDelivered) Descriptor() ([]byte, []int) {
+	return file_internal_agent_agentpb_agent_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *SteerDelivered) GetWorkerId() string {
+	if x != nil {
+		return x.WorkerId
+	}
+	return ""
+}
+
+func (x *SteerDelivered) GetCommandId() string {
+	if x != nil {
+		return x.CommandId
+	}
+	return ""
+}
+
+func (x *SteerDelivered) GetText() string {
+	if x != nil {
+		return x.Text
+	}
+	return ""
+}
+
 var File_internal_agent_agentpb_agent_proto protoreflect.FileDescriptor
 
 const file_internal_agent_agentpb_agent_proto_rawDesc = "" +
 	"\n" +
-	"\"internal/agent/agentpb/agent.proto\x12\x0factlet.agent.v0\x1a\x1factlet/gateway/v0/gateway.proto\"\x81\x02\n" +
+	"\"internal/agent/agentpb/agent.proto\x12\x0factlet.agent.v0\x1a\x1factlet/gateway/v0/gateway.proto\"\x89\x01\n" +
 	"\n" +
-	"Checkpoint\x12\x12\n" +
-	"\x04turn\x18\x01 \x01(\x04R\x04turn\x12\x14\n" +
-	"\x05model\x18\x02 \x01(\tR\x05model\x12\x16\n" +
-	"\x06system\x18\x03 \x01(\tR\x06system\x126\n" +
-	"\bmessages\x18\x04 \x03(\v2\x1a.actlet.gateway.v0.MessageR\bmessages\x12\"\n" +
-	"\fcontinuation\x18\x05 \x01(\fR\fcontinuation\x12.\n" +
-	"\x05usage\x18\x06 \x01(\v2\x18.actlet.gateway.v0.UsageR\x05usage\x12%\n" +
-	"\x0eprompt_version\x18\a \x01(\tR\rpromptVersion\"B\n" +
+	"Checkpoint\x126\n" +
+	"\aworkers\x18\x01 \x03(\v2\x1c.actlet.agent.v0.WorkerStateR\aworkers\x12)\n" +
+	"\x10steers_delivered\x18\x02 \x03(\tR\x0fsteersDelivered\x12\x18\n" +
+	"\aspawned\x18\x03 \x01(\rR\aspawned\"\xbe\x05\n" +
+	"\vWorkerState\x12\x1b\n" +
+	"\tworker_id\x18\x01 \x01(\tR\bworkerId\x12\x1b\n" +
+	"\tparent_id\x18\x02 \x01(\tR\bparentId\x12$\n" +
+	"\x0eparent_call_id\x18\x03 \x01(\tR\fparentCallId\x12\x14\n" +
+	"\x05depth\x18\x04 \x01(\rR\x05depth\x12\x12\n" +
+	"\x04turn\x18\x05 \x01(\x04R\x04turn\x12\x14\n" +
+	"\x05model\x18\x06 \x01(\tR\x05model\x12\x16\n" +
+	"\x06system\x18\a \x01(\tR\x06system\x126\n" +
+	"\bmessages\x18\b \x03(\v2\x1a.actlet.gateway.v0.MessageR\bmessages\x12\"\n" +
+	"\fcontinuation\x18\t \x01(\fR\fcontinuation\x12.\n" +
+	"\x05usage\x18\n" +
+	" \x01(\v2\x18.actlet.gateway.v0.UsageR\x05usage\x12%\n" +
+	"\x0eprompt_version\x18\v \x01(\tR\rpromptVersion\x12>\n" +
+	"\tinference\x18\f \x01(\v2 .actlet.agent.v0.InferenceIntentR\tinference\x124\n" +
+	"\apending\x18\r \x01(\v2\x1a.actlet.gateway.v0.MessageR\apending\x125\n" +
+	"\aintents\x18\x0e \x03(\v2\x1b.actlet.agent.v0.ToolIntentR\aintents\x126\n" +
+	"\aresults\x18\x0f \x03(\v2\x1c.actlet.agent.v0.ToolOutcomeR\aresults\x12\x14\n" +
+	"\x05ended\x18\x10 \x01(\bR\x05ended\x12\x18\n" +
+	"\arefused\x18\x11 \x01(\bR\arefused\x12/\n" +
+	"\x04done\x18\x12 \x01(\v2\x1b.actlet.agent.v0.WorkerDoneR\x04done\"_\n" +
 	"\x0fInferenceIntent\x12\x1b\n" +
 	"\tintent_id\x18\x01 \x01(\tR\bintentId\x12\x12\n" +
-	"\x04turn\x18\x02 \x01(\x04R\x04turn\"\xb7\x01\n" +
+	"\x04turn\x18\x02 \x01(\x04R\x04turn\x12\x1b\n" +
+	"\tworker_id\x18\x03 \x01(\tR\bworkerId\"\xd4\x01\n" +
 	"\x10InferenceOutcome\x12\x1b\n" +
 	"\tintent_id\x18\x01 \x01(\tR\bintentId\x124\n" +
 	"\amessage\x18\x02 \x01(\v2\x1a.actlet.gateway.v0.MessageR\amessage\x124\n" +
 	"\x04done\x18\x03 \x01(\v2 .actlet.gateway.v0.InferenceDoneR\x04done\x12\x1a\n" +
-	"\battempts\x18\x04 \x01(\rR\battempts\"\x9a\x01\n" +
+	"\battempts\x18\x04 \x01(\rR\battempts\x12\x1b\n" +
+	"\tworker_id\x18\x05 \x01(\tR\bworkerId\"\xb7\x01\n" +
 	"\n" +
 	"ToolIntent\x12\x1b\n" +
 	"\tintent_id\x18\x01 \x01(\tR\bintentId\x12\x17\n" +
@@ -455,14 +870,32 @@ const file_internal_agent_agentpb_agent_proto_rawDesc = "" +
 	"\x04tool\x18\x03 \x01(\tR\x04tool\x12\x14\n" +
 	"\x05input\x18\x04 \x01(\tR\x05input\x12\x14\n" +
 	"\x05check\x18\x05 \x01(\fR\x05check\x12\x16\n" +
-	"\x06policy\x18\x06 \x01(\tR\x06policy\"\xbf\x01\n" +
+	"\x06policy\x18\x06 \x01(\tR\x06policy\x12\x1b\n" +
+	"\tworker_id\x18\a \x01(\tR\bworkerId\"\xdc\x01\n" +
 	"\vToolOutcome\x12\x1b\n" +
 	"\tintent_id\x18\x01 \x01(\tR\bintentId\x12\x17\n" +
 	"\acall_id\x18\x02 \x01(\tR\x06callId\x12\x18\n" +
 	"\acontent\x18\x03 \x01(\tR\acontent\x12\x19\n" +
 	"\bis_error\x18\x04 \x01(\bR\aisError\x12'\n" +
 	"\x0foutcome_unknown\x18\x05 \x01(\bR\x0eoutcomeUnknown\x12\x1c\n" +
-	"\trecovered\x18\x06 \x01(\bR\trecoveredB1Z/github.com/actlet/actlet/internal/agent/agentpbb\x06proto3"
+	"\trecovered\x18\x06 \x01(\bR\trecovered\x12\x1b\n" +
+	"\tworker_id\x18\a \x01(\tR\bworkerId\"\xb3\x01\n" +
+	"\x05Spawn\x12\x1b\n" +
+	"\tintent_id\x18\x01 \x01(\tR\bintentId\x12\x1b\n" +
+	"\tparent_id\x18\x02 \x01(\tR\bparentId\x12\x17\n" +
+	"\acall_id\x18\x03 \x01(\tR\x06callId\x124\n" +
+	"\x06worker\x18\x04 \x01(\v2\x1c.actlet.agent.v0.WorkerStateR\x06worker\x12!\n" +
+	"\fbudget_share\x18\x05 \x01(\x01R\vbudgetShare\"\\\n" +
+	"\n" +
+	"WorkerDone\x12\x1b\n" +
+	"\tworker_id\x18\x01 \x01(\tR\bworkerId\x12\x16\n" +
+	"\x06result\x18\x02 \x01(\tR\x06result\x12\x19\n" +
+	"\bis_error\x18\x03 \x01(\bR\aisError\"`\n" +
+	"\x0eSteerDelivered\x12\x1b\n" +
+	"\tworker_id\x18\x01 \x01(\tR\bworkerId\x12\x1d\n" +
+	"\n" +
+	"command_id\x18\x02 \x01(\tR\tcommandId\x12\x12\n" +
+	"\x04text\x18\x03 \x01(\tR\x04textB1Z/github.com/actlet/actlet/internal/agent/agentpbb\x06proto3"
 
 var (
 	file_internal_agent_agentpb_agent_proto_rawDescOnce sync.Once
@@ -476,27 +909,38 @@ func file_internal_agent_agentpb_agent_proto_rawDescGZIP() []byte {
 	return file_internal_agent_agentpb_agent_proto_rawDescData
 }
 
-var file_internal_agent_agentpb_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
+var file_internal_agent_agentpb_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
 var file_internal_agent_agentpb_agent_proto_goTypes = []any{
 	(*Checkpoint)(nil),       // 0: actlet.agent.v0.Checkpoint
-	(*InferenceIntent)(nil),  // 1: actlet.agent.v0.InferenceIntent
-	(*InferenceOutcome)(nil), // 2: actlet.agent.v0.InferenceOutcome
-	(*ToolIntent)(nil),       // 3: actlet.agent.v0.ToolIntent
-	(*ToolOutcome)(nil),      // 4: actlet.agent.v0.ToolOutcome
-	(*v0.Message)(nil),       // 5: actlet.gateway.v0.Message
-	(*v0.Usage)(nil),         // 6: actlet.gateway.v0.Usage
-	(*v0.InferenceDone)(nil), // 7: actlet.gateway.v0.InferenceDone
+	(*WorkerState)(nil),      // 1: actlet.agent.v0.WorkerState
+	(*InferenceIntent)(nil),  // 2: actlet.agent.v0.InferenceIntent
+	(*InferenceOutcome)(nil), // 3: actlet.agent.v0.InferenceOutcome
+	(*ToolIntent)(nil),       // 4: actlet.agent.v0.ToolIntent
+	(*ToolOutcome)(nil),      // 5: actlet.agent.v0.ToolOutcome
+	(*Spawn)(nil),            // 6: actlet.agent.v0.Spawn
+	(*WorkerDone)(nil),       // 7: actlet.agent.v0.WorkerDone
+	(*SteerDelivered)(nil),   // 8: actlet.agent.v0.SteerDelivered
+	(*v0.Message)(nil),       // 9: actlet.gateway.v0.Message
+	(*v0.Usage)(nil),         // 10: actlet.gateway.v0.Usage
+	(*v0.InferenceDone)(nil), // 11: actlet.gateway.v0.InferenceDone
 }
 var file_internal_agent_agentpb_agent_proto_depIdxs = []int32{
-	5, // 0: actlet.agent.v0.Checkpoint.messages:type_name -> actlet.gateway.v0.Message
-	6, // 1: actlet.agent.v0.Checkpoint.usage:type_name -> actlet.gateway.v0.Usage
-	5, // 2: actlet.agent.v0.InferenceOutcome.message:type_name -> actlet.gateway.v0.Message
-	7, // 3: actlet.agent.v0.InferenceOutcome.done:type_name -> actlet.gateway.v0.InferenceDone
-	4, // [4:4] is the sub-list for method output_type
-	4, // [4:4] is the sub-list for method input_type
-	4, // [4:4] is the sub-list for extension type_name
-	4, // [4:4] is the sub-list for extension extendee
-	0, // [0:4] is the sub-list for field type_name
+	1,  // 0: actlet.agent.v0.Checkpoint.workers:type_name -> actlet.agent.v0.WorkerState
+	9,  // 1: actlet.agent.v0.WorkerState.messages:type_name -> actlet.gateway.v0.Message
+	10, // 2: actlet.agent.v0.WorkerState.usage:type_name -> actlet.gateway.v0.Usage
+	2,  // 3: actlet.agent.v0.WorkerState.inference:type_name -> actlet.agent.v0.InferenceIntent
+	9,  // 4: actlet.agent.v0.WorkerState.pending:type_name -> actlet.gateway.v0.Message
+	4,  // 5: actlet.agent.v0.WorkerState.intents:type_name -> actlet.agent.v0.ToolIntent
+	5,  // 6: actlet.agent.v0.WorkerState.results:type_name -> actlet.agent.v0.ToolOutcome
+	7,  // 7: actlet.agent.v0.WorkerState.done:type_name -> actlet.agent.v0.WorkerDone
+	9,  // 8: actlet.agent.v0.InferenceOutcome.message:type_name -> actlet.gateway.v0.Message
+	11, // 9: actlet.agent.v0.InferenceOutcome.done:type_name -> actlet.gateway.v0.InferenceDone
+	1,  // 10: actlet.agent.v0.Spawn.worker:type_name -> actlet.agent.v0.WorkerState
+	11, // [11:11] is the sub-list for method output_type
+	11, // [11:11] is the sub-list for method input_type
+	11, // [11:11] is the sub-list for extension type_name
+	11, // [11:11] is the sub-list for extension extendee
+	0,  // [0:11] is the sub-list for field type_name
 }
 
 func init() { file_internal_agent_agentpb_agent_proto_init() }
@@ -510,7 +954,7 @@ func file_internal_agent_agentpb_agent_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_internal_agent_agentpb_agent_proto_rawDesc), len(file_internal_agent_agentpb_agent_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   5,
+			NumMessages:   9,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

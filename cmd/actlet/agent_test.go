@@ -31,6 +31,9 @@ type agentGateway struct {
 	t     *testing.T
 	addr  string
 	srv   *sdk.Server
+	gs    *grpc.Server
+	store *sdk.RecordingStore
+	data  string
 	model *scripted.Model
 
 	mu     sync.Mutex
@@ -43,11 +46,31 @@ func newAgentGateway(t *testing.T, script string) *agentGateway {
 	if err != nil {
 		t.Fatal(err)
 	}
-	g := &agentGateway{t: t, model: model}
+	g := &agentGateway{t: t, model: model, addr: "127.0.0.1:0", data: t.TempDir()}
+	g.start()
+	t.Cleanup(g.stop)
+	return g
+}
+
+// stop stops the gateway at once, as a crash would.
+func (g *agentGateway) stop() {
+	g.gs.Stop()
+	_ = g.store.Close()
+}
+
+// start starts a gateway on the address, knowing no sessions.
+func (g *agentGateway) start() {
+	t := g.t
+	t.Helper()
+	var err error
+	if g.store, err = sdk.NewRecordingStore(g.data); err != nil {
+		t.Fatal(err)
+	}
 	g.srv, err = sdk.NewServer(sdk.Options{
+		Store:        g.store,
 		Authenticate: sdk.StaticToken("tok"),
 		Logger:       slog.New(slog.DiscardHandler),
-		OnInference:  model.Serve,
+		OnInference:  g.model.Serve,
 		OnActivity: func(_ string, ev *gatewayv0.ActivityEvent) {
 			g.mu.Lock()
 			g.events = append(g.events, ev)
@@ -58,7 +81,7 @@ func newAgentGateway(t *testing.T, script string) *agentGateway {
 				SessionId: req.GetSessionId(),
 				Profile: &gatewayv0.Profile{Id: "agent", Models: &gatewayv0.ModelCatalog{
 					Aliases: []*gatewayv0.ModelAlias{{Alias: "scripted"}}, Roles: map[string]string{"main": "scripted"},
-				}},
+				}, Limits: &gatewayv0.Limits{MaxWorkers: 4, MaxToolConcurrency: 4}},
 				Task: &gatewayv0.Task{Schema: "v0", Id: "sum", Kind: "agent", Input: []byte(`"Add up the numbers in the input file and write a report."`)},
 			}, nil
 		},
@@ -66,16 +89,20 @@ func newAgentGateway(t *testing.T, script string) *agentGateway {
 	if err != nil {
 		t.Fatal(err)
 	}
-	lis, err := net.Listen("tcp", "127.0.0.1:0")
+	var lis net.Listener
+	for range 50 { // the address may take a moment to free up
+		if lis, err = net.Listen("tcp", g.addr); err == nil {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
 	if err != nil {
 		t.Fatal(err)
 	}
-	gs := grpc.NewServer(sdk.ServerOptions()...)
-	g.srv.RegisterService(gs)
-	go func() { _ = gs.Serve(lis) }()
-	t.Cleanup(gs.Stop)
+	g.gs = grpc.NewServer(sdk.ServerOptions()...)
+	g.srv.RegisterService(g.gs)
+	go func() { _ = g.gs.Serve(lis) }()
 	g.addr = lis.Addr().String()
-	return g
 }
 
 // worker starts `actlet run` on the session folder, optionally dying at a

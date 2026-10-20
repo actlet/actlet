@@ -132,8 +132,13 @@ type Config struct {
 	Model                string   `protobuf:"bytes,8,opt,name=model,proto3" json:"model,omitempty"`
 	CheckpointEveryTurns uint32   `protobuf:"varint,9,opt,name=checkpoint_every_turns,json=checkpointEveryTurns,proto3" json:"checkpoint_every_turns,omitempty"`
 	Tools                []string `protobuf:"bytes,10,rep,name=tools,proto3" json:"tools,omitempty"`
-	unknownFields        protoimpl.UnknownFields
-	sizeCache            protoimpl.SizeCache
+	// Subagents: their default model alias, how deep they may nest and how
+	// many a session may create.
+	SubagentModel    string `protobuf:"bytes,11,opt,name=subagent_model,json=subagentModel,proto3" json:"subagent_model,omitempty"`
+	MaxSubagentDepth uint32 `protobuf:"varint,12,opt,name=max_subagent_depth,json=maxSubagentDepth,proto3" json:"max_subagent_depth,omitempty"`
+	MaxSubagents     uint32 `protobuf:"varint,13,opt,name=max_subagents,json=maxSubagents,proto3" json:"max_subagents,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *Config) Reset() {
@@ -234,6 +239,27 @@ func (x *Config) GetTools() []string {
 		return x.Tools
 	}
 	return nil
+}
+
+func (x *Config) GetSubagentModel() string {
+	if x != nil {
+		return x.SubagentModel
+	}
+	return ""
+}
+
+func (x *Config) GetMaxSubagentDepth() uint32 {
+	if x != nil {
+		return x.MaxSubagentDepth
+	}
+	return 0
+}
+
+func (x *Config) GetMaxSubagents() uint32 {
+	if x != nil {
+		return x.MaxSubagents
+	}
+	return 0
 }
 
 // Command is a control command the session received, and what it did with
@@ -470,7 +496,7 @@ const file_internal_session_sessionpb_session_proto_rawDesc = "" +
 	"\x06config\x18\x03 \x01(\v2\x19.actlet.session.v0.ConfigR\x06config\x12\x18\n" +
 	"\aresumed\x18\x04 \x01(\bR\aresumed\x12\x1b\n" +
 	"\tworker_id\x18\x05 \x01(\tR\bworkerId\x12%\n" +
-	"\x0eactlet_version\x18\x06 \x01(\tR\ractletVersion\"\xb1\x03\n" +
+	"\x0eactlet_version\x18\x06 \x01(\tR\ractletVersion\"\xab\x04\n" +
 	"\x06Config\x12\x1d\n" +
 	"\n" +
 	"profile_id\x18\x01 \x01(\tR\tprofileId\x12'\n" +
@@ -485,7 +511,10 @@ const file_internal_session_sessionpb_session_proto_rawDesc = "" +
 	"\x05model\x18\b \x01(\tR\x05model\x124\n" +
 	"\x16checkpoint_every_turns\x18\t \x01(\rR\x14checkpointEveryTurns\x12\x14\n" +
 	"\x05tools\x18\n" +
-	" \x03(\tR\x05tools\"\x9f\x02\n" +
+	" \x03(\tR\x05tools\x12%\n" +
+	"\x0esubagent_model\x18\v \x01(\tR\rsubagentModel\x12,\n" +
+	"\x12max_subagent_depth\x18\f \x01(\rR\x10maxSubagentDepth\x12#\n" +
+	"\rmax_subagents\x18\r \x01(\rR\fmaxSubagents\"\x9f\x02\n" +
 	"\aCommand\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x16\n" +
 	"\x06origin\x18\x02 \x01(\tR\x06origin\x12\x14\n" +

@@ -40,6 +40,11 @@ message Config {
   string model = 8;
   uint32 checkpoint_every_turns = 9;
   repeated string tools = 10;
+  // Subagents: their default model alias, how deep they may nest and how
+  // many a session may create.
+  string subagent_model = 11;
+  uint32 max_subagent_depth = 12;
+  uint32 max_subagents = 13;
 }
 
 // Command is a control command the session received, and what it did with

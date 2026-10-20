@@ -289,8 +289,21 @@ func effectiveConfig(cfg Config, p *gatewayv0.Profile) *sessionpb.Config {
 	for _, g := range p.GetTools() {
 		granted = append(granted, g.GetName())
 	}
+	subModel := p.GetModels().GetRoles()["subagent"]
+	if subModel == "" {
+		subModel = model
+	}
+	orDefault := func(v uint32, def uint32) uint32 {
+		if v == 0 {
+			return def
+		}
+		return v
+	}
 	return &sessionpb.Config{
 		Model:                model,
+		SubagentModel:        subModel,
+		MaxSubagentDepth:     orDefault(p.GetLimits().GetMaxSubagentDepth(), agent.DefaultMaxSubagentDepth),
+		MaxSubagents:         orDefault(p.GetLimits().GetMaxSubagents(), agent.DefaultMaxSubagents),
 		CheckpointEveryTurns: max(p.GetCheckpointEveryTurns(), 1),
 		Tools:                granted,
 		ProfileId:            p.GetId(),
@@ -327,8 +340,14 @@ func agentSettings(cfg Config, p *gatewayv0.Profile, effective *sessionpb.Config
 		return agent.Settings{}, fmt.Errorf("tools manifest: %w", err)
 	}
 	s := agent.Settings{
-		Model:           effective.GetModel(),
-		CheckpointEvery: uint64(effective.GetCheckpointEveryTurns()),
+		Model:              effective.GetModel(),
+		SubagentModel:      effective.GetSubagentModel(),
+		Selectable:         p.GetModels().GetSelectable(),
+		CheckpointEvery:    uint64(effective.GetCheckpointEveryTurns()),
+		MaxWorkers:         int(effective.GetMaxWorkers()),
+		MaxToolConcurrency: int(effective.GetMaxToolConcurrency()),
+		MaxSubagentDepth:   int(effective.GetMaxSubagentDepth()),
+		MaxSubagents:       int(effective.GetMaxSubagents()),
 		Prompt: agent.Prompt{
 			Base: p.GetBasePrompt(), Instructions: p.GetInstructions(),
 			Manifests: []string{manifest, p.GetToolsManifest()},

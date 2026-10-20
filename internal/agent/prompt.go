@@ -51,8 +51,13 @@ type Prompt struct {
 	Manifests []string
 }
 
-// system builds the system prompt.
-func (p Prompt) system(ts *tools.Set) (text, version string) {
+// subagentNote tells a subagent what it is.
+const subagentNote = `## You are a subagent
+
+Another agent gave you a subtask, below. Work on it with your tools. Your final answer, without tool calls, is returned to that agent as the result, so make it complete and to the point. You share the workspace with other agents working in parallel: write only the files your subtask is about.`
+
+// system builds the system prompt, for the root worker or a subagent.
+func (p Prompt) system(ts *tools.Set, subagent bool) (text, version string) {
 	var sb strings.Builder
 	version = PromptVersion
 	if p.Base != "" {
@@ -60,6 +65,10 @@ func (p Prompt) system(ts *tools.Set) (text, version string) {
 		version = "custom"
 	} else {
 		sb.WriteString(strings.TrimSpace(BasePrompt))
+	}
+	if subagent {
+		sb.WriteString("\n\n")
+		sb.WriteString(subagentNote)
 	}
 	if s := strings.TrimSpace(p.Instructions); s != "" {
 		sb.WriteString("\n\n## Instructions\n\n")

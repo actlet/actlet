@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"os"
 	"os/exec"
@@ -33,14 +34,20 @@ type turn struct {
 	block bool
 }
 
-// model answers with the turn for the number of answers in the
-// conversation, like the scripted model.
+// model answers each worker with the turn for the number of answers in
+// its conversation, like the scripted model. A subagent's script is
+// chosen by a phrase in its subtask.
 type model struct {
 	turns []turn
+	sub   map[string][]turn
 
-	mu      sync.Mutex
-	intents []string
-	turnOf  []int
+	mu    sync.Mutex
+	calls []call
+}
+
+type call struct {
+	intent, script string
+	turn           int
 }
 
 func (m *model) infer(ctx context.Context, req *gatewayv0.InferenceRequest) (*gwclient.Inference, error) {
@@ -50,17 +57,23 @@ func (m *model) infer(ctx context.Context, req *gatewayv0.InferenceRequest) (*gw
 			n++
 		}
 	}
-	m.mu.Lock()
-	m.intents = append(m.intents, req.GetIntentId())
-	m.turnOf = append(m.turnOf, n+1)
-	m.mu.Unlock()
-	if n >= len(m.turns) {
-		return nil, errors.New("script exhausted")
+	turns, script := m.turns, "root"
+	first := req.GetMessages()[0].GetParts()[0].GetText()
+	for phrase, ts := range m.sub {
+		if strings.Contains(first, phrase) {
+			turns, script = ts, phrase
+		}
 	}
-	t := m.turns[n]
+	m.mu.Lock()
+	m.calls = append(m.calls, call{req.GetIntentId(), script, n + 1})
+	m.mu.Unlock()
+	if n >= len(turns) {
+		return nil, fmt.Errorf("%s: script exhausted", script)
+	}
+	t := turns[n]
 	if t.check != nil {
 		if err := t.check(req); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("%s turn %d: %w", script, n+1, err)
 		}
 	}
 	if t.block {
@@ -73,7 +86,7 @@ func (m *model) infer(ctx context.Context, req *gatewayv0.InferenceRequest) (*gw
 	}
 	for i, c := range t.calls {
 		msg.Parts = append(msg.Parts, &gatewayv0.Part{Part: &gatewayv0.Part_ToolCall{ToolCall: &gatewayv0.ToolCall{
-			Id: "call_" + string(rune('a'+n)) + string(rune('0'+i)), Name: c[0], Input: c[1],
+			Id: fmt.Sprintf("call_%d_%d", n+1, i+1), Name: c[0], Input: c[1],
 		}}})
 	}
 	stop := t.stop
@@ -86,6 +99,18 @@ func (m *model) infer(ctx context.Context, req *gatewayv0.InferenceRequest) (*gw
 	return &gwclient.Inference{Message: msg, Attempts: 1, Done: &gatewayv0.InferenceDone{
 		StopReason: stop, Continuation: []byte{byte(n + 1)}, Usage: &gatewayv0.Usage{InputTokens: 10, OutputTokens: 2},
 	}}, nil
+}
+
+func (m *model) callsOf(script string) []call {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var out []call
+	for _, c := range m.calls {
+		if c.script == script {
+			out = append(out, c)
+		}
+	}
+	return out
 }
 
 // lastResults returns the tool results the request carries.
@@ -105,113 +130,149 @@ func expect(want ...string) func(*gatewayv0.InferenceRequest) error {
 	return func(req *gatewayv0.InferenceRequest) error {
 		got := lastResults(req)
 		if len(got) != len(want) {
-			return errors.New("wrong number of tool results")
+			return fmt.Errorf("%d tool results, want %d", len(got), len(want))
 		}
 		for i, w := range want {
 			if !strings.Contains(got[i].GetContent(), w) {
-				return errors.New("tool result " + got[i].GetContent() + " lacks " + w)
+				return fmt.Errorf("tool result %q lacks %q", got[i].GetContent(), w)
 			}
 		}
 		return nil
 	}
 }
 
-type crash struct{}
+var errCrash = errors.New("simulated crash")
 
-// box is a session folder with an in-memory journal.
-type box struct {
+// sandbox is a session folder with an in-memory journal.
+type sandbox struct {
 	t       *testing.T
 	folder  sessionfs.Folder
 	model   *model
+	mu      sync.Mutex
 	records []journal.Record
 	events  []*gatewayv0.ActivityEvent
-	evMu    sync.Mutex
-	// crashBefore and crashAfter end a run abruptly before or after a
-	// record is stored, as a crash would.
+	steers  []Steer
+	crashed bool
+	// A simulated crash: at the crash point crashAt, or before or after a
+	// matching record is stored. Nothing more reaches the journal after
+	// it, and the worker at a crash point stops right there.
+	crashAt                 string
 	crashBefore, crashAfter func(kind string, m proto.Message) bool
 	settings                Settings
 }
 
-func newBox(t *testing.T, input string, turns ...turn) *box {
+func newSandbox(t *testing.T, turns ...turn) *sandbox {
 	t.Helper()
 	f, err := sessionfs.Open(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
-	return &box{t: t, folder: f, model: &model{turns: turns}, settings: Settings{Model: "main"}}
+	return &sandbox{t: t, folder: f, model: &model{turns: turns, sub: map[string][]turn{}}, settings: Settings{
+		Model: "main", SubagentModel: "sub", MaxWorkers: 4, MaxToolConcurrency: 4, MaxSubagentDepth: 2, MaxSubagents: 8,
+	}}
 }
 
-func (b *box) task(input string) *sessionfs.Task {
-	in, _ := json.Marshal(input)
-	return &sessionfs.Task{Schema: "v0", ID: "t1", Kind: Kind, Input: in}
+func (s *sandbox) task() *sessionfs.Task {
+	return &sessionfs.Task{Schema: "v0", ID: "t1", Kind: Kind, Input: json.RawMessage(`"count the numbers"`)}
 }
 
 // sinceCheckpoint returns the records from the latest checkpoint on.
-func (b *box) sinceCheckpoint() []journal.Record {
+func (s *sandbox) sinceCheckpoint() []journal.Record {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	start := 0
-	for i, r := range b.records {
+	for i, r := range s.records {
 		if r.Kind == KindCheckpoint {
 			start = i
 		}
 	}
-	return append([]journal.Record(nil), b.records[start:]...)
+	return append([]journal.Record(nil), s.records[start:]...)
 }
 
-// run runs the agent once; crashed reports an abrupt end.
-func (b *box) run(soft, hard context.Context, wantsStop func() bool) (done bool, err error, crashed bool) {
-	if wantsStop == nil {
-		wantsStop = func() bool { return false }
+func (s *sandbox) record(_ context.Context, kind string, m proto.Message) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.crashed {
+		return errCrash
 	}
-	defer func() {
-		if r := recover(); r != nil {
-			if _, ok := r.(crash); !ok {
-				panic(r)
-			}
-			crashed = true
+	if s.crashBefore != nil && s.crashBefore(kind, m) {
+		s.crashed, s.crashBefore = true, nil
+		return errCrash
+	}
+	data, err := proto.Marshal(m)
+	if err != nil {
+		return err
+	}
+	s.records = append(s.records, journal.Record{Kind: kind, Data: data, Seq: uint64(len(s.records) + 1)})
+	if s.crashAfter != nil && s.crashAfter(kind, m) {
+		s.crashed, s.crashAfter = true, nil
+	}
+	return nil
+}
+
+// run runs the agent once; crashed reports a simulated crash.
+func (s *sandbox) run(soft, hard context.Context, stopping <-chan struct{}) (done bool, err error, crashed bool) {
+	if stopping == nil {
+		stopping = make(chan struct{})
+	}
+	s.mu.Lock()
+	s.crashed = false
+	s.mu.Unlock()
+	crashHook = func(point string) bool {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		if s.crashAt != "" && point == s.crashAt {
+			s.crashed, s.crashAt = true, ""
+			return true
 		}
-	}()
+		return false
+	}
+	defer func() { crashHook = nil }()
 	done, err = Run(Env{
-		Settings: b.settings, Folder: b.folder, Task: b.task("count the numbers"), SessionID: "s", Epoch: 1,
-		Records: b.sinceCheckpoint(),
-		Record: func(_ context.Context, kind string, m proto.Message) error {
-			if b.crashBefore != nil && b.crashBefore(kind, m) {
-				b.crashBefore = nil
-				panic(crash{})
-			}
-			data, err := proto.Marshal(m)
-			if err != nil {
-				return err
-			}
-			b.records = append(b.records, journal.Record{Kind: kind, Data: data, Seq: uint64(len(b.records) + 1)})
-			if b.crashAfter != nil && b.crashAfter(kind, m) {
-				b.crashAfter = nil
-				panic(crash{})
-			}
-			return nil
-		},
+		Settings: s.settings, Folder: s.folder, Task: s.task(), SessionID: "s", Epoch: 1,
+		Records: s.sinceCheckpoint(), Record: s.record,
 		Emit: func(ev *gatewayv0.ActivityEvent) {
-			b.evMu.Lock()
-			b.events = append(b.events, ev)
-			b.evMu.Unlock()
+			s.mu.Lock()
+			s.events = append(s.events, ev)
+			s.mu.Unlock()
 		},
-		Infer: b.model.infer, Soft: soft, Hard: hard, WantsStop: wantsStop,
+		Infer: s.model.infer, Soft: soft, Hard: hard, Stopping: stopping,
+		Steers: func() []Steer {
+			s.mu.Lock()
+			defer s.mu.Unlock()
+			return append([]Steer(nil), s.steers...)
+		},
 		Logger: slog.New(slog.DiscardHandler),
 	})
+	s.mu.Lock()
+	crashed = s.crashed
+	s.mu.Unlock()
+	if crashed {
+		return false, nil, true
+	}
 	return done, err, false
 }
 
-func (b *box) runToEnd() (bool, error) {
-	b.t.Helper()
-	done, err, crashed := b.run(b.t.Context(), b.t.Context(), nil)
-	if crashed {
-		b.t.Fatal("unexpected crash")
+func (s *sandbox) mustCrash() {
+	s.t.Helper()
+	if done, err, crashed := s.run(s.t.Context(), s.t.Context(), nil); !crashed {
+		s.t.Fatalf("didn't crash: done %v, err %v", done, err)
 	}
-	return done, err
 }
 
-func (b *box) count(kind string) int {
+func (s *sandbox) mustFinish() {
+	s.t.Helper()
+	done, err, crashed := s.run(s.t.Context(), s.t.Context(), nil)
+	if crashed || !done || err != nil {
+		s.t.Fatalf("crashed %v, done %v, err %v", crashed, done, err)
+	}
+}
+
+func (s *sandbox) count(kind string) int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	n := 0
-	for _, r := range b.records {
+	for _, r := range s.records {
 		if r.Kind == kind {
 			n++
 		}
@@ -219,25 +280,36 @@ func (b *box) count(kind string) int {
 	return n
 }
 
-func (b *box) outcomes() []*agentpb.ToolOutcome {
-	var out []*agentpb.ToolOutcome
-	for _, r := range b.records {
-		if r.Kind == KindToolOutcome {
-			o := &agentpb.ToolOutcome{}
-			if err := proto.Unmarshal(r.Data, o); err != nil {
-				b.t.Fatal(err)
+// decoded returns the records of a kind, decoded.
+func (s *sandbox) decoded(kind string) []proto.Message {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var out []proto.Message
+	for _, r := range s.records {
+		if r.Kind == kind {
+			m, err := decode(r)
+			if err != nil {
+				s.t.Fatal(err)
 			}
-			out = append(out, o)
+			out = append(out, m)
 		}
 	}
 	return out
 }
 
-func (b *box) eventsOf(match func(*gatewayv0.ActivityEvent) bool) int {
-	b.evMu.Lock()
-	defer b.evMu.Unlock()
+func (s *sandbox) outcomes() []*agentpb.ToolOutcome {
+	var out []*agentpb.ToolOutcome
+	for _, m := range s.decoded(KindToolOutcome) {
+		out = append(out, m.(*agentpb.ToolOutcome))
+	}
+	return out
+}
+
+func (s *sandbox) eventsOf(match func(*gatewayv0.ActivityEvent) bool) int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	n := 0
-	for _, ev := range b.events {
+	for _, ev := range s.events {
 		if match(ev) {
 			n++
 		}
@@ -245,8 +317,8 @@ func (b *box) eventsOf(match func(*gatewayv0.ActivityEvent) bool) int {
 	return n
 }
 
-func (b *box) file(rel string) string {
-	data, err := os.ReadFile(filepath.Join(b.folder.Dir, rel))
+func (s *sandbox) file(rel string) string {
+	data, err := os.ReadFile(filepath.Join(s.folder.Dir, rel))
 	if err != nil {
 		return ""
 	}
@@ -262,7 +334,7 @@ func TestAgentCompletesTask(t *testing.T) {
 	if !hasShell() {
 		t.Skip("no shell")
 	}
-	b := newBox(t, "",
+	s := newSandbox(t,
 		turn{text: "Reading the input.", calls: [][2]string{{"read_file", `{"path":"../inputs/numbers.txt"}`}}},
 		turn{check: expect("     1\t3"), calls: [][2]string{
 			{"write_file", `{"path":"sum.sh","content":"echo $((3 + 4))\n"}`},
@@ -275,26 +347,29 @@ func TestAgentCompletesTask(t *testing.T) {
 		}},
 		turn{check: expect("replaced 1 occurrence", "created ../output/report.md", "read-only"), text: "The sum is 7."},
 	)
-	if err := os.WriteFile(filepath.Join(b.folder.Inputs(), "numbers.txt"), []byte("3\n4\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(s.folder.Inputs(), "numbers.txt"), []byte("3\n4\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	done, err := b.runToEnd()
-	if err != nil || !done {
-		t.Fatalf("done %v, err %v", done, err)
+	s.mustFinish()
+	if s.file("output/report.md") != "The sum is 7.\n" || s.file("inputs/numbers.txt") != "3\n4\n" || s.file("workspace/total.txt") != "7\n" {
+		t.Errorf("files: report %q, input %q, total %q", s.file("output/report.md"), s.file("inputs/numbers.txt"), s.file("workspace/total.txt"))
 	}
-	if b.file("output/report.md") != "The sum is 7.\n" || b.file("inputs/numbers.txt") != "3\n4\n" || b.file("workspace/total.txt") != "7\n" {
-		t.Errorf("files: report %q, input %q, total %q", b.file("output/report.md"), b.file("inputs/numbers.txt"), b.file("workspace/total.txt"))
+	if s.count(KindInferenceIntent) != 4 || s.count(KindInferenceOutcome) != 4 {
+		t.Errorf("records: %d model intents, %d answers", s.count(KindInferenceIntent), s.count(KindInferenceOutcome))
 	}
-	// One checkpoint to start and one per turn; an intent and outcome per call.
-	if b.count(KindCheckpoint) != 4 || b.count(KindInferenceIntent) != 4 || b.count(KindInferenceOutcome) != 4 {
-		t.Errorf("records: %d checkpoints, %d model intents, %d answers", b.count(KindCheckpoint), b.count(KindInferenceIntent), b.count(KindInferenceOutcome))
+	if s.count(KindToolIntent) != 5 || s.count(KindToolOutcome) != 6 { // the refused write has no intent
+		t.Errorf("records: %d tool intents, %d outcomes", s.count(KindToolIntent), s.count(KindToolOutcome))
 	}
-	if b.count(KindToolIntent) != 5 || b.count(KindToolOutcome) != 6 { // the refused write has no intent
-		t.Errorf("records: %d tool intents, %d outcomes", b.count(KindToolIntent), b.count(KindToolOutcome))
+	for _, o := range s.outcomes() {
+		if o.GetWorkerId() != RootWorker {
+			t.Errorf("outcome without the worker: %v", o)
+		}
 	}
-	turns := b.eventsOf(func(ev *gatewayv0.ActivityEvent) bool { return ev.GetModelTurn() != nil })
-	finished := b.eventsOf(func(ev *gatewayv0.ActivityEvent) bool { return ev.GetToolFinished() != nil })
-	diffs := b.eventsOf(func(ev *gatewayv0.ActivityEvent) bool {
+	turns := s.eventsOf(func(ev *gatewayv0.ActivityEvent) bool {
+		return ev.GetModelTurn() != nil && ev.GetWorker() == RootWorker
+	})
+	finished := s.eventsOf(func(ev *gatewayv0.ActivityEvent) bool { return ev.GetToolFinished() != nil })
+	diffs := s.eventsOf(func(ev *gatewayv0.ActivityEvent) bool {
 		return strings.Contains(ev.GetFileChange().GetDiff(), "-echo $((3 + 4))\n+echo $((3 + 4 + 0))")
 	})
 	if turns != 4 || finished != 6 || diffs != 1 {
@@ -303,53 +378,42 @@ func TestAgentCompletesTask(t *testing.T) {
 }
 
 func TestAgentWritesDeliverableIfNone(t *testing.T) {
-	b := newBox(t, "", turn{text: "Nothing to do: the answer is 42."})
-	if done, err := b.runToEnd(); !done || err != nil {
-		t.Fatal(done, err)
-	}
-	if got := b.file("output/result.md"); got != "Nothing to do: the answer is 42.\n" {
+	s := newSandbox(t, turn{text: "Nothing to do: the answer is 42."})
+	s.mustFinish()
+	if got := s.file("output/result.md"); got != "Nothing to do: the answer is 42.\n" {
 		t.Errorf("result.md = %q", got)
 	}
 }
 
 func TestAgentPrompt(t *testing.T) {
-	b := newBox(t, "", turn{check: func(req *gatewayv0.InferenceRequest) error {
+	s := newSandbox(t, turn{check: func(req *gatewayv0.InferenceRequest) error {
 		sys, first := req.GetSystem(), req.GetMessages()[0].GetParts()[0].GetText()
 		for _, want := range []string{"inside Actlet", "## Instructions\n\nBe brief.", "## What is installed\n\njq is installed."} {
 			if !strings.Contains(sys, want) {
 				return errors.New("system prompt lacks " + want)
 			}
 		}
+		if strings.Contains(sys, "You are a subagent") {
+			return errors.New("the root is told it is a subagent")
+		}
 		if !strings.Contains(first, "# Task t1\n\ncount the numbers") || !strings.Contains(first, "- a.txt") {
 			return errors.New("task message: " + first)
 		}
-		if req.GetModel() != "large" || len(req.GetTools()) < 5 {
-			return errors.New("model or tools")
+		var names []string
+		for _, tl := range req.GetTools() {
+			names = append(names, tl.GetName())
+		}
+		if req.GetModel() != "large" || !strings.Contains(strings.Join(names, ","), SpawnTool) {
+			return fmt.Errorf("model %s, tools %v", req.GetModel(), names)
 		}
 		return nil
 	}, text: "ok"})
-	b.settings = Settings{Model: "large", Prompt: Prompt{Instructions: "Be brief.", Manifests: []string{"", "jq is installed."}}}
-	if err := os.WriteFile(filepath.Join(b.folder.Inputs(), "a.txt"), []byte("x"), 0o644); err != nil {
+	s.settings.Model = "large"
+	s.settings.Prompt = Prompt{Instructions: "Be brief.", Manifests: []string{"", "jq is installed."}}
+	if err := os.WriteFile(filepath.Join(s.folder.Inputs(), "a.txt"), []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if done, err := b.runToEnd(); !done || err != nil {
-		t.Fatal(done, err)
-	}
-}
-
-func isTool(kind, tool string) func(string, proto.Message) bool {
-	return func(k string, m proto.Message) bool {
-		if k != kind {
-			return false
-		}
-		switch m := m.(type) {
-		case *agentpb.ToolIntent:
-			return m.GetTool() == tool
-		case *agentpb.ToolOutcome:
-			return strings.HasPrefix(m.GetCallId(), "call_") && tool != "" // any outcome
-		}
-		return false
-	}
+	s.mustFinish()
 }
 
 // A crash after a tool call's intent was recorded, before it ran: a call
@@ -369,28 +433,24 @@ func TestCrashAfterToolIntent(t *testing.T) {
 		{"read_file", `{"path":"../task.json"}`, "\"kind\"", false},
 	} {
 		t.Run(tt.tool, func(t *testing.T) {
-			b := newBox(t, "",
+			s := newSandbox(t,
 				turn{calls: [][2]string{{tt.tool, tt.input}}},
 				turn{check: expect(tt.want), text: "done"},
 			)
-			if err := b.folder.WriteTask(b.task("x")); err != nil {
+			if err := s.folder.WriteTask(s.task()); err != nil {
 				t.Fatal(err)
 			}
-			b.crashAfter = isTool(KindToolIntent, tt.tool)
-			if _, _, crashed := b.run(t.Context(), t.Context(), nil); !crashed {
-				t.Fatal("didn't crash")
-			}
-			if done, err := b.runToEnd(); !done || err != nil {
-				t.Fatalf("after recovery: %v %v", done, err)
-			}
-			if got := b.file("workspace/side.txt"); (got == "once\n") != tt.ran || strings.Count(got, "once") > 1 {
+			s.crashAt = "tool.intent:" + tt.tool
+			s.mustCrash()
+			s.mustFinish()
+			if got := s.file("workspace/side.txt"); (got == "once\n") != tt.ran || strings.Count(got, "once") > 1 {
 				t.Errorf("side.txt = %q", got)
 			}
-			if o := b.outcomes(); len(o) != 1 || (tt.tool == "shell") != o[0].GetOutcomeUnknown() {
+			if o := s.outcomes(); len(o) != 1 || (tt.tool == "shell") != o[0].GetOutcomeUnknown() {
 				t.Errorf("outcomes %v", o)
 			}
-			if b.count(KindToolIntent) != 1 {
-				t.Errorf("%d intents: a repeated call needs no new intent", b.count(KindToolIntent))
+			if s.count(KindToolIntent) != 1 {
+				t.Errorf("%d intents: a repeated call needs no new intent", s.count(KindToolIntent))
 			}
 		})
 	}
@@ -403,21 +463,17 @@ func TestCrashAfterShellSideEffect(t *testing.T) {
 	if !hasShell() {
 		t.Skip("no shell")
 	}
-	b := newBox(t, "",
+	s := newSandbox(t,
 		turn{calls: [][2]string{{"shell", `{"command":"echo once >> side.txt"}`}}},
 		turn{check: expect("outcome_unknown"), text: "checked"},
 	)
-	b.crashBefore = isTool(KindToolOutcome, "shell")
-	if _, _, crashed := b.run(t.Context(), t.Context(), nil); !crashed {
-		t.Fatal("didn't crash")
-	}
-	if done, err := b.runToEnd(); !done || err != nil {
-		t.Fatal(done, err)
-	}
-	if got := b.file("workspace/side.txt"); got != "once\n" {
+	s.crashAt = "tool.done:shell"
+	s.mustCrash()
+	s.mustFinish()
+	if got := s.file("workspace/side.txt"); got != "once\n" {
 		t.Errorf("side.txt = %q", got)
 	}
-	if o := b.outcomes(); len(o) != 1 || !o[0].GetOutcomeUnknown() || !o[0].GetRecovered() {
+	if o := s.outcomes(); len(o) != 1 || !o[0].GetOutcomeUnknown() || !o[0].GetRecovered() {
 		t.Errorf("outcomes %v", o)
 	}
 }
@@ -425,25 +481,21 @@ func TestCrashAfterShellSideEffect(t *testing.T) {
 // A crash during a model call: the next run makes the call again with the
 // same intent ID, from the same conversation.
 func TestCrashDuringInference(t *testing.T) {
-	b := newBox(t, "",
+	s := newSandbox(t,
 		turn{calls: [][2]string{{"glob", `{"pattern":"*"}`}}},
 		turn{check: expect("no files match"), text: "done"},
 	)
-	b.crashBefore = func(kind string, _ proto.Message) bool {
-		return kind == KindInferenceOutcome && len(b.model.intents) == 2
+	s.crashBefore = func(kind string, _ proto.Message) bool {
+		return kind == KindInferenceOutcome && len(s.model.callsOf("root")) == 2
 	}
-	if _, _, crashed := b.run(t.Context(), t.Context(), nil); !crashed {
-		t.Fatal("didn't crash")
+	s.mustCrash()
+	s.mustFinish()
+	c := s.model.callsOf("root")
+	if len(c) != 3 || c[1].intent != c[2].intent || c[0].intent == c[1].intent || c[2].turn != 2 {
+		t.Errorf("calls %v", c)
 	}
-	if done, err := b.runToEnd(); !done || err != nil {
-		t.Fatal(done, err)
-	}
-	m := b.model
-	if len(m.intents) != 3 || m.intents[1] != m.intents[2] || m.intents[0] == m.intents[1] || m.turnOf[2] != 2 {
-		t.Errorf("intents %v for turns %v", m.intents, m.turnOf)
-	}
-	if b.count(KindInferenceIntent) != 2 {
-		t.Errorf("%d model intents", b.count(KindInferenceIntent))
+	if s.count(KindInferenceIntent) != 2 {
+		t.Errorf("%d model intents", s.count(KindInferenceIntent))
 	}
 }
 
@@ -463,7 +515,7 @@ func TestPauseDuringTool(t *testing.T) {
 			if interrupt {
 				wantResult = "interrupted"
 			}
-			b := newBox(t, "",
+			s := newSandbox(t,
 				turn{calls: [][2]string{
 					{"shell", `{"command":"echo yes > started; sleep 1; echo finished > finished"}`},
 					{"shell", `{"command":"echo second > second"}`},
@@ -471,56 +523,46 @@ func TestPauseDuringTool(t *testing.T) {
 				turn{check: expect(wantResult, "exit code 0"), text: "done"},
 			)
 			soft, cancelSoft := context.WithCancel(t.Context())
-			var paused sync.Once
-			var pausing bool
-			var mu sync.Mutex
+			stopping := make(chan struct{})
 			go func() {
-				for b.file("workspace/started") == "" {
+				for s.file("workspace/started") == "" {
 					time.Sleep(5 * time.Millisecond)
 				}
-				paused.Do(func() {
-					mu.Lock()
-					pausing = true
-					mu.Unlock()
-					if interrupt {
-						cancelSoft()
-					}
-				})
+				close(stopping)
+				if interrupt {
+					cancelSoft()
+				}
 			}()
-			wantsStop := func() bool { mu.Lock(); defer mu.Unlock(); return pausing }
-			done, err, _ := b.run(soft, t.Context(), wantsStop)
+			done, err, _ := s.run(soft, t.Context(), stopping)
 			if done || err != nil {
 				t.Fatalf("first run: %v %v", done, err)
 			}
-			if (b.file("workspace/finished") != "") == interrupt || b.file("workspace/second") != "" {
-				t.Errorf("after pausing: finished %q, second %q", b.file("workspace/finished"), b.file("workspace/second"))
+			if (s.file("workspace/finished") != "") == interrupt || s.file("workspace/second") != "" {
+				t.Errorf("after pausing: finished %q, second %q", s.file("workspace/finished"), s.file("workspace/second"))
 			}
-			if done, err := b.runToEnd(); !done || err != nil {
-				t.Fatalf("resumed run: %v %v", done, err)
-			}
-			if b.file("workspace/second") != "second\n" {
+			s.mustFinish()
+			if s.file("workspace/second") != "second\n" {
 				t.Error("the second call didn't run after resuming")
 			}
 		})
 	}
 }
 
-// Pausing during a model call: drain waits for the answer, interrupt
-// abandons it, and the next run makes the same call again.
+// Pausing during a model call: interrupt abandons it, and the next run
+// makes the same call again.
 func TestPauseDuringInference(t *testing.T) {
-	b := newBox(t, "", turn{block: true}, turn{text: "never"})
+	s := newSandbox(t, turn{block: true}, turn{text: "never"})
 	soft, cancel := context.WithCancel(t.Context())
-	time.AfterFunc(50*time.Millisecond, cancel)
-	done, err, _ := b.run(soft, t.Context(), func() bool { return soft.Err() != nil })
+	stopping := make(chan struct{})
+	time.AfterFunc(50*time.Millisecond, func() { close(stopping); cancel() })
+	done, err, _ := s.run(soft, t.Context(), stopping)
 	if done || err != nil {
 		t.Fatal(done, err)
 	}
-	b.model.turns[0] = turn{text: "done"}
-	if done, err := b.runToEnd(); !done || err != nil {
-		t.Fatal(done, err)
-	}
-	if m := b.model; len(m.intents) != 2 || m.intents[0] != m.intents[1] {
-		t.Errorf("intents %v", m.intents)
+	s.model.turns[0] = turn{text: "done"}
+	s.mustFinish()
+	if c := s.model.callsOf("root"); len(c) != 2 || c[0].intent != c[1].intent {
+		t.Errorf("calls %v", c)
 	}
 }
 
@@ -530,23 +572,19 @@ func TestCheckpointCadence(t *testing.T) {
 		turns = append(turns, turn{calls: [][2]string{{"glob", `{"pattern":"*.none"}`}}})
 	}
 	turns = append(turns, turn{text: "done"})
-	b := newBox(t, "", turns...)
-	b.settings.CheckpointEvery = 2
+	s := newSandbox(t, turns...)
+	s.settings.CheckpointEvery = 2
 	// Crash in the middle; recovery replays the turns since the checkpoint.
-	b.crashBefore = func(kind string, _ proto.Message) bool {
-		return kind == KindInferenceIntent && len(b.model.intents) == 3
+	s.crashBefore = func(kind string, _ proto.Message) bool {
+		return kind == KindInferenceIntent && len(s.model.callsOf("root")) == 3
 	}
-	if _, _, crashed := b.run(t.Context(), t.Context(), nil); !crashed {
-		t.Fatal("didn't crash")
-	}
-	if done, err := b.runToEnd(); !done || err != nil {
-		t.Fatal(done, err)
-	}
-	// The initial one, then after turns 2 and 4.
-	if n := b.count(KindCheckpoint); n != 3 {
+	s.mustCrash()
+	s.mustFinish()
+	// The initial one, then after turns 2, 4 and 6.
+	if n := s.count(KindCheckpoint); n != 4 {
 		t.Errorf("%d checkpoints", n)
 	}
-	if n := b.count(KindInferenceOutcome); n != 6 {
+	if n := s.count(KindInferenceOutcome); n != 6 {
 		t.Errorf("%d answers", n)
 	}
 }
@@ -555,7 +593,7 @@ func TestAgentEnds(t *testing.T) {
 	tests := []struct {
 		name  string
 		turns []turn
-		max   string
+		def   string
 		err   string
 	}{
 		{"refusal", []turn{{text: "no", stop: gatewayv0.StopReason_STOP_REASON_REFUSAL}}, "", "refused"},
@@ -572,17 +610,14 @@ func TestAgentEnds(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			b := newBox(t, "", tt.turns...)
-			def := tt.max
+			s := newSandbox(t, tt.turns...)
 			_, err := Run(Env{
-				Settings: b.settings, Folder: b.folder,
-				Task:      &sessionfs.Task{ID: "t", Kind: Kind, Definition: json.RawMessage(def)},
-				Record:    func(context.Context, string, proto.Message) error { return nil },
-				Emit:      func(*gatewayv0.ActivityEvent) {},
-				Infer:     b.model.infer,
-				Soft:      t.Context(),
-				Hard:      t.Context(),
-				WantsStop: func() bool { return false },
+				Settings: s.settings, Folder: s.folder,
+				Task:   &sessionfs.Task{ID: "t", Kind: Kind, Definition: json.RawMessage(tt.def)},
+				Record: func(context.Context, string, proto.Message) error { return nil },
+				Emit:   func(*gatewayv0.ActivityEvent) {},
+				Infer:  s.model.infer,
+				Soft:   t.Context(), Hard: t.Context(), Stopping: make(chan struct{}),
 			})
 			if (err == nil) != (tt.err == "") || (err != nil && !strings.Contains(err.Error(), tt.err)) {
 				t.Fatalf("err = %v, want %q", err, tt.err)
