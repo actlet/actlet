@@ -1,10 +1,16 @@
 // Actlet attach protocol, version 0.
 //
 // A running Actlet box serves it to viewers: the local TUI over a Unix
-// socket in the session folder, and the same calls can serve remote
-// viewers. Viewers watch the session's activity and may send the commands
-// the profile allows. Execution never depends on a viewer: a viewer that
-// reads too slowly skips events rather than holding the box up.
+// socket in the session folder, and remote viewers over the box's optional
+// attach port. An orchestrator serves the same protocol for the sessions
+// it runs, relaying their activity, commands and file reads. Viewers watch
+// a session's activity and may send the commands they are allowed.
+// Execution never depends on a viewer: a viewer that reads too slowly
+// skips events rather than holding the box up.
+//
+// Calls to an orchestrator name their session in the "actlet-session"
+// request metadata. A box serves only its own session: it ignores the
+// metadata when it is absent, and refuses another session's ID.
 //
 // EXPERIMENTAL (v0): messages may change incompatibly until v1.
 
@@ -34,6 +40,7 @@ const (
 	Attach_Watch_FullMethodName    = "/actlet.attach.v0.Attach/Watch"
 	Attach_Command_FullMethodName  = "/actlet.attach.v0.Attach/Command"
 	Attach_ReadFile_FullMethodName = "/actlet.attach.v0.Attach/ReadFile"
+	Attach_Sessions_FullMethodName = "/actlet.attach.v0.Attach/Sessions"
 )
 
 // AttachClient is the client API for Attach service.
@@ -46,14 +53,17 @@ type AttachClient interface {
 	// Watch streams the run's activity: the events the box still holds
 	// after the requested sequence number, then new ones as they happen.
 	Watch(ctx context.Context, in *WatchRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[WatchResponse], error)
-	// Command sends a command as a local operator, if the profile allows
-	// it. It is recorded with origin "local" and acknowledged like any
-	// other.
+	// Command sends a command, if the viewer is allowed it. It is recorded
+	// with origin "local" over the session folder's socket and "remote"
+	// otherwise, and acknowledged like any other.
 	Command(ctx context.Context, in *CommandRequest, opts ...grpc.CallOption) (*v0.CommandAck, error)
 	// ReadFile returns a file of the session, read only: one in inputs/,
 	// workspace/ or output/, never outside them, also not through symbolic
 	// links. A large file is cut short.
 	ReadFile(ctx context.Context, in *ReadFileRequest, opts ...grpc.CallOption) (*ReadFileResponse, error)
+	// Sessions lists the sessions a viewer may attach to: a box's own, or
+	// an orchestrator's.
+	Sessions(ctx context.Context, in *SessionsRequest, opts ...grpc.CallOption) (*SessionsResponse, error)
 }
 
 type attachClient struct {
@@ -113,6 +123,16 @@ func (c *attachClient) ReadFile(ctx context.Context, in *ReadFileRequest, opts .
 	return out, nil
 }
 
+func (c *attachClient) Sessions(ctx context.Context, in *SessionsRequest, opts ...grpc.CallOption) (*SessionsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SessionsResponse)
+	err := c.cc.Invoke(ctx, Attach_Sessions_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // AttachServer is the server API for Attach service.
 // All implementations must embed UnimplementedAttachServer
 // for forward compatibility.
@@ -123,14 +143,17 @@ type AttachServer interface {
 	// Watch streams the run's activity: the events the box still holds
 	// after the requested sequence number, then new ones as they happen.
 	Watch(*WatchRequest, grpc.ServerStreamingServer[WatchResponse]) error
-	// Command sends a command as a local operator, if the profile allows
-	// it. It is recorded with origin "local" and acknowledged like any
-	// other.
+	// Command sends a command, if the viewer is allowed it. It is recorded
+	// with origin "local" over the session folder's socket and "remote"
+	// otherwise, and acknowledged like any other.
 	Command(context.Context, *CommandRequest) (*v0.CommandAck, error)
 	// ReadFile returns a file of the session, read only: one in inputs/,
 	// workspace/ or output/, never outside them, also not through symbolic
 	// links. A large file is cut short.
 	ReadFile(context.Context, *ReadFileRequest) (*ReadFileResponse, error)
+	// Sessions lists the sessions a viewer may attach to: a box's own, or
+	// an orchestrator's.
+	Sessions(context.Context, *SessionsRequest) (*SessionsResponse, error)
 	mustEmbedUnimplementedAttachServer()
 }
 
@@ -152,6 +175,9 @@ func (UnimplementedAttachServer) Command(context.Context, *CommandRequest) (*v0.
 }
 func (UnimplementedAttachServer) ReadFile(context.Context, *ReadFileRequest) (*ReadFileResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ReadFile not implemented")
+}
+func (UnimplementedAttachServer) Sessions(context.Context, *SessionsRequest) (*SessionsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method Sessions not implemented")
 }
 func (UnimplementedAttachServer) mustEmbedUnimplementedAttachServer() {}
 func (UnimplementedAttachServer) testEmbeddedByValue()                {}
@@ -239,6 +265,24 @@ func _Attach_ReadFile_Handler(srv interface{}, ctx context.Context, dec func(int
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Attach_Sessions_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SessionsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AttachServer).Sessions(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Attach_Sessions_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AttachServer).Sessions(ctx, req.(*SessionsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Attach_ServiceDesc is the grpc.ServiceDesc for Attach service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -257,6 +301,10 @@ var Attach_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ReadFile",
 			Handler:    _Attach_ReadFile_Handler,
+		},
+		{
+			MethodName: "Sessions",
+			Handler:    _Attach_Sessions_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

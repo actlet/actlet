@@ -489,6 +489,8 @@ func originName(o gatewayv0.Origin) string {
 		return "orchestrator"
 	case gatewayv0.Origin_ORIGIN_LOCAL:
 		return "local"
+	case gatewayv0.Origin_ORIGIN_REMOTE:
+		return "remote"
 	}
 	return "unspecified"
 }

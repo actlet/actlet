@@ -1,10 +1,16 @@
 // Actlet attach protocol, version 0.
 //
 // A running Actlet box serves it to viewers: the local TUI over a Unix
-// socket in the session folder, and the same calls can serve remote
-// viewers. Viewers watch the session's activity and may send the commands
-// the profile allows. Execution never depends on a viewer: a viewer that
-// reads too slowly skips events rather than holding the box up.
+// socket in the session folder, and remote viewers over the box's optional
+// attach port. An orchestrator serves the same protocol for the sessions
+// it runs, relaying their activity, commands and file reads. Viewers watch
+// a session's activity and may send the commands they are allowed.
+// Execution never depends on a viewer: a viewer that reads too slowly
+// skips events rather than holding the box up.
+//
+// Calls to an orchestrator name their session in the "actlet-session"
+// request metadata. A box serves only its own session: it ignores the
+// metadata when it is absent, and refuses another session's ID.
 //
 // EXPERIMENTAL (v0): messages may change incompatibly until v1.
 
@@ -27,15 +33,35 @@ service Attach {
   // after the requested sequence number, then new ones as they happen.
   rpc Watch(WatchRequest) returns (stream WatchResponse);
 
-  // Command sends a command as a local operator, if the profile allows
-  // it. It is recorded with origin "local" and acknowledged like any
-  // other.
+  // Command sends a command, if the viewer is allowed it. It is recorded
+  // with origin "local" over the session folder's socket and "remote"
+  // otherwise, and acknowledged like any other.
   rpc Command(CommandRequest) returns (actlet.gateway.v0.CommandAck);
 
   // ReadFile returns a file of the session, read only: one in inputs/,
   // workspace/ or output/, never outside them, also not through symbolic
   // links. A large file is cut short.
   rpc ReadFile(ReadFileRequest) returns (ReadFileResponse);
+
+  // Sessions lists the sessions a viewer may attach to: a box's own, or
+  // an orchestrator's.
+  rpc Sessions(SessionsRequest) returns (SessionsResponse);
+}
+
+message SessionsRequest {}
+
+message SessionsResponse {
+  repeated SessionSummary sessions = 1;
+}
+
+message SessionSummary {
+  string session_id = 1;
+  string worker_id = 2;
+  uint64 epoch = 3;
+  actlet.gateway.v0.SessionState state = 4;
+  // Whether the box is connected now: its control stream, for an
+  // orchestrator.
+  bool connected = 5;
 }
 
 message InfoRequest {}
@@ -68,7 +94,8 @@ message Stats {
 
 message WatchRequest {
   // Send events after this sequence number of the current run; 0 sends
-  // everything the box still holds.
+  // everything the box still holds, or, from an orchestrator, every run's
+  // events it still holds.
   uint64 after_seq = 1;
 }
 

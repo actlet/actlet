@@ -684,6 +684,8 @@ func originName(o gatewayv0.Origin) string {
 	switch o {
 	case gatewayv0.Origin_ORIGIN_LOCAL:
 		return "a local operator"
+	case gatewayv0.Origin_ORIGIN_REMOTE:
+		return "a remote operator"
 	case gatewayv0.Origin_ORIGIN_ORCHESTRATOR:
 		return "the orchestrator"
 	}

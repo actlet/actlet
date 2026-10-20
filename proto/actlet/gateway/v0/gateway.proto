@@ -220,6 +220,7 @@ message ControlUp {
     ControlHello hello = 1;
     CommandAck ack = 2;
     Status status = 3;
+    FileResponse file = 4;
   }
 }
 
@@ -233,7 +234,38 @@ message ControlDown {
   oneof msg {
     Command command = 1;
     Heartbeat heartbeat = 2;
+    FileRequest read_file = 3;
   }
+}
+
+// FileRequest asks the worker for a file of the session folder, for a
+// viewer attached through the orchestrator. It isn't a command: the worker
+// doesn't record it, and the gateway doesn't send it again after a
+// reconnect. Workers that announce the "attach.files" capability answer
+// with a FileResponse of the same ID, serving only files in inputs/,
+// workspace/ and output/, never through symbolic links out of them, and
+// cutting large files short.
+message FileRequest {
+  string id = 1;
+  // The path as tools show it: relative to workspace/, such as
+  // "report.md" or "../output/report.md".
+  string path = 2;
+}
+
+message FileResponse {
+  string id = 1;
+  // The path relative to the session folder, such as "output/report.md".
+  string path = 2;
+  // The start of the file, up to the worker's limit.
+  bytes content = 3;
+  int64 size = 4;
+  bool truncated = 5;
+  // The file holds binary data, which isn't returned.
+  bool binary = 6;
+  // Why the file couldn't be read: a gRPC status code, and a message.
+  // Zero means it was read.
+  int32 error_code = 7;
+  string error = 8;
 }
 
 // Heartbeat keeps an idle control stream busy in the gateway-to-worker
@@ -262,7 +294,11 @@ message Command {
 enum Origin {
   ORIGIN_UNSPECIFIED = 0;
   ORIGIN_ORCHESTRATOR = 1;
+  // A viewer on the box's machine, over the session folder's socket.
   ORIGIN_LOCAL = 2;
+  // A viewer elsewhere: attached through the orchestrator, or to the box's
+  // attach port.
+  ORIGIN_REMOTE = 3;
 }
 
 // Pause: stop starting new work, persist, and exit the process. The session
