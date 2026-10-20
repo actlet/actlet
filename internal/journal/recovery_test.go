@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"strings"
 	"testing"
 )
 
@@ -73,20 +74,103 @@ func TestTruncatedHeaderIsCorrupt(t *testing.T) {
 	}
 }
 
-// Flipping any single bit anywhere in a journal of complete batches must be
-// reported as corruption: never silently skipped, never mistaken for a torn
-// tail and truncated.
-func TestBitFlipsAreCorruption(t *testing.T) {
-	data := fixture(t, 3)
+// Flipping any single bit in the file header or in a batch that another
+// batch follows must be reported as corruption, never skipped or truncated.
+// The same damage in the final batch is a write that never fully reached the
+// disk: it is truncated as a torn tail.
+func TestBitFlips(t *testing.T) {
+	const n = 3
+	data := fixture(t, n)
+	ends := batchEnds(t, data)
+	lastStart := ends[n-2]
 	for i := range data {
 		for bit := range 8 {
 			c := bytes.Clone(data)
 			c[i] ^= 1 << bit
-			_, err := scanBytes(c, ReaderOptions{})
-			if !errors.Is(err, ErrCorrupt) {
-				t.Fatalf("flip byte %d bit %d: err = %v, want ErrCorrupt", i, bit, err)
+			res, err := scanBytes(c, ReaderOptions{})
+			if int64(i) < lastStart {
+				if !errors.Is(err, ErrCorrupt) {
+					t.Fatalf("flip byte %d bit %d: err = %v, want ErrCorrupt", i, bit, err)
+				}
+				continue
+			}
+			if err != nil || res.Tail != TailTorn || res.ValidEnd != lastStart || res.LastSeq != n-1 {
+				t.Fatalf("flip byte %d bit %d in the final batch: err=%v tail=%v ValidEnd=%d LastSeq=%d, want torn at %d",
+					i, bit, err, res.Tail, res.ValidEnd, res.LastSeq, lastStart)
 			}
 		}
+	}
+}
+
+// Power loss can persist an unsynced final batch partially or out of order.
+// Damage confined to the final batch is truncated on open; the same damage in
+// an earlier batch is corruption and the file is left alone.
+func TestPowerLossShapes(t *testing.T) {
+	const n = 3
+	data := fixture(t, n)
+	ends := batchEnds(t, data)
+	starts := []int64{int64(len(encodeFileHeader(Header{SessionID: "test-session"}))), ends[0], ends[1]}
+
+	type shape struct {
+		name   string
+		damage func(c []byte, start, end int64)
+	}
+	shapes := []shape{
+		{"payload zeroed, trailer present", func(c []byte, start, end int64) {
+			clear(c[start+batchHeaderLen : end-batchChecksumLen-batchTrailerLen])
+		}},
+		{"payload garbled", func(c []byte, start, end int64) {
+			for i := start + batchHeaderLen; i < end-batchChecksumLen-batchTrailerLen; i++ {
+				c[i] ^= 0x5a
+			}
+		}},
+		{"header zeroed, rest present", func(c []byte, start, end int64) {
+			clear(c[start : start+batchHeaderLen])
+		}},
+		{"header garbled", func(c []byte, start, end int64) {
+			for i := start; i < start+batchHeaderLen; i++ {
+				c[i] ^= 0xa5
+			}
+		}},
+		{"checksum zeroed", func(c []byte, start, end int64) {
+			clear(c[end-batchChecksumLen-batchTrailerLen : end-batchTrailerLen])
+		}},
+	}
+	for _, sh := range shapes {
+		t.Run(sh.name, func(t *testing.T) {
+			// Final batch: truncated, then appending resumes.
+			c := bytes.Clone(data)
+			sh.damage(c, starts[n-1], ends[n-1])
+			path := tempJournal(t)
+			if err := os.WriteFile(path, c, 0o600); err != nil {
+				t.Fatal(err)
+			}
+			w := mustOpen(t, path, testOptions())
+			rec := w.Recovery()
+			if rec.Tail != TailTorn || rec.ValidEnd != starts[n-1] || rec.Truncated() != ends[n-1]-starts[n-1] {
+				t.Fatalf("final batch: Recovery = %+v, want %d bytes truncated at %d", rec, ends[n-1]-starts[n-1], starts[n-1])
+			}
+			if !strings.Contains(rec.TailErr.Error(), "damaged final batch") {
+				t.Errorf("TailErr = %v, want it to name the damaged final batch", rec.TailErr)
+			}
+			appendN(t, w, 1)
+			mustClose(t, w)
+			checkRecords(t, readAll(t, path), n)
+
+			// Second-to-last batch: corruption, file untouched.
+			c = bytes.Clone(data)
+			sh.damage(c, starts[n-2], ends[n-2])
+			path = tempJournal(t)
+			if err := os.WriteFile(path, c, 0o600); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := Open(path, testOptions()); !errors.Is(err, ErrCorrupt) {
+				t.Fatalf("second-to-last batch: Open err = %v, want ErrCorrupt", err)
+			}
+			if after, _ := os.ReadFile(path); !bytes.Equal(after, c) {
+				t.Fatal("Open modified a corrupt journal")
+			}
+		})
 	}
 }
 
@@ -142,10 +226,39 @@ func TestZeroFilledTailIsTorn(t *testing.T) {
 	}
 }
 
-func TestGarbageAfterLastBatchIsCorrupt(t *testing.T) {
-	data := append(fixture(t, 2), []byte("garbage that is not a batch header..")...)
-	if _, err := scanBytes(data, ReaderOptions{}); !errors.Is(err, ErrCorrupt) {
-		t.Fatalf("err = %v, want ErrCorrupt", err)
+func TestGarbageTail(t *testing.T) {
+	data := fixture(t, 2)
+	ends := batchEnds(t, data)
+	garbage := []byte("garbage that is not a batch header..")
+
+	// Garbage where the next batch would start, with nothing valid after it,
+	// is a damaged final write: truncated.
+	res, err := scanBytes(append(bytes.Clone(data), garbage...), ReaderOptions{})
+	if err != nil || res.Tail != TailTorn || res.ValidEnd != ends[1] {
+		t.Fatalf("garbage at end: err=%v tail=%v ValidEnd=%d", err, res.Tail, res.ValidEnd)
+	}
+
+	// Garbage followed by a valid batch is damage in the middle: corruption.
+	mid := append(bytes.Clone(data[:ends[0]]), garbage...)
+	mid = append(mid, data[ends[0]:]...)
+	if _, err := scanBytes(mid, ReaderOptions{}); !errors.Is(err, ErrCorrupt) {
+		t.Fatalf("garbage before a batch: err = %v, want ErrCorrupt", err)
+	}
+}
+
+// A final batch with a valid header that is unsupported or over the limits
+// may come from a newer or differently configured writer: never truncated.
+func TestFinalBatchNotTruncatedWhenUnsupported(t *testing.T) {
+	data := fixture(t, 2)
+	unknownCodec := append(bytes.Clone(data), craftBatch(batchHeader{codec: 42, firstSeq: 3, count: 1, storedLen: 3, rawLen: 3}, []byte("abc"))...)
+	if _, err := scanBytes(unknownCodec, ReaderOptions{}); !errors.Is(err, ErrUnsupported) {
+		t.Fatalf("unknown codec in final batch: err = %v, want ErrUnsupported", err)
+	}
+	limits := DefaultLimits()
+	limits.MaxBatchRecords = 1
+	tooMany := append(bytes.Clone(data), craftBatch(batchHeader{firstSeq: 3, count: 2, storedLen: 3, rawLen: 3}, []byte("abc"))...)
+	if _, err := scanBytes(tooMany, ReaderOptions{Limits: limits}); !errors.Is(err, ErrLimit) {
+		t.Fatalf("over-limit final batch: err = %v, want ErrLimit", err)
 	}
 }
 

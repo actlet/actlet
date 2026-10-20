@@ -116,7 +116,9 @@ A batch can be fully written but not acknowledged: the process dies between the 
 
 ## Recovery
 
-`Open` takes the lock, then reads the journal from the start and validates every batch. It stops at the first problem and classifies it:
+`Open` takes the lock, then reads the journal from the start and validates every batch. It stops at the first problem and classifies it.
+
+The rule that decides between truncating and refusing comes from how the writer works. It syncs every batch before it writes the next one, so at most the **final** batch can be unsynced at any moment. Damage confined to the final batch is therefore what an interrupted write or a power loss leaves behind, and it is truncated. Damage in a batch that another batch follows is in data that was already synced, so it is corruption.
 
 | What the reader finds | Classification | What `Open` does |
 |---|---|---|
@@ -124,15 +126,19 @@ A batch can be fully written but not acknowledged: the process dies between the 
 | Fewer bytes left than a batch header | **torn tail** | truncate, sync, append |
 | A valid batch header whose batch extends past end of file | **torn tail** | truncate, sync, append |
 | An invalid batch header, and only zero bytes until end of file | **torn tail** (the filesystem extended the file but the data never arrived) | truncate, sync, append |
-| A full-length batch whose trailer and everything after it are zero | **torn tail** | truncate, sync, append |
-| An invalid batch header followed by non-zero data | **corruption** | refuse to open, leave the file as is |
-| A bad commit trailer (not zero) | **corruption** | refuse |
-| A checksum mismatch in a batch with a valid trailer | **corruption** | refuse |
-| A payload that doesn't decode, a wrong record count or a sequence gap | **corruption** | refuse |
-| A length or count above the configured limits | **limit exceeded** | refuse |
-| An unknown format version, codec, checksum or flag | **unsupported** | refuse |
+| An invalid batch header, and no valid batch header anywhere after it | **torn tail** (damaged final batch) | truncate, sync, append |
+| A bad commit trailer or checksum in a batch with only zeros or nothing after it | **torn tail** (damaged final batch) | truncate, sync, append |
+| An invalid batch header with a valid batch somewhere after it | **corruption** | refuse to open, leave the file as is |
+| A bad commit trailer or checksum in a batch followed by more data | **corruption** | refuse |
+| A payload that passes its checksum but doesn't decode, a wrong record count or a sequence gap | **corruption** | refuse |
+| A length or count above the configured limits | **limit exceeded** | refuse, even in the final batch |
+| An unknown format version, codec, checksum or flag | **unsupported** | refuse, even in the final batch |
 
-The committed prefix is everything before the first problem. A torn tail was never acknowledged, so cutting it off loses nothing that was promised. Corruption inside complete data is never skipped or silently truncated. It is reported with its offset, and someone has to decide what to do. `actlet journal inspect` shows exactly where it is.
+The committed prefix is everything before the first problem. Batches over the limits or in an unknown encoding are never truncated, even at the end of the file, because they may come from a newer or differently configured writer. Corruption in earlier data is never skipped or silently truncated. It is reported with its offset, and someone has to decide what to do. `actlet journal inspect` shows exactly where it is.
+
+`Open` reports what it found in `Writer.Recovery()`. `Truncated()` gives the number of bytes it dropped, and `TailErr` gives the reason. Callers should log every truncation.
+
+The trade-off: if the final batch *was* acknowledged and the storage later damages it, it is dropped rather than refused. As with unacknowledged records that survive, higher layers must reconcile everything near the end of the journal rather than assume it.
 
 The file header is written and synced before `Create` returns, so a journal with a damaged or missing header is reported as corrupt, never as torn.
 
@@ -180,4 +186,4 @@ What it doesn't guarantee:
 
 ### A note on power loss
 
-The process-kill tests show that a killed process leaves a valid journal: a write either completes in the page cache or doesn't happen. A power loss is different. Writes that haven't been synced can reach the disk partially and out of order, for example a batch's trailer without all of its payload. Because nothing unsynced was ever acknowledged, such a batch is always the *last* one in the file. It still fails its checksum and is currently reported as corruption rather than as a torn tail, which is the conservative choice. Whether a checksum failure in the final batch should be treated as a torn tail is an open design question.
+The process-kill tests show that a killed process leaves a valid journal: a write either completes in the page cache or doesn't happen. A power loss is different. Writes that haven't been synced can reach the disk partially and out of order, for example a batch's trailer without all of its payload. Because the writer syncs each batch before writing the next, only the final batch can be affected, and recovery truncates it as described above. The tests simulate these shapes directly: zeroed or garbled payloads, headers and checksums in the final batch.

@@ -127,14 +127,21 @@ func (r *Reader) next() (*Batch, error) {
 	h, ok := decodeBatchHeader(hb[:])
 	if !ok {
 		// Some filesystems extend a file with zeros when a crash interrupts
-		// an append. Zeros up to EOF are a torn tail; anything else is
-		// corruption.
+		// an append: zeros up to EOF are a torn tail. Otherwise the header
+		// is damaged. If no valid batch follows, this is the final batch,
+		// which was never synced: also a torn tail. If a batch follows, the
+		// damage is in synced data: corruption.
 		if zero, err := r.zeroUntilEOF(off); err != nil {
 			return nil, err
 		} else if zero {
 			return nil, formatErr(off, ErrTornTail, "zero-filled tail of %d bytes", remaining)
 		}
-		return nil, formatErr(off, ErrCorrupt, "invalid batch header")
+		if later, err := r.batchHeaderAfter(off + 1); err != nil {
+			return nil, err
+		} else if later >= 0 {
+			return nil, formatErr(off, ErrCorrupt, "invalid batch header (a valid batch follows at offset %d)", later)
+		}
+		return nil, formatErr(off, ErrTornTail, "damaged final batch: invalid batch header, %d bytes to end of file", remaining)
 	}
 
 	l := r.opts.Limits
@@ -171,24 +178,27 @@ func (r *Reader) next() (*Batch, error) {
 	sum := binary.LittleEndian.Uint32(buf[h.storedLen:])
 	trailer := [4]byte(buf[int(h.storedLen)+batchChecksumLen:])
 
-	if trailer != batchTrailerMagic {
-		// A missing trailer with only zeros after it is an append that was
-		// cut short after the filesystem extended the file.
-		if trailer == [4]byte{} {
-			if zero, err := r.zeroUntilEOF(off + frameLen); err != nil {
-				return nil, err
-			} else if zero {
-				return nil, formatErr(off, ErrTornTail, "batch without commit trailer at end of file")
-			}
+	// A bad trailer or checksum in the final batch, with nothing but zeros
+	// after it, is the last write never fully reaching the disk: a torn
+	// tail. Followed by more data, the batch was synced before the next one
+	// was written, so the damage is corruption.
+	damaged := func(reason string) error {
+		if zero, err := r.zeroUntilEOF(off + frameLen); err != nil {
+			return err
+		} else if zero {
+			return formatErr(off, ErrTornTail, "damaged final batch: %s", reason)
 		}
-		return nil, formatErr(off, ErrCorrupt, "invalid commit trailer")
+		return formatErr(off, ErrCorrupt, "%s", reason)
+	}
+	if trailer != batchTrailerMagic {
+		return nil, damaged("invalid commit trailer")
 	}
 	want, ok := batchChecksum(h.checksum, hb[:], payload)
 	if !ok {
 		return nil, formatErr(off, ErrUnsupported, "checksum algorithm %v", h.checksum)
 	}
 	if sum != want {
-		return nil, formatErr(off, ErrCorrupt, "checksum mismatch")
+		return nil, damaged("checksum mismatch")
 	}
 
 	c, ok := r.codecs.get(h.codec)
@@ -236,6 +246,30 @@ func (r *Reader) zeroUntilEOF(off int64) (bool, error) {
 		off += n
 	}
 	return true, nil
+}
+
+// batchHeaderAfter returns the offset of the first valid batch header at or
+// after off, or -1 if there is none. It reads in fixed-size chunks.
+func (r *Reader) batchHeaderAfter(off int64) (int64, error) {
+	const chunkLen = 32 << 10
+	var chunk [chunkLen + batchHeaderLen - 1]byte
+	for off+batchHeaderLen <= r.size {
+		n := min(int64(len(chunk)), r.size-off)
+		buf := chunk[:n]
+		if _, err := r.r.ReadAt(buf, off); err != nil {
+			return 0, fmt.Errorf("journal: read at %d: %w", off, err)
+		}
+		for i := 0; i+batchHeaderLen <= len(buf); i++ {
+			if buf[i] == batchMagic[0] {
+				if _, ok := decodeBatchHeader(buf[i : i+batchHeaderLen]); ok {
+					return off + int64(i), nil
+				}
+			}
+		}
+		// Overlap chunks so a header straddling the boundary is seen.
+		off += max(n-(batchHeaderLen-1), 1)
+	}
+	return -1, nil
 }
 
 func allZero(b []byte) bool {
@@ -331,6 +365,15 @@ type ScanResult struct {
 	Tail TailState
 	// TailErr describes the torn tail, if any.
 	TailErr error
+}
+
+// Truncated returns how many bytes past the valid prefix a writer drops when
+// it opens the journal: the torn tail, or 0.
+func (r ScanResult) Truncated() int64 {
+	if r.Tail != TailTorn {
+		return 0
+	}
+	return r.Size - r.ValidEnd
 }
 
 // Scan reads the whole journal and reports its valid committed prefix. A torn

@@ -90,8 +90,9 @@ func runJournalInspect(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "Usage: actlet journal inspect [-summary] <file>")
 		fmt.Fprintln(stderr)
 		fmt.Fprintln(stderr, "Validate a journal and print its header, batches and committed prefix.")
-		fmt.Fprintln(stderr, "Exits 1 if the journal is corrupt or unreadable. An incomplete final")
-		fmt.Fprintln(stderr, "batch is reported but is not an error.")
+		fmt.Fprintln(stderr, "Exits 1 if the journal is corrupt or unreadable. An incomplete or damaged")
+		fmt.Fprintln(stderr, "final batch, which opening the journal would truncate, is reported but")
+		fmt.Fprintln(stderr, "is not an error.")
 		fmt.Fprintln(stderr)
 		fs.PrintDefaults()
 	}
@@ -154,7 +155,8 @@ func runJournalInspect(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stdout, "status:   ok")
 		return 0
 	case errors.Is(endErr, journal.ErrTornTail):
-		fmt.Fprintf(stdout, "status:   incomplete final batch, %d bytes after the valid prefix (%v)\n", size-r.Offset(), endErr)
+		fmt.Fprintf(stdout, "status:   ok, but opening the journal for writing would truncate the last %d bytes\n", size-r.Offset())
+		fmt.Fprintf(stdout, "          (%v)\n", endErr)
 		return 0
 	default:
 		fmt.Fprintf(stdout, "status:   INVALID: %v\n", endErr)

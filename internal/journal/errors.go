@@ -11,8 +11,9 @@ var (
 	// unreadable until an operator decides what to do.
 	ErrCorrupt = errors.New("journal: corrupt")
 
-	// ErrTornTail reports an incomplete final batch, left by a write that was
-	// interrupted. It was never acknowledged as durable; recovery truncates it.
+	// ErrTornTail reports an incomplete or damaged final batch at the end of
+	// the file, left by a write that never fully reached the disk. Recovery
+	// truncates it.
 	ErrTornTail = errors.New("journal: incomplete trailing batch")
 
 	// ErrLimit reports a length that exceeds the configured limits.

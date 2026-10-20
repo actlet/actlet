@@ -59,31 +59,41 @@ func TestJournalInspectTornAndCorrupt(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	torn := filepath.Join(t.TempDir(), "torn.actlet")
-	if err := os.WriteFile(torn, data[:len(data)-5], 0o600); err != nil {
-		t.Fatal(err)
+	// headerLen is the file header size for the session ID "cli-test".
+	const headerLen = 14 + len("cli-test") + 4
+	cases := []struct {
+		name     string
+		data     []byte
+		wantCode int
+		want     []string
+	}{
+		{"incomplete final batch", data[:len(data)-5], 0, []string{"records:  3 (seq 1-3)", "would truncate the last"}},
+		{"damaged final batch", flip(data, len(data)-10), 0, []string{"records:  3 (seq 1-3)", "damaged final batch"}},
+		{"damaged first batch", flip(data, headerLen+33), 1, []string{"records:  0", "INVALID"}},
 	}
-	var stdout, stderr bytes.Buffer
-	if code := run([]string{"journal", "inspect", "-summary", torn}, &stdout, &stderr); code != 0 {
-		t.Fatalf("torn: exit %d, want 0", code)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "j.actlet")
+			if err := os.WriteFile(path, tc.data, 0o600); err != nil {
+				t.Fatal(err)
+			}
+			var stdout, stderr bytes.Buffer
+			if code := run([]string{"journal", "inspect", "-summary", path}, &stdout, &stderr); code != tc.wantCode {
+				t.Fatalf("exit %d, want %d\n%s", code, tc.wantCode, stdout.String())
+			}
+			for _, w := range tc.want {
+				if !strings.Contains(stdout.String(), w) {
+					t.Errorf("output missing %q:\n%s", w, stdout.String())
+				}
+			}
+		})
 	}
-	if !strings.Contains(stdout.String(), "records:  3 (seq 1-3)") || !strings.Contains(stdout.String(), "incomplete final batch") {
-		t.Errorf("torn: unexpected output:\n%s", stdout.String())
-	}
+}
 
-	corrupt := filepath.Join(t.TempDir(), "corrupt.actlet")
+func flip(data []byte, i int) []byte {
 	c := bytes.Clone(data)
-	c[len(c)-10] ^= 0x40
-	if err := os.WriteFile(corrupt, c, 0o600); err != nil {
-		t.Fatal(err)
-	}
-	stdout.Reset()
-	if code := run([]string{"journal", "inspect", "-summary", corrupt}, &stdout, &stderr); code != 1 {
-		t.Fatalf("corrupt: exit %d, want 1", code)
-	}
-	if !strings.Contains(stdout.String(), "INVALID") {
-		t.Errorf("corrupt: unexpected output:\n%s", stdout.String())
-	}
+	c[i] ^= 0x40
+	return c
 }
 
 func TestJournalExportJSONL(t *testing.T) {
