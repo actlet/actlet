@@ -11,6 +11,8 @@ LDFLAGS := -s -w -X main.version=$(VERSION) -X main.commit=$(COMMIT) -X main.dat
 
 GOLANGCI_LINT         ?= golangci-lint
 GOLANGCI_LINT_VERSION ?= v2.15.0
+PROTOC_GEN_GO_VERSION ?= v1.36.12
+PROTO_FILES           := $(shell find . -name '*.proto' -not -path './.git/*')
 
 ARGS ?= help
 
@@ -26,6 +28,7 @@ help: ## Show this help
 setup: ## Download modules and install development tools
 	go mod download
 	go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
+	go install google.golang.org/protobuf/cmd/protoc-gen-go@$(PROTOC_GEN_GO_VERSION)
 
 ##@ Development
 
@@ -40,6 +43,10 @@ run: build ## Build and run actlet (pass arguments with ARGS="...")
 .PHONY: test
 test: ## Run tests with the race detector
 	go test -race ./...
+
+.PHONY: generate
+generate: ## Regenerate protobuf code (needs protoc)
+	protoc --go_out=. --go_opt=module=github.com/actlet/actlet $(PROTO_FILES)
 
 .PHONY: check
 check: ## Check formatting, vet, lint and go.mod tidiness

@@ -1,0 +1,29 @@
+// Record schema for the session journal.
+//
+// EXPERIMENTAL (v0): this schema may change incompatibly until the journal
+// format is declared stable. Journals written with v0 are not guaranteed to
+// be readable by later versions.
+
+syntax = "proto3";
+
+package actlet.journal.v0;
+
+option go_package = "github.com/actlet/actlet/internal/journal/journalpb";
+
+// Batch is the uncompressed payload of one journal batch.
+message Batch {
+  repeated Record records = 1;
+}
+
+// Record is one journal entry. Its meaning is given by kind; data is opaque
+// to the storage layer.
+message Record {
+  // Sequence number, unique and contiguous across the whole journal.
+  uint64 seq = 1;
+  // Record kind, for example "tool.intent". Interpreted by higher layers.
+  string kind = 2;
+  // Time the record was appended, in Unix nanoseconds.
+  int64 time_unix_nano = 3;
+  // Opaque record payload.
+  bytes data = 4;
+}
