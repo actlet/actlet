@@ -21,6 +21,7 @@ import (
 	"github.com/actlet/actlet/internal/runner"
 	"github.com/actlet/actlet/internal/session"
 	"github.com/actlet/actlet/internal/sessionfs"
+	"github.com/actlet/actlet/internal/supervise"
 	"github.com/actlet/actlet/internal/tui"
 )
 
@@ -213,7 +214,11 @@ func runRun(args []string, stdout, stderr io.Writer, signals <-chan os.Signal) i
 		defer signal.Stop(ch)
 		signals = ch
 	}
+	// Nothing the tools started outlives the run, whichever way it ends.
+	stopReaping := supervise.Supervise()
 	code := runner.Run(context.Background(), cfg, signals)
+	supervise.KillAll()
+	stopReaping()
 	runEnded.Store(true)
 	if viewerStarted.Load() {
 		<-viewerDone // the viewer says the run ended; q quits it

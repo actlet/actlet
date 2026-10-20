@@ -9,6 +9,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/actlet/actlet/internal/supervise"
 )
 
 func (e *Env) shellTool() *tool {
@@ -99,12 +101,16 @@ func (e *Env) runProgram(ctx RunContext, argv, extraEnv []string, timeout time.D
 	cmd.WaitDelay = 2 * time.Second
 	newProcessGroup(cmd)
 	start := time.Now()
-	if err := cmd.Start(); err != nil {
+	if err := supervise.Start(cmd); err != nil {
 		r.startErr = err
 		return r
 	}
 	done := make(chan error, 1)
-	go func() { done <- cmd.Wait() }()
+	go func() {
+		err := cmd.Wait()
+		supervise.Done(cmd)
+		done <- err
+	}()
 	timer := time.NewTimer(timeout)
 	defer timer.Stop()
 	soft, hard := ctx.Soft.Done(), ctx.Hard.Done()

@@ -17,6 +17,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/actlet/actlet/internal/supervise"
 )
 
 // Limits of the search tools.
@@ -96,7 +98,17 @@ func (e *Env) rgFiles(ctx context.Context, dir, pattern string) ([]string, error
 	cmd := exec.CommandContext(ctx, e.ripgrep, "--files", "--hidden", "--glob", "!.git", "--glob", pattern)
 	cmd.Dir = dir
 	cmd.Env = toolEnv()
-	out, err := cmd.Output()
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &stdout, &stderr
+	err := supervise.Start(cmd)
+	if err == nil {
+		err = cmd.Wait()
+		supervise.Done(cmd)
+	}
+	out := stdout.Bytes()
+	if ee := (*exec.ExitError)(nil); errors.As(err, &ee) {
+		ee.Stderr = stderr.Bytes()
+	}
 	if err != nil && !isExit(err, 1) { // 1: nothing found
 		return nil, rgError(err)
 	}
@@ -254,9 +266,10 @@ func (e *Env) rgGrep(ctx context.Context, target, pattern, glob string, ignoreCa
 	if err != nil {
 		return errorResult("%v", err)
 	}
-	if err := cmd.Start(); err != nil {
+	if err := supervise.Start(cmd); err != nil {
 		return errorResult("ripgrep: %v", err)
 	}
+	defer supervise.Done(cmd)
 	g := newGrepOutput()
 	sc := bufio.NewScanner(out)
 	sc.Buffer(make([]byte, 64<<10), 1<<20)

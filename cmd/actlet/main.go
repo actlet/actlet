@@ -8,6 +8,7 @@ import (
 	"os"
 
 	"github.com/actlet/actlet/internal/buildinfo"
+	"github.com/actlet/actlet/internal/supervise"
 )
 
 const usage = `Actlet is a lightweight agent runtime for isolated containers and sandboxes.
@@ -33,6 +34,11 @@ Exit codes of "actlet run":
 `
 
 func main() {
+	if supervise.ShouldInit() {
+		// The container's first process: reap orphans and pass signals on
+		// to a copy of this command, which does the work.
+		os.Exit(supervise.Init())
+	}
 	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
 }
 

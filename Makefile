@@ -14,6 +14,7 @@ DIST_DIR       := dist
 DIST_PLATFORMS ?= linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64
 DIST_BINARIES  := actlet actlet-cli actlet-devgw
 IMAGE          ?= actlet:dev
+GO_IMAGE_VERSION ?= 1.27
 DEVGW_IMAGE    ?= actlet-devgw:dev
 
 GOLANGCI_LINT         ?= golangci-lint
@@ -86,6 +87,14 @@ test: ## Run tests with the race detector, plus a short fuzz run
 test-docker: ## Kill a writer container and recover from its volume (needs Docker)
 	@if ! docker info >/dev/null 2>&1; then echo "test-docker: Docker isn't available, skipping"; exit 0; fi; \
 		$(MAKE) image && ACTLET_IMAGE=$(IMAGE) go test -tags dockertest -run '^TestDocker' -count=1 -v $(JOURNAL_PKG)
+
+.PHONY: test-linux
+test-linux: ## Run the tests of Linux-only behaviour, such as supervising processes as PID 1, in a container (needs Docker)
+	@if ! docker info >/dev/null 2>&1; then echo "test-linux: Docker isn't available, skipping"; exit 0; fi; \
+		docker run --rm -v "$(CURDIR)":/src -w /src -v actlet-gomod:/go/pkg/mod -v actlet-gocache:/root/.cache/go-build \
+			golang:$(GO_IMAGE_VERSION) sh -c 'go test -race -count=1 ./internal/supervise/ ./internal/tools/ ./cmd/actlet/ && \
+			CGO_ENABLED=0 go test -c -o /tmp/supervise.test ./internal/supervise && cp /tmp/supervise.test /src/bin/supervise.linux.test' && \
+		docker run --rm -v "$(CURDIR)/bin":/t --entrypoint /t/supervise.linux.test golang:$(GO_IMAGE_VERSION) -test.run '^TestAsPID1$$' -test.v -test.count=1
 
 .PHONY: test-k8s
 test-k8s: ## Run the Kubernetes path test in a throwaway kind cluster (needs Docker and kind)

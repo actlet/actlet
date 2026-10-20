@@ -51,6 +51,12 @@ The model is the alias the profile assigns to the `main` role (`models.roles.mai
 - `python` is offered only when `python3` or `python` is installed. An uncaught exception comes back with its type, message and the traceback's files, lines and code, with hints for a missing module or file.
 - Every file change is published as a `file_change` activity event with a unified diff.
 
+### Processes the tools start
+
+Nothing a tool starts outlives the run, however it ends: completed, failed, paused, stopped, or by a signal. A command may leave processes running in the background for later calls, such as a server it tests against, but when `actlet run` ends it kills every process group the tools started. On Linux it is also a *child subreaper*: descendants that leave their process group and session, as daemons do with `setsid`, are adopted by it rather than by the system, killed at the end too, and reaped as they exit. On macOS and Windows, such daemons can escape.
+
+As a container's first process, PID 1, `actlet` runs itself again as its child, as `tini` does: it reaps every orphan in the container, passes `SIGTERM`, `SIGINT`, `SIGHUP`, `SIGQUIT`, `SIGUSR1`, `SIGUSR2` and `SIGWINCH` on to the child, and once the child exits, kills whatever is left and exits with the child's code. `ACTLET_NO_INIT=true` turns this off, as for a container that has an init process already (`docker run --init`). `make test-linux` tests both in a Linux container.
+
 A profile's `tools` list restricts the tools to those named, with settings: `shell` takes `shell`, `timeout`, `max_timeout` and `output_cap`, and `python` takes `interpreter`. Without a list, all the local tools are offered.
 
 ### Standard tools
