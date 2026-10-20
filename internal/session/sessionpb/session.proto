@@ -1,0 +1,70 @@
+// Records a session writes to its journal. They are the local, authoritative
+// record of a session's progress and are versioned independently of the
+// gateway protocol.
+//
+// EXPERIMENTAL (v0): this schema may change incompatibly.
+
+syntax = "proto3";
+
+package actlet.session.v0;
+
+import "google/protobuf/duration.proto";
+
+option go_package = "github.com/actlet/actlet/internal/session/sessionpb";
+
+// Started is written when a run of the session starts (kind
+// "session.started"). The number of Started records is the current epoch.
+message Started {
+  uint64 epoch = 1;
+  string session_id = 2;
+  Config config = 3;
+  // The run continues a session that ran before.
+  bool resumed = 4;
+  string worker_id = 5;
+  string actlet_version = 6;
+}
+
+// Config is the effective configuration of a run: the profile, within the
+// deployment's ceilings. It never holds credentials.
+message Config {
+  string profile_id = 1;
+  string profile_version = 2;
+  uint32 max_workers = 3;
+  uint32 max_tool_concurrency = 4;
+  google.protobuf.Duration stop_grace = 5;
+  // "drain" or "interrupt".
+  string default_pause_mode = 6;
+  google.protobuf.Duration signal_deadline = 7;
+}
+
+// Command is a control command the session received, and what it did with
+// it (kind "command"). It is written before the command is acknowledged.
+message Command {
+  string id = 1;
+  // "orchestrator" or "local".
+  string origin = 2;
+  string actor = 3;
+  // "pause", "stop", "steer", or "unknown".
+  string action = 4;
+  // Pause: "drain" or "interrupt"; empty if none was given.
+  string pause_mode = 5;
+  // Stop: the grace period that applies, and whether to kill at once.
+  google.protobuf.Duration stop_grace = 6;
+  bool stop_kill = 7;
+  // Steer: the operator note.
+  string note = 8;
+  bool accepted = 9;
+  string message = 10;
+}
+
+// StepDone records a completed step of the task (kind "task.step").
+message StepDone {
+  uint64 step = 1;
+}
+
+// Ended is written when a run ends on purpose (kind "session.ended").
+message Ended {
+  // "paused", "stopped", "completed" or "failed".
+  string state = 1;
+  string reason = 2;
+}
