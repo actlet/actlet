@@ -14,29 +14,57 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  ci:
-    name: Check, test and build
+  check:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - name: Set up tools
+        run: make setup
+      - name: Check
+        run: make check
+
+  test:
+    name: Test (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      # Race detector and fuzz smoke runs on Linux and macOS.
+      - name: Test
+        if: runner.os != 'Windows'
+        run: make test
+      # Windows runs the portable tests; process-kill and flock tests are
+      # built for Unix only.
+      - name: Test
+        if: runner.os == 'Windows'
+        run: go test ./...
+      - name: Build
+        run: go build ./...
+
+  dist:
+    name: Cross-build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0 # full history and tags for `git describe` in the build version
-
       - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
-
-      - name: Set up tools
-        run: make setup
-
-      - name: Check
-        run: make check
-
-      - name: Test
-        run: make test
-
-      - name: Build
-        run: make build
-
-      - name: Cross-build
+      - name: Build all platforms
         run: make dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: actlet-binaries
+          path: dist/
+          if-no-files-found: error

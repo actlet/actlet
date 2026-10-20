@@ -1,0 +1,31 @@
+# Development gateway image: actlet-devgw on a distroless base, as a
+# non-root user. It listens on port 7400 and records activity under
+# /var/lib/actlet-devgw (mount a volume there to keep recordings).
+#
+#   make image-devgw                    # or:
+#   docker build -f Dockerfile.devgw -t actlet-devgw:dev .
+#   docker run -it -p 7400:7400 actlet-devgw:dev -token dev
+#
+# Run it with -it to type admin commands; without a terminal it serves
+# until stopped.
+
+ARG GO_VERSION=1.27
+
+FROM --platform=$BUILDPLATFORM golang:${GO_VERSION} AS build
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+ARG TARGETOS TARGETARCH
+ARG VERSION=dev COMMIT=unknown DATE=unknown
+RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath \
+      -ldflags "-s -w -X github.com/actlet/actlet/internal/buildinfo.Version=${VERSION} -X github.com/actlet/actlet/internal/buildinfo.Commit=${COMMIT} -X github.com/actlet/actlet/internal/buildinfo.Date=${DATE}" \
+      -o /out/actlet-devgw ./cmd/actlet-devgw \
+ && mkdir /out/data
+
+FROM gcr.io/distroless/static-debian12:nonroot
+COPY --from=build /out/actlet-devgw /usr/local/bin/actlet-devgw
+COPY --from=build --chown=65532:65532 /out/data /var/lib/actlet-devgw
+USER 65532:65532
+EXPOSE 7400
+ENTRYPOINT ["/usr/local/bin/actlet-devgw", "-listen", "0.0.0.0:7400", "-data", "/var/lib/actlet-devgw"]

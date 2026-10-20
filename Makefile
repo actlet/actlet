@@ -1,8 +1,6 @@
 .DEFAULT_GOAL := help
 
 BIN_DIR := bin
-BINARY  := $(BIN_DIR)/actlet
-PKG     := ./cmd/actlet
 
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 COMMIT  ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
@@ -13,8 +11,10 @@ LDFLAGS := -s -w -X $(BUILDINFO).Version=$(VERSION) -X $(BUILDINFO).Commit=$(COM
 # Release binaries are static and CGO-free so they run on any Linux base
 # image. Tests keep CGO, which the race detector needs.
 DIST_DIR       := dist
-DIST_PLATFORMS ?= linux/amd64 linux/arm64 darwin/arm64
+DIST_PLATFORMS ?= linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64
+DIST_BINARIES  := actlet actlet-cli actlet-devgw
 IMAGE          ?= actlet:dev
+DEVGW_IMAGE    ?= actlet-devgw:dev
 
 GOLANGCI_LINT         ?= golangci-lint
 GOLANGCI_LINT_VERSION ?= v2.15.0
@@ -49,21 +49,27 @@ build: ## Build static actlet and actlet-devgw binaries for this machine into bi
 	CGO_ENABLED=0 go build -trimpath -ldflags "$(LDFLAGS)" -o $(BIN_DIR)/ ./cmd/...
 
 .PHONY: dist
-dist: ## Cross-build static binaries into dist/ (DIST_PLATFORMS)
+dist: ## Cross-build static binaries of every command into dist/ (DIST_PLATFORMS)
 	@mkdir -p $(DIST_DIR)
 	@for p in $(DIST_PLATFORMS); do \
-		os=$${p%/*}; arch=$${p#*/}; out=$(DIST_DIR)/actlet_$${os}_$${arch}; \
-		echo "$$out"; \
-		CGO_ENABLED=0 GOOS=$$os GOARCH=$$arch go build -trimpath -ldflags "$(LDFLAGS)" -o $$out $(PKG) || exit 1; \
+		os=$${p%/*}; arch=$${p#*/}; ext=; [ "$$os" = windows ] && ext=.exe; \
+		for b in $(DIST_BINARIES); do \
+			out=$(DIST_DIR)/$${b}_$${os}_$${arch}$$ext; echo "$$out"; \
+			CGO_ENABLED=0 GOOS=$$os GOARCH=$$arch go build -trimpath -ldflags "$(LDFLAGS)" -o $$out ./cmd/$$b || exit 1; \
+		done; \
 	done
 
 .PHONY: image
-image: ## Build the container image (IMAGE, default actlet:dev)
+image: ## Build the actlet container image (IMAGE, default actlet:dev)
 	docker build --build-arg VERSION=$(VERSION) --build-arg COMMIT=$(COMMIT) --build-arg DATE=$(DATE) -t $(IMAGE) .
+
+.PHONY: image-devgw
+image-devgw: ## Build the development gateway image (DEVGW_IMAGE, default actlet-devgw:dev)
+	docker build -f Dockerfile.devgw --build-arg VERSION=$(VERSION) --build-arg COMMIT=$(COMMIT) --build-arg DATE=$(DATE) -t $(DEVGW_IMAGE) .
 
 .PHONY: run
 run: build ## Build and run actlet (pass arguments with ARGS="...")
-	./$(BINARY) $(ARGS)
+	./$(BIN_DIR)/actlet $(ARGS)
 
 FUZZ_TARGETS := FuzzScan FuzzOpen
 JOURNAL_PKG  := ./internal/journal
