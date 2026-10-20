@@ -87,6 +87,12 @@ test-docker: ## Kill a writer container and recover from its volume (needs Docke
 	@if ! docker info >/dev/null 2>&1; then echo "test-docker: Docker isn't available, skipping"; exit 0; fi; \
 		$(MAKE) image && ACTLET_IMAGE=$(IMAGE) go test -tags dockertest -run '^TestDocker' -count=1 -v $(JOURNAL_PKG)
 
+.PHONY: test-k8s
+test-k8s: ## Run the Kubernetes path test in a throwaway kind cluster (needs Docker and kind)
+	@if ! command -v kind >/dev/null || ! docker info >/dev/null 2>&1; then echo "test-k8s: kind or Docker isn't available, skipping"; exit 0; fi; \
+		$(MAKE) image image-devgw && \
+		ACTLET_IMAGE=$(IMAGE) ACTLET_DEVGW_IMAGE=$(DEVGW_IMAGE) go test -tags k8stest -run TestKubernetesPath -count=1 -v -timeout 30m ./test/k8s
+
 .PHONY: fuzz
 fuzz: ## Fuzz the journal reader (FUZZTIME per target, default 2m)
 	@for t in $(FUZZ_TARGETS); do \

@@ -1,9 +1,10 @@
 version: "2"
 
 run:
-  # Lint the Docker-only tests too.
+  # Lint the Docker and Kubernetes tests too.
   build-tags:
     - dockertest
+    - k8stest
 
 linters:
   # The standard set (errcheck, govet, ineffassign, staticcheck, unused) plus a
