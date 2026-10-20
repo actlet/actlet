@@ -264,6 +264,7 @@ type Info struct {
 	WorkerID      string
 	Version       string
 	LocalCommands []string
+	Skills        []*gatewayv0.SkillInfo
 }
 
 // Usage counts tokens, and what they cost when the gateway says.
@@ -584,7 +585,7 @@ func (s *Session) Apply(ev *gatewayv0.ActivityEvent) {
 			TaskID: Sanitize(i.GetTaskId()), TaskKind: Sanitize(i.GetTaskKind()), Task: Sanitize(i.GetTask()),
 			Config: Sanitize(i.GetConfig()), Budgets: i.GetBudgets(), Models: i.GetModels(), Tools: i.GetTools(),
 			Grants: i.GetGrants(), Manifest: Sanitize(i.GetToolsManifest()), WorkerID: Sanitize(i.GetWorkerId()),
-			Version: Sanitize(i.GetActletVersion()),
+			Version: Sanitize(i.GetActletVersion()), Skills: i.GetSkills(),
 		}
 		for _, c := range i.GetLocalCommands() {
 			info.LocalCommands = append(info.LocalCommands, Sanitize(c))

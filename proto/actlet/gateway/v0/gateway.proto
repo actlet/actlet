@@ -519,6 +519,18 @@ message SessionInfo {
   string actlet_version = 11;
   // Commands a local viewer may send.
   repeated string local_commands = 12;
+  // The skills the agent may load.
+  repeated SkillInfo skills = 13;
+}
+
+// SkillInfo describes a skill for viewers.
+message SkillInfo {
+  string name = 1;
+  string description = 2;
+  // Where it comes from: "image" or "profile".
+  string source = 3;
+  // Its files other than SKILL.md, up to 200.
+  repeated string files = 4;
 }
 
 message ToolInfo {

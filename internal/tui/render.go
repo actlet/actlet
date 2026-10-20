@@ -940,6 +940,15 @@ func (m *Model) toolsLines(w int) []string {
 		desc := ansi.Truncate(firstSentence(view.Sanitize(t.GetDescription())), max(w-lipgloss.Width(l), 10), "…")
 		out = append(out, l+styleMuted.Render(desc))
 	}
+	out = append(out, "", styleBold.Render("Skills")+styleMuted.Render(" (source, files)"))
+	if len(info.Skills) == 0 {
+		add("  none")
+	}
+	for _, sk := range info.Skills {
+		l := fmt.Sprintf("  %-15s %-8s %-3d ", view.Sanitize(sk.GetName()), view.Sanitize(sk.GetSource()), len(sk.GetFiles()))
+		desc := ansi.Truncate(firstSentence(view.Sanitize(sk.GetDescription())), max(w-lipgloss.Width(l), 10), "…")
+		out = append(out, l+styleMuted.Render(desc))
+	}
 	out = append(out, "", styleBold.Render("Grants"))
 	if len(info.Grants) == 0 {
 		add("  none: every local tool, with default settings")

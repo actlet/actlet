@@ -55,6 +55,8 @@ func run() []*gatewayv0.ActivityEvent {
 				{Name: "write_file", Policy: "reconcile", Description: "Write a file."}},
 			Grants:        []*gatewayv0.ToolGrant{{Name: "shell", Settings: map[string]string{"timeout": "5m"}}},
 			ToolsManifest: "jq and ripgrep are installed.",
+			Skills: []*gatewayv0.SkillInfo{{Name: "csv-report", Description: "Write reports from CSV files. Use it for any CSV.",
+				Source: "profile", Files: []string{"scripts/report.sh", "reference.md"}}},
 		}}
 	})
 	add("", func(ev *gatewayv0.ActivityEvent) {

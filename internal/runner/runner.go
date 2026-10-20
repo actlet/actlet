@@ -464,6 +464,12 @@ func skills(cfg Config, folder sessionfs.Folder, p *gatewayv0.Profile, log *slog
 	for _, w := range warnings {
 		log.Warn("skills: " + w)
 	}
+	for i := range found {
+		found[i].Source = "image"
+		if filepath.Dir(found[i].Dir) == dir {
+			found[i].Source = "profile"
+		}
+	}
 	return found, nil
 }
 

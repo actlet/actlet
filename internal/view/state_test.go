@@ -23,10 +23,14 @@ func TestViewState(t *testing.T) {
 	}
 
 	evs := subagentRun()
+	evs[1].GetSessionInfo().Skills = []*gatewayv0.SkillInfo{{Name: "csv", Description: "CSV.", Source: "image", Files: []string{"a.sh"}}}
 	var e events
 	e.seq = uint64(len(evs))
 	e.add("root", &gatewayv0.ToolFinished{CallId: "z", Tool: "shell", OutcomeUnknown: true, IsError: true})
 	st := fold(append(evs, e.out...)).ViewState()
+	if string(st.Info.Skills[0]) != `{"name":"csv","description":"CSV.","source":"image","files":["a.sh"]}` {
+		t.Errorf("skills %s", st.Info.Skills)
+	}
 	if st.State != "SESSION_STATE_COMPLETED" || st.Profile != "coding" || *st.First != "2023-11-14T22:13:21Z" ||
 		st.Info == nil || string(st.Info.Tools[0]) != `{"name":"shell","policy":"never"}` || len(st.Info.Budgets) != 0 {
 		t.Fatalf("state %+v, info %+v", st, st.Info)

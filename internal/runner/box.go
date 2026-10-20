@@ -18,6 +18,7 @@ import (
 	"github.com/actlet/actlet/internal/session"
 	"github.com/actlet/actlet/internal/session/sessionpb"
 	"github.com/actlet/actlet/internal/sessionfs"
+	"github.com/actlet/actlet/internal/skill"
 	attachv0 "github.com/actlet/actlet/proto/actlet/attach/v0"
 	gatewayv0 "github.com/actlet/actlet/proto/actlet/gateway/v0"
 )
@@ -56,6 +57,10 @@ func sessionInfo(cfg Config, folder sessionfs.Folder, task *sessionfs.Task, p *g
 		}
 		info.Tools = tools
 		notes = append(notes, toolNotes...)
+		for _, sk := range settings.Skills {
+			info.Skills = append(info.Skills, &gatewayv0.SkillInfo{Name: sk.Name, Description: sk.Description, Source: sk.Source,
+				Files: skill.Files(sk.Dir, skill.MaxFiles)})
+		}
 	}
 	info.ToolsManifest = cutText(strings.Join(notes, "\n\n"), maxInfoText)
 	return info

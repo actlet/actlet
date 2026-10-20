@@ -32,8 +32,8 @@ const (
 	MaxDescription = 1024
 	// MaxFile bounds a file read from a skill.
 	MaxFile = 1 << 20
-	// MaxFiles bounds the files of a skill in a profile, and MaxProfile
-	// the size of all the profile's skills' files.
+	// MaxFiles bounds the files of a skill in a profile, or listed, and
+	// MaxProfile the size of all the profile's skills' files.
 	MaxFiles   = 200
 	MaxProfile = 2 << 20
 )
@@ -45,6 +45,8 @@ var Name = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,63}$`)
 type Skill struct {
 	Name, Description string
 	Dir               string
+	// Source says where it comes from, such as "image" or "profile".
+	Source string
 }
 
 // meta is SKILL.md's front matter. Other fields, such as a license, are

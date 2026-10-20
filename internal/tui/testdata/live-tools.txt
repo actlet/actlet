@@ -3,14 +3,14 @@ Tools (recovery policy)
   shell           never      Run a command.                                                         
   write_file      reconcile  Write a file.                                                          
                                                                                                     
+Skills (source, files)                                                                              
+  csv-report      profile  2   Write reports from CSV files.                                        
+                                                                                                    
 Grants                                                                                              
   shell  timeout=5m                                                                                 
                                                                                                     
 Installed (tools manifest)                                                                          
   jq and ripgrep are installed.                                                                     
-                                                                                                    
-                                                                                                    
-                                                                                                    
                                                                                                     
                                                                                                     
                                                                                                     

@@ -91,6 +91,14 @@ turns:
 			t.Errorf("the prompt lacks %q:\n%s", want, system)
 		}
 	}
+	// Viewers see the skills.
+	if n := g.eventCount(func(ev *gatewayv0.ActivityEvent) bool {
+		sk := ev.GetSessionInfo().GetSkills()
+		return len(sk) == 2 && sk[0].GetName() == "count" && sk[0].GetSource() == "profile" && sk[0].GetFiles()[0] == "scripts/count.sh" &&
+			sk[1].GetName() == "greet" && sk[1].GetSource() == "image"
+	}); n != 1 {
+		t.Errorf("%d session_info events with the skills", n)
+	}
 	// The calls are journaled and in the activity, for replays.
 	if n := len(toolOutcomes(t, dir, agent.RootWorker)); n != 4 {
 		t.Errorf("%d tool outcomes", n)
