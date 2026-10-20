@@ -25,6 +25,7 @@ import (
 
 	"google.golang.org/grpc"
 
+	"github.com/actlet/actlet/internal/buildinfo"
 	gatewayv0 "github.com/actlet/actlet/proto/actlet/gateway/v0"
 	"github.com/actlet/actlet/sdk"
 )
@@ -87,6 +88,8 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	fs.StringVar(&cfg.listen, "listen", envDefault("ACTLET_DEVGW_LISTEN", "127.0.0.1:7400"), "address to listen on [ACTLET_DEVGW_LISTEN]")
 	fs.StringVar(&cfg.token, "token", envDefault("ACTLET_DEVGW_TOKEN", ""), "bearer token workers must send; empty accepts any [ACTLET_DEVGW_TOKEN]")
 	fs.StringVar(&cfg.dataDir, "data", envDefault("ACTLET_DEVGW_DATA", "devgw-data"), "directory for activity recordings [ACTLET_DEVGW_DATA]")
+	var showVersion bool
+	fs.BoolVar(&showVersion, "version", false, "print version information and exit")
 	fs.StringVar(&cfg.taskFile, "task", "", "task file to assign, in the task.json format (default: a demo task)")
 	fs.StringVar(&cfg.demoDef, "demo", `{"steps":5,"step":"2s","ticks":2}`, "definition of the default demo task")
 	fs.StringVar(&cfg.demoInput, "demo-input", `{"message":"hello from actlet-devgw"}`, "input of the default demo task")
@@ -100,6 +103,9 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 			return 0
 		}
 		return 2
+	}
+	if showVersion {
+		return buildinfo.RunVersion("actlet-devgw", nil, stdout, stderr)
 	}
 
 	log := slog.New(slog.NewTextHandler(stderr, nil))
@@ -123,8 +129,13 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, os.Interrupt)
 	defer stop()
 	go func() {
-		gw.admin(ctx, stdin)
-		stop()
+		if gw.admin(ctx, stdin) {
+			stop() // "quit"
+			return
+		}
+		// Without a terminal, as in a container, standard input ends at
+		// once: keep serving until a signal arrives.
+		log.Info("standard input closed: admin commands unavailable; stop with SIGTERM or Ctrl-C")
 	}()
 	<-ctx.Done()
 	log.Info("shutting down")
@@ -276,8 +287,9 @@ func stateName(s gatewayv0.SessionState) string {
 	return strings.ToLower(strings.TrimPrefix(s.String(), "SESSION_STATE_"))
 }
 
-// admin reads commands from in until it ends or "quit".
-func (g *gateway) admin(ctx context.Context, in io.Reader) {
+// admin reads commands from in until it ends or "quit". It reports
+// whether "quit" was given.
+func (g *gateway) admin(ctx context.Context, in io.Reader) bool {
 	sc := bufio.NewScanner(in)
 	for sc.Scan() {
 		fields := strings.Fields(sc.Text())
@@ -285,10 +297,11 @@ func (g *gateway) admin(ctx context.Context, in io.Reader) {
 			continue
 		}
 		if fields[0] == "quit" || fields[0] == "exit" {
-			return
+			return true
 		}
 		g.handle(ctx, fields)
 	}
+	return false
 }
 
 func (g *gateway) handle(ctx context.Context, f []string) {

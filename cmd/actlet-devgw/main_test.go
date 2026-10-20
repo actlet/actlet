@@ -125,14 +125,14 @@ func TestDevGateway(t *testing.T) {
 }
 
 // The dev gateway is built on the SDK's public API only, like any other
-// orchestrator.
+// orchestrator. The one exception is the shared version information.
 func TestUsesOnlyTheSDK(t *testing.T) {
 	out, err := exec.Command("go", "list", "-f", `{{join .Imports "\n"}}`, ".").Output()
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, imp := range strings.Fields(string(out)) {
-		if strings.HasPrefix(imp, "github.com/actlet/actlet/internal/") {
+		if strings.HasPrefix(imp, "github.com/actlet/actlet/internal/") && imp != "github.com/actlet/actlet/internal/buildinfo" {
 			t.Errorf("actlet-devgw imports %s", imp)
 		}
 	}
@@ -157,5 +157,20 @@ func TestProfileFlag(t *testing.T) {
 	}
 	if _, err := loadProfile(config{profileID: "dev", pauseMode: "sleep"}); err == nil {
 		t.Error("accepted pause mode sleep")
+	}
+}
+
+func TestStdinEndKeepsServing(t *testing.T) {
+	g, err := newGateway(config{dataDir: t.TempDir(), profileID: "dev", pauseMode: "drain", demoDef: "{}", demoInput: "{}"},
+		&syncBuffer{}, slog.New(slog.DiscardHandler))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = g.store.Close() }()
+	if g.admin(t.Context(), strings.NewReader("sessions\n")) {
+		t.Error("end of input treated as quit")
+	}
+	if !g.admin(t.Context(), strings.NewReader("sessions\nquit\nsessions\n")) {
+		t.Error("quit not recognised")
 	}
 }
