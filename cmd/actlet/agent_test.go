@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -35,6 +36,7 @@ type agentGateway struct {
 	store *sdk.RecordingStore
 	data  string
 	model *scripted.Model
+	task  *gatewayv0.Task
 
 	mu     sync.Mutex
 	events []*gatewayv0.ActivityEvent
@@ -46,7 +48,8 @@ func newAgentGateway(t *testing.T, script string) *agentGateway {
 	if err != nil {
 		t.Fatal(err)
 	}
-	g := &agentGateway{t: t, model: model, addr: "127.0.0.1:0", data: t.TempDir()}
+	g := &agentGateway{t: t, model: model, addr: "127.0.0.1:0", data: t.TempDir(),
+		task: &gatewayv0.Task{Schema: "v0", Id: "sum", Kind: "agent", Input: []byte(`"Add up the numbers in the input file and write a report."`)}}
 	g.start()
 	t.Cleanup(g.stop)
 	return g
@@ -82,7 +85,7 @@ func (g *agentGateway) start() {
 				Profile: &gatewayv0.Profile{Id: "agent", Models: &gatewayv0.ModelCatalog{
 					Aliases: []*gatewayv0.ModelAlias{{Alias: "scripted"}}, Roles: map[string]string{"main": "scripted"},
 				}, Limits: &gatewayv0.Limits{MaxWorkers: 4, MaxToolConcurrency: 4}},
-				Task: &gatewayv0.Task{Schema: "v0", Id: "sum", Kind: "agent", Input: []byte(`"Add up the numbers in the input file and write a report."`)},
+				Task: g.task,
 			}, nil
 		},
 	})
@@ -399,5 +402,44 @@ func TestPauseDuringTool(t *testing.T) {
 				t.Fatalf("resumed run: exit %d, want 0", code)
 			}
 		})
+	}
+}
+
+// The example in examples/agent runs as its docs say.
+func TestAgentExample(t *testing.T) {
+	if testing.Short() {
+		t.Skip("spawns processes")
+	}
+	if _, err := exec.LookPath("python3"); err != nil {
+		t.Skip("needs python3")
+	}
+	dir := filepath.Join("..", "..", "examples", "agent")
+	script, err := os.ReadFile(filepath.Join(dir, "model.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var task struct {
+		Schema, ID, Kind  string
+		Definition, Input json.RawMessage
+	}
+	data, err := os.ReadFile(filepath.Join(dir, "task.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(data, &task); err != nil {
+		t.Fatal(err)
+	}
+	numbers, err := os.ReadFile(filepath.Join(dir, "numbers.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	g := newAgentGateway(t, string(script))
+	g.task = &gatewayv0.Task{Schema: task.Schema, Id: task.ID, Kind: task.Kind, Definition: task.Definition, Input: task.Input}
+	session := sessionDir(t, map[string]string{"numbers.txt": string(numbers)})
+	if code := exitCode(t, g.worker(session, "")); code != 0 {
+		t.Fatalf("exit code %d, want 0", code)
+	}
+	if got := readFile(t, filepath.Join(session, "output", "report.md")); got != "# Report\n\nTotal: 12\n" {
+		t.Errorf("report.md = %q", got)
 	}
 }
