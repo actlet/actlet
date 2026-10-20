@@ -46,6 +46,12 @@ func (e *events) add(worker string, body any) {
 		ev.Body = &gatewayv0.ActivityEvent_Steer{Steer: b}
 	case *gatewayv0.Gap:
 		ev.Body = &gatewayv0.ActivityEvent_Gap{Gap: b}
+	case *gatewayv0.Progress:
+		ev.Body = &gatewayv0.ActivityEvent_Progress{Progress: b}
+	case *gatewayv0.Feedback:
+		ev.Body = &gatewayv0.ActivityEvent_Feedback{Feedback: b}
+	case *gatewayv0.BudgetStatus:
+		ev.Body = &gatewayv0.ActivityEvent_BudgetStatus{BudgetStatus: b}
 	case string:
 		ev.Body = &gatewayv0.ActivityEvent_Text{Text: &gatewayv0.Text{Text: b}}
 	default:
@@ -307,4 +313,23 @@ func FuzzSanitize(f *testing.F) {
 			}
 		}
 	})
+}
+
+// Progress reports and feedback from the agent's tools.
+func TestProgressAndFeedback(t *testing.T) {
+	var e events
+	pct := uint32(40)
+	e.add("root", &gatewayv0.Progress{Message: "reading", Percent: &pct})
+	e.add("root.1", &gatewayv0.Progress{Message: "almost\x1b[2J there"})
+	e.add("root", &gatewayv0.Feedback{Kind: "problem", Message: "no header"})
+	s := fold(e.out)
+	if p := s.Progress; p == nil || p.Worker != "root.1" || p.Message != "almost there" || p.Percent != -1 {
+		t.Errorf("progress %+v", p)
+	}
+	if len(s.Feedback) != 1 || s.Feedback[0].Kind != "problem" || s.Feedback[0].Message != "no header" {
+		t.Errorf("feedback %+v", s.Feedback)
+	}
+	if got := Describe(e.out[0]); got != "progress 40%: reading" {
+		t.Errorf("describe %q", got)
+	}
 }

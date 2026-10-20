@@ -40,6 +40,7 @@ func (b *box) specs(depth uint32) []*gatewayv0.ToolSpec {
 	for _, sp := range b.tools.Specs() {
 		out = append(out, &gatewayv0.ToolSpec{Name: sp.Name, Description: sp.Description, InputSchema: string(sp.Schema)})
 	}
+	out = append(out, b.standardSpecs()...)
 	s := b.env.Settings
 	if int(depth) < s.MaxSubagentDepth && s.MaxSubagents > 0 {
 		out = append(out, b.spawnSpec())
@@ -106,6 +107,23 @@ func (w *worker) runTools(st *agentpb.WorkerState) error {
 		if call.GetName() == SpawnTool {
 			wg.Go(func() {
 				if err := w.spawn(call, prev); err != nil {
+					fail(err)
+				}
+			})
+			continue
+		}
+		if b.standard[call.GetName()] != nil {
+			// Standard tools write nothing locally: no lock to wait for.
+			wg.Go(func() {
+				select {
+				case sem <- struct{}{}:
+				case <-b.env.Stopping:
+					return
+				case <-b.stopAll:
+					return
+				}
+				defer func() { <-sem }()
+				if err := w.runStandard(call, prev); err != nil {
 					fail(err)
 				}
 			})

@@ -98,6 +98,8 @@ message ToolOutcome {
   // Decided by recovery rather than by running the call.
   bool recovered = 6;
   string worker_id = 7;
+  // What a call through the gateway used, such as an llm call.
+  actlet.gateway.v0.Usage usage = 8;
 }
 
 // Spawn creates a subagent for a parent's spawn_subagent call (kind

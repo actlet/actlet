@@ -448,6 +448,16 @@ func toolLabel(name string) string {
 		return "Python"
 	case "spawn_subagent":
 		return "Subagent"
+	case "report_progress":
+		return "Progress"
+	case "send_feedback":
+		return "Feedback"
+	case "budget_status":
+		return "Budget"
+	case "decide":
+		return "Decide"
+	case "llm":
+		return "LLM"
 	}
 	return name
 }
@@ -490,6 +500,23 @@ func keyArgs(call *view.ToolCall) string {
 			s += " · " + model
 		}
 		return strings.TrimSpace(s + "  " + str("task"))
+	case "report_progress":
+		if p, ok := a["percent"].(float64); ok {
+			return fmt.Sprintf("%.0f%% · %s", p, str("message"))
+		}
+		return str("message")
+	case "send_feedback":
+		return str("kind") + ": " + str("message")
+	case "decide":
+		return str("question")
+	case "llm":
+		s := str("prompt")
+		if model := str("model"); model != "" {
+			s = model + " · " + s
+		}
+		return s
+	case "budget_status":
+		return ""
 	}
 	return firstLine(call.Input)
 }
@@ -657,6 +684,13 @@ func (m *Model) sessionLines(w int) []string {
 		events += fmt.Sprintf(", %d missed", s.Skipped)
 	}
 	kv("events", events)
+	if p := s.Progress; p != nil {
+		text := p.Message
+		if p.Percent >= 0 {
+			text = fmt.Sprintf("%d%% · %s", p.Percent, text)
+		}
+		kv("progress", text)
+	}
 
 	head("Box")
 	folder, output, mem, cpu, gw := "n/a", "n/a", "n/a", "n/a", "n/a"
@@ -705,6 +739,16 @@ func (m *Model) sessionLines(w int) []string {
 	} else {
 		for _, b := range s.Info.Budgets {
 			add("  " + m.budgetLine(b))
+		}
+	}
+
+	if len(s.Feedback) > 0 {
+		head("Feedback")
+		if s.FeedbackDropped > 0 {
+			add(styleFaint.Render(fmt.Sprintf("  … %d earlier", s.FeedbackDropped)))
+		}
+		for _, f := range s.Feedback {
+			add(fmt.Sprintf("  %s %-10s %s", f.Time.Local().Format("15:04:05"), f.Kind, f.Message))
 		}
 	}
 	return out

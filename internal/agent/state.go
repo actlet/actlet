@@ -156,11 +156,7 @@ func (s *stateSet) apply(m proto.Message) error {
 func answered(w *agentpb.WorkerState, o *agentpb.InferenceOutcome) {
 	w.Messages = append(w.Messages, o.GetMessage())
 	w.Continuation = o.GetDone().GetContinuation()
-	u := o.GetDone().GetUsage()
-	w.Usage.InputTokens += u.GetInputTokens()
-	w.Usage.OutputTokens += u.GetOutputTokens()
-	w.Usage.CacheReadTokens += u.GetCacheReadTokens()
-	w.Usage.CacheWriteTokens += u.GetCacheWriteTokens()
+	addUsage(w.Usage, o.GetDone().GetUsage())
 	w.Turn++
 	w.Inference = nil
 	switch {
@@ -178,6 +174,7 @@ func answered(w *agentpb.WorkerState, o *agentpb.InferenceOutcome) {
 // resolved applies a tool call's outcome. When every call of the answer
 // has one, the results join the conversation, in the order of the calls.
 func resolved(w *agentpb.WorkerState, o *agentpb.ToolOutcome) {
+	addUsage(w.Usage, o.GetUsage())
 	for i, in := range w.Intents {
 		if in.GetCallId() == o.GetCallId() {
 			w.Intents = append(w.Intents[:i], w.Intents[i+1:]...)
@@ -198,6 +195,20 @@ func resolved(w *agentpb.WorkerState, o *agentpb.ToolOutcome) {
 	}
 	w.Messages = append(w.Messages, msg)
 	w.Pending, w.Intents, w.Results = nil, nil, nil
+}
+
+// addUsage adds what a call used to a worker's usage. Costs add up in the
+// currency the worker's first priced call used; a call priced in another
+// currency adds its tokens only.
+func addUsage(to, u *gatewayv0.Usage) {
+	to.InputTokens += u.GetInputTokens()
+	to.OutputTokens += u.GetOutputTokens()
+	to.CacheReadTokens += u.GetCacheReadTokens()
+	to.CacheWriteTokens += u.GetCacheWriteTokens()
+	if u.GetCost() > 0 && (to.Currency == "" || to.Currency == u.GetCurrency()) {
+		to.Cost += u.GetCost()
+		to.Currency = u.GetCurrency()
+	}
 }
 
 // result returns the outcome of a call of the pending answer, or nil.

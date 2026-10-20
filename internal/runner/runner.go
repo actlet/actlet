@@ -432,7 +432,12 @@ func agentSettings(cfg Config, p *gatewayv0.Profile, effective *sessionpb.Config
 	if len(p.GetTools()) > 0 {
 		s.Tools.Grants = []tools.Grant{}
 		for _, g := range p.GetTools() {
-			s.Tools.Grants = append(s.Tools.Grants, tools.Grant{Name: g.GetName(), Settings: g.GetSettings()})
+			grant := tools.Grant{Name: g.GetName(), Settings: g.GetSettings()}
+			if agent.IsStandard(g.GetName()) {
+				s.Standard = append(s.Standard, grant)
+			} else {
+				s.Tools.Grants = append(s.Tools.Grants, grant)
+			}
 		}
 	}
 	return s, nil

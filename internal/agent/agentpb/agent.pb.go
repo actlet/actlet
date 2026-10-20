@@ -530,8 +530,10 @@ type ToolOutcome struct {
 	IsError        bool   `protobuf:"varint,4,opt,name=is_error,json=isError,proto3" json:"is_error,omitempty"`
 	OutcomeUnknown bool   `protobuf:"varint,5,opt,name=outcome_unknown,json=outcomeUnknown,proto3" json:"outcome_unknown,omitempty"`
 	// Decided by recovery rather than by running the call.
-	Recovered     bool   `protobuf:"varint,6,opt,name=recovered,proto3" json:"recovered,omitempty"`
-	WorkerId      string `protobuf:"bytes,7,opt,name=worker_id,json=workerId,proto3" json:"worker_id,omitempty"`
+	Recovered bool   `protobuf:"varint,6,opt,name=recovered,proto3" json:"recovered,omitempty"`
+	WorkerId  string `protobuf:"bytes,7,opt,name=worker_id,json=workerId,proto3" json:"worker_id,omitempty"`
+	// What a call through the gateway used, such as an llm call.
+	Usage         *v0.Usage `protobuf:"bytes,8,opt,name=usage,proto3" json:"usage,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -613,6 +615,13 @@ func (x *ToolOutcome) GetWorkerId() string {
 		return x.WorkerId
 	}
 	return ""
+}
+
+func (x *ToolOutcome) GetUsage() *v0.Usage {
+	if x != nil {
+		return x.Usage
+	}
+	return nil
 }
 
 // Spawn creates a subagent for a parent's spawn_subagent call (kind
@@ -871,7 +880,7 @@ const file_internal_agent_agentpb_agent_proto_rawDesc = "" +
 	"\x05input\x18\x04 \x01(\tR\x05input\x12\x14\n" +
 	"\x05check\x18\x05 \x01(\fR\x05check\x12\x16\n" +
 	"\x06policy\x18\x06 \x01(\tR\x06policy\x12\x1b\n" +
-	"\tworker_id\x18\a \x01(\tR\bworkerId\"\xdc\x01\n" +
+	"\tworker_id\x18\a \x01(\tR\bworkerId\"\x8c\x02\n" +
 	"\vToolOutcome\x12\x1b\n" +
 	"\tintent_id\x18\x01 \x01(\tR\bintentId\x12\x17\n" +
 	"\acall_id\x18\x02 \x01(\tR\x06callId\x12\x18\n" +
@@ -879,7 +888,8 @@ const file_internal_agent_agentpb_agent_proto_rawDesc = "" +
 	"\bis_error\x18\x04 \x01(\bR\aisError\x12'\n" +
 	"\x0foutcome_unknown\x18\x05 \x01(\bR\x0eoutcomeUnknown\x12\x1c\n" +
 	"\trecovered\x18\x06 \x01(\bR\trecovered\x12\x1b\n" +
-	"\tworker_id\x18\a \x01(\tR\bworkerId\"\xb3\x01\n" +
+	"\tworker_id\x18\a \x01(\tR\bworkerId\x12.\n" +
+	"\x05usage\x18\b \x01(\v2\x18.actlet.gateway.v0.UsageR\x05usage\"\xb3\x01\n" +
 	"\x05Spawn\x12\x1b\n" +
 	"\tintent_id\x18\x01 \x01(\tR\bintentId\x12\x1b\n" +
 	"\tparent_id\x18\x02 \x01(\tR\bparentId\x12\x17\n" +
@@ -935,12 +945,13 @@ var file_internal_agent_agentpb_agent_proto_depIdxs = []int32{
 	7,  // 7: actlet.agent.v0.WorkerState.done:type_name -> actlet.agent.v0.WorkerDone
 	9,  // 8: actlet.agent.v0.InferenceOutcome.message:type_name -> actlet.gateway.v0.Message
 	11, // 9: actlet.agent.v0.InferenceOutcome.done:type_name -> actlet.gateway.v0.InferenceDone
-	1,  // 10: actlet.agent.v0.Spawn.worker:type_name -> actlet.agent.v0.WorkerState
-	11, // [11:11] is the sub-list for method output_type
-	11, // [11:11] is the sub-list for method input_type
-	11, // [11:11] is the sub-list for extension type_name
-	11, // [11:11] is the sub-list for extension extendee
-	0,  // [0:11] is the sub-list for field type_name
+	10, // 10: actlet.agent.v0.ToolOutcome.usage:type_name -> actlet.gateway.v0.Usage
+	1,  // 11: actlet.agent.v0.Spawn.worker:type_name -> actlet.agent.v0.WorkerState
+	12, // [12:12] is the sub-list for method output_type
+	12, // [12:12] is the sub-list for method input_type
+	12, // [12:12] is the sub-list for extension type_name
+	12, // [12:12] is the sub-list for extension extendee
+	0,  // [0:12] is the sub-list for field type_name
 }
 
 func init() { file_internal_agent_agentpb_agent_proto_init() }

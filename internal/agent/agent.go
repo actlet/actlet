@@ -97,6 +97,9 @@ type Settings struct {
 	MaxSubagentDepth, MaxSubagents int
 	// Tools selects and configures the tools; the agent sets the paths.
 	Tools tools.Options
+	// Standard are the standard tools the profile grants, with their
+	// settings.
+	Standard []tools.Grant
 }
 
 // InferFunc makes a model call through the gateway.
@@ -153,12 +156,13 @@ var errStopped = errors.New("stopped")
 
 // box is the agent of a session: its workers and what they share.
 type box struct {
-	env   Env
-	log   *slog.Logger
-	def   definition
-	tools *tools.Set
-	locks *tools.Locks
-	slots chan struct{} // running workers
+	env      Env
+	log      *slog.Logger
+	def      definition
+	tools    *tools.Set
+	standard map[string]*standardTool
+	locks    *tools.Locks
+	slots    chan struct{} // running workers
 
 	mu         sync.Mutex
 	st         *stateSet
@@ -201,6 +205,7 @@ func Run(env Env) (done bool, err error) {
 	if b.tools, err = tools.New(topts); err != nil {
 		return false, err
 	}
+	b.standard = b.standardTools()
 
 	if len(env.Records) > 0 {
 		for _, r := range env.Records {
@@ -280,6 +285,11 @@ func Tools(s Settings, f sessionfs.Folder) ([]*gatewayv0.ToolInfo, []string, err
 	if s.MaxSubagentDepth > 0 && s.MaxSubagents > 0 {
 		out = append(out, &gatewayv0.ToolInfo{Name: SpawnTool, Policy: "spawn", Description: "start a subagent on a subtask"})
 	}
+	b := &box{env: Env{Settings: s}}
+	for name, t := range b.standardTools() {
+		out = append(out, &gatewayv0.ToolInfo{Name: name, Policy: t.policy, Description: firstLine(t.spec.GetDescription())})
+	}
+	slices.SortFunc(out, func(a, b *gatewayv0.ToolInfo) int { return strings.Compare(a.GetName(), b.GetName()) })
 	return out, ts.Notes(), nil
 }
 

@@ -26,6 +26,8 @@ const (
 	MaxItems = 2000
 	// MaxLog bounds the raw event log.
 	MaxLog = 5000
+	// MaxFeedback bounds the feedback kept.
+	MaxFeedback = 200
 )
 
 // Session is the presentation state of a session.
@@ -46,6 +48,11 @@ type Session struct {
 	Info *Info
 	// Usage totals the model calls' tokens and cost.
 	Usage Usage
+	// Progress is the agent's latest progress report; nil before one.
+	Progress *Progress
+	// Feedback is what the agent sent, oldest first.
+	Feedback        []Feedback
+	FeedbackDropped int
 	// Items is the session's own timeline: its start and state changes,
 	// commands, operator notes and messages.
 	Items   []*Item
@@ -82,6 +89,23 @@ type Worker struct {
 
 	last  *Turn
 	calls map[string]*ToolCall
+}
+
+// Progress is a progress report of the agent's.
+type Progress struct {
+	Worker  string
+	Message string
+	// Percent is how far along it is, or -1 when it didn't say.
+	Percent int
+	Time    time.Time
+}
+
+// Feedback is feedback the agent sent.
+type Feedback struct {
+	Worker  string
+	Kind    string
+	Message string
+	Time    time.Time
 }
 
 // WorkerStatus is how far a worker is.
@@ -462,6 +486,8 @@ func (s *Session) Apply(ev *gatewayv0.ActivityEvent) {
 		c := w.call(ev, f.GetCallId(), f.GetTool())
 		c.Output = Sanitize(f.GetOutput())
 		c.Took = f.GetTook().AsDuration()
+		w.Usage.add(f.GetUsage())
+		s.Usage.add(f.GetUsage())
 		switch {
 		case f.GetOutcomeUnknown():
 			c.Status = ToolUnknown
@@ -469,6 +495,19 @@ func (s *Session) Apply(ev *gatewayv0.ActivityEvent) {
 			c.Status = ToolError
 		default:
 			c.Status = ToolOK
+		}
+	case *gatewayv0.ActivityEvent_Progress:
+		p := &Progress{Worker: Sanitize(ev.GetWorker()), Message: Sanitize(b.Progress.GetMessage()), Percent: -1, Time: at}
+		if b.Progress.Percent != nil {
+			p.Percent = int(min(b.Progress.GetPercent(), 100))
+		}
+		s.Progress = p
+	case *gatewayv0.ActivityEvent_Feedback:
+		s.Feedback = append(s.Feedback, Feedback{Worker: Sanitize(ev.GetWorker()), Kind: Sanitize(b.Feedback.GetKind()),
+			Message: Sanitize(b.Feedback.GetMessage()), Time: at})
+		if n := len(s.Feedback) - MaxFeedback; n > 0 {
+			s.Feedback = append([]Feedback(nil), s.Feedback[n:]...)
+			s.FeedbackDropped += n
 		}
 	case *gatewayv0.ActivityEvent_FileChange:
 		if w == nil {
@@ -735,6 +774,13 @@ func Describe(ev *gatewayv0.ActivityEvent) string {
 		return fmt.Sprintf("subagent_finished error=%v: %s", b.SubagentFinished.GetIsError(), firstLine(b.SubagentFinished.GetResult()))
 	case *gatewayv0.ActivityEvent_SessionInfo:
 		return "session_info: task " + b.SessionInfo.GetTaskId()
+	case *gatewayv0.ActivityEvent_Progress:
+		if b.Progress.Percent != nil {
+			return fmt.Sprintf("progress %d%%: %s", b.Progress.GetPercent(), firstLine(b.Progress.GetMessage()))
+		}
+		return "progress: " + firstLine(b.Progress.GetMessage())
+	case *gatewayv0.ActivityEvent_Feedback:
+		return fmt.Sprintf("feedback (%s): %s", b.Feedback.GetKind(), firstLine(b.Feedback.GetMessage()))
 	}
 	return "an event this viewer doesn't know"
 }
