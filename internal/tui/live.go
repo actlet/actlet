@@ -145,3 +145,60 @@ func RunReplay(ctx context.Context, m *Model, speed float64) error {
 	}
 	return err
 }
+
+// DumpOptions choose the screen DumpLive prints.
+type DumpOptions struct {
+	Tab           int
+	Width, Height int
+	// File, if set, is opened in the file viewer, as the sidebar names it.
+	File       string
+	Separators bool
+}
+
+// DumpLive renders a box's screen once, as text: what it holds now. It
+// takes what the box sends until it goes quiet.
+func DumpLive(ctx context.Context, client attachv0.AttachClient, conn Connection, o DumpOptions) (string, error) {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	m := NewLive(conn, nil, "")
+	m.SetSize(o.Width, o.Height)
+	m.SetTab(o.Tab)
+	m.SetSeparators(o.Separators)
+	m.SetFileReader(Files(ctx, client, conn.Dir))
+	msgs := make(chan tea.Msg, 64)
+	errc := make(chan error, 1)
+	go func() {
+		errc <- Feed(ctx, client, func(msg tea.Msg) {
+			select {
+			case msgs <- msg:
+			case <-ctx.Done():
+			}
+		})
+	}()
+	dump := func() string {
+		if o.File != "" {
+			m.Open(o.File)
+		}
+		return m.Dump()
+	}
+	// The backlog comes at once.
+	idle := time.NewTimer(2 * time.Second)
+	for {
+		select {
+		case msg := <-msgs:
+			m.Update(msg)
+			idle.Reset(300 * time.Millisecond)
+		case err := <-errc:
+			// Take what was sent before the feed ended.
+			for len(msgs) > 0 {
+				m.Update(<-msgs)
+			}
+			if err != nil && m.Session().Events == 0 {
+				return "", err
+			}
+			return dump(), nil
+		case <-idle.C:
+			return dump(), nil
+		}
+	}
+}

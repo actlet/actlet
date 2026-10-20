@@ -8,14 +8,10 @@ import (
 	"io"
 	"os/user"
 	"path/filepath"
-	"time"
-
-	tea "charm.land/bubbletea/v2"
 
 	"github.com/actlet/actlet/internal/attach"
 	"github.com/actlet/actlet/internal/sessionfs"
 	"github.com/actlet/actlet/internal/tui"
-	attachv0 "github.com/actlet/actlet/proto/actlet/attach/v0"
 )
 
 const attachUsage = `Usage: actlet attach [flags]
@@ -60,7 +56,9 @@ func runAttach(args []string, stdout, stderr io.Writer) int {
 	defer func() { _ = closeClient() }()
 	conn := tui.Connection{Kind: "local box", Target: absPath(*dir), Dir: absPath(*dir)}
 	if *dump {
-		out, err := dumpLive(context.Background(), client, conn, t, *width, *height, *file, *separators)
+		out, err := tui.DumpLive(context.Background(), client, conn, tui.DumpOptions{
+			Tab: t, Width: *width, Height: *height, File: *file, Separators: *separators,
+		})
 		if err != nil {
 			fmt.Fprintf(stderr, "actlet attach: %v\n", err)
 			return 1
@@ -77,42 +75,6 @@ func runAttach(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	return 0
-}
-
-// dumpLive renders a box's screen once: what it holds now.
-func dumpLive(ctx context.Context, client attachv0.AttachClient, conn tui.Connection, tab, w, h int, file string, separators bool) (string, error) {
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-	m := tui.NewLive(conn, nil, "")
-	m.SetSize(w, h)
-	m.SetTab(tab)
-	m.SetSeparators(separators)
-	m.SetFileReader(tui.Files(ctx, client, conn.Dir))
-	msgs := make(chan tea.Msg, 64)
-	errc := make(chan error, 1)
-	go func() { errc <- tui.Feed(ctx, client, func(msg tea.Msg) { msgs <- msg }) }()
-	// Take what arrives until it goes quiet: the backlog comes at once.
-	idle := time.NewTimer(2 * time.Second)
-	for {
-		select {
-		case msg := <-msgs:
-			m.Update(msg)
-			idle.Reset(300 * time.Millisecond)
-		case err := <-errc:
-			if err != nil && m.Session().Events == 0 {
-				return "", err
-			}
-			if file != "" {
-				m.Open(file)
-			}
-			return m.Dump(), nil
-		case <-idle.C:
-			if file != "" {
-				m.Open(file)
-			}
-			return m.Dump(), nil
-		}
-	}
 }
 
 func absPath(p string) string {

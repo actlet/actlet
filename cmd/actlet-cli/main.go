@@ -1,6 +1,7 @@
-// Command actlet-cli holds Actlet's offline tools: inspecting and exporting
-// session journals and activity recordings. It never runs a session and
-// needs no gateway.
+// Command actlet-cli holds Actlet's tools for people: inspecting,
+// exporting and playing back session journals and activity recordings,
+// offline, and attaching the terminal viewer to a running session. It
+// never runs a session.
 package main
 
 import (
@@ -11,14 +12,16 @@ import (
 	"github.com/actlet/actlet/internal/buildinfo"
 )
 
-const usage = `actlet-cli works with Actlet's files offline.
+const usage = `actlet-cli works with Actlet's files offline, and attaches to running
+sessions.
 
 Usage:
   actlet-cli <command> [arguments]
 
 Commands:
+  attach     Watch and steer a running session, through the orchestrator or directly
   journal    Inspect and export session journals (.actlet)
-  replay     Inspect and export activity recordings (.actrec)
+  replay     Inspect, export and play activity recordings (.actrec)
   version    Print version information
   help       Print this help
 
@@ -37,6 +40,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 	}
 	cmd, rest := args[0], args[1:]
 	switch cmd {
+	case "attach":
+		return runAttach(rest, stdout, stderr)
 	case "journal":
 		return runJournal(rest, stdout, stderr)
 	case "replay":
