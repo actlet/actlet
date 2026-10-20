@@ -205,7 +205,7 @@ func TestProgramSmoke(t *testing.T) {
 		}
 		return &gatewayv0.CommandAck{Result: gatewayv0.CommandResult_COMMAND_RESULT_ACCEPTED}, nil
 	}, "tester")
-	var out bytes.Buffer
+	var out syncBuffer
 	p := tea.NewProgram(m, tea.WithInput(&bytes.Buffer{}), tea.WithOutput(&out), tea.WithWindowSize(100, 30),
 		tea.WithoutSignals(), tea.WithContext(t.Context()))
 	done := make(chan error, 1)
@@ -214,6 +214,10 @@ func TestProgramSmoke(t *testing.T) {
 		done <- err
 	}()
 	p.Send(watch(run()))
+	// Let the chat draw before the keys move away from it.
+	for deadline := time.Now().Add(5 * time.Second); !strings.Contains(out.String(), "WORKERS") && time.Now().Before(deadline); {
+		time.Sleep(10 * time.Millisecond)
+	}
 	keys := func(s ...string) {
 		for _, k := range s {
 			switch k {
@@ -258,8 +262,26 @@ func TestProgramSmoke(t *testing.T) {
 		t.Errorf("notice %q", m.notice)
 	}
 	if m.worker != "root" || !strings.Contains(out.String(), "WORKERS") {
-		t.Errorf("worker %q; output %d bytes", m.worker, out.Len())
+		t.Errorf("worker %q; output %d bytes", m.worker, len(out.String()))
 	}
+}
+
+// syncBuffer is a buffer a program writes while a test reads it.
+type syncBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *syncBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *syncBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
 }
 
 // Untrusted text can't drive the terminal from either view.
