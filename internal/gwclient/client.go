@@ -12,6 +12,7 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"math/rand/v2"
 	"os"
@@ -344,7 +345,19 @@ func (c *Client) controlOnce(ctx context.Context, h ControlHandler) (established
 			sendMu.Lock()
 			err := stream.CloseSend()
 			sendMu.Unlock()
-			return established, err
+			if err != nil {
+				return established, err
+			}
+			// Let the gateway finish the stream, so the final status is
+			// delivered before the stream is torn down.
+			select {
+			case err := <-recvErr:
+				if !errors.Is(err, io.EOF) {
+					c.log.Debug("control: stream ended after the final status", "err", err)
+				}
+			case <-time.After(2 * time.Second):
+			}
+			return established, nil
 		}
 	}
 }
