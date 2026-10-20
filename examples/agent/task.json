@@ -1,0 +1,7 @@
+{
+  "schema": "v0",
+  "id": "sum-numbers",
+  "kind": "agent",
+  "definition": {"max_turns": 20},
+  "input": "Add up the numbers in inputs/numbers.txt and write a short report to output/report.md."
+}

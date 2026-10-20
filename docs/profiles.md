@@ -1,6 +1,6 @@
 # Profiles
 
-A **profile** is what the orchestrator lets a session do: limits, how it pauses and stops, which features it needs from the worker, and later its budgets, models and tools. The gateway hands one to every worker when it registers. The worker applies it within the ceilings of its own deployment (`actlet run -h` lists them) and records the effective configuration in the session journal.
+A **profile** is what the orchestrator lets a session do: limits, how it pauses and stops, which features it needs from the worker, its models and tools, what the agent is told, and later its budgets. The gateway hands one to every worker when it registers. The worker applies it within the ceilings of its own deployment (`actlet run -h` lists them) and records the effective configuration in the session journal.
 
 The schema is versioned (`schema: v0`) and **experimental**. The SDK reads it from Go structs or from JSON or YAML files; all three describe the same fields.
 
@@ -39,11 +39,18 @@ models:
     main: large
     subagent: fast
     llm: fast
-tools:
+tools:                          # the local tools to offer; omit for all of them
   - name: shell
+    settings:
+      timeout: 5m
   - name: decide
     settings:
       route: humans
+instructions: |                 # the implementor's layer of the agent's prompt
+  Follow the repository's CONTRIBUTING.md.
+tools_manifest: |               # what is installed, for the agent
+  Go 1.27, Node 22 and jq are installed.
+checkpoint_every_turns: 1       # model turns between checkpoints
 ```
 
 The same document as JSON has the same field names. Durations are strings such as `"30s"` in both formats.
@@ -62,7 +69,7 @@ All problems are reported at once.
 
 ### Required features
 
-`required_features` names capabilities the worker announces when it registers. Today those are `control.pause`, `control.stop`, `control.steer`, `activity.v0` and `task.demo`. A gateway built on the SDK refuses to register a worker that lacks any of them, and the worker refuses such a profile itself too. An older worker therefore never runs a profile it only half understands: it exits with code 1 and names the missing features.
+`required_features` names capabilities the worker announces when it registers. Today those are `control.pause`, `control.stop`, `control.steer`, `activity.v0`, `task.demo`, `task.agent`, `inference.v0` and `tools.local`. A gateway built on the SDK refuses to register a worker that lacks any of them, and the worker refuses such a profile itself too. An older worker therefore never runs a profile it only half understands: it exits with code 1 and names the missing features.
 
 ## Using profiles from Go
 
@@ -80,4 +87,8 @@ wire, err := p.Proto() // validates, then converts for RegisterResponse.Profile
 
 ## Models
 
-Workers never see provider names, endpoints or credentials. They see only the aliases the orchestrator defines, and which alias each role (`main`, `subagent`, `llm`) uses. The orchestrator resolves an alias when the worker asks for a model.
+Workers never see provider names, endpoints or credentials. They see only the aliases the orchestrator defines, and which alias each role (`main`, `subagent`, `llm`) uses. The orchestrator resolves an alias when the worker asks for a model. The agent uses the `main` role's alias, or `main` when the profile has no models.
+
+## The agent
+
+`instructions`, `base_prompt` (which replaces Actlet's own) and `tools_manifest` make up the agent's prompt, and `tools` selects and configures its local tools. See [the agent](agent.md).

@@ -1,0 +1,31 @@
+# A scripted model for the example task: actlet-devgw -model plays these
+# turns in order, and checks the tool results each turn receives.
+turns:
+  - text: Let me read the input first.
+    tool_calls:
+      - name: read_file
+        input: {path: ../inputs/numbers.txt}
+  - expect:
+      - contains: "     3\t5"
+    text: I'll sort the numbers with the shell and add them up in Python.
+    tool_calls:
+      - name: shell
+        input: {command: "sort -n ../inputs/numbers.txt > sorted.txt && wc -l < sorted.txt"}
+      - name: python
+        input: {code: "nums = [int(line) for line in open('sorted.txt')]\nprint(sum(nums))"}
+  - expect:
+      - contains: "stdout:\n"
+      - contains: "stdout:\n12\n"
+    text: Writing the report.
+    tool_calls:
+      - name: write_file
+        input: {path: report.md, content: "# Report\n\nTotal: TBD\n"}
+      - name: edit_file
+        input: {path: report.md, old_string: TBD, new_string: "12"}
+      - name: shell
+        input: {command: "cp report.md ../output/report.md"}
+  - expect:
+      - contains: created report.md
+      - contains: "+Total: 12"
+      - contains: exit code 0
+    text: The numbers add up to 12. The report is in output/report.md.
