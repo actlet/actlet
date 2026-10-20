@@ -179,7 +179,7 @@ func runRun(args []string, stdout, stderr io.Writer, signals <-chan os.Signal) i
 					return
 				}
 				defer func() { _ = closeClient() }()
-				conn := tui.Connection{Kind: "this process", Target: absPath(*dir)}
+				conn := tui.Connection{Kind: "this process", Target: absPath(*dir), Dir: absPath(*dir)}
 				if err := tui.RunLive(context.Background(), client, conn, viewerName()); err != nil {
 					log.Error("tui", "err", err)
 				}

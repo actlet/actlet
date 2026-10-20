@@ -58,7 +58,7 @@ func runAttach(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	defer func() { _ = closeClient() }()
-	conn := tui.Connection{Kind: "local box", Target: absPath(*dir)}
+	conn := tui.Connection{Kind: "local box", Target: absPath(*dir), Dir: absPath(*dir)}
 	if *dump {
 		out, err := dumpLive(context.Background(), client, conn, t, *width, *height, *file, *separators)
 		if err != nil {
@@ -87,7 +87,7 @@ func dumpLive(ctx context.Context, client attachv0.AttachClient, conn tui.Connec
 	m.SetSize(w, h)
 	m.SetTab(tab)
 	m.SetSeparators(separators)
-	m.SetFileReader(tui.Files(ctx, client))
+	m.SetFileReader(tui.Files(ctx, client, conn.Dir))
 	msgs := make(chan tea.Msg, 64)
 	errc := make(chan error, 1)
 	go func() { errc <- tui.Feed(ctx, client, func(msg tea.Msg) { msgs <- msg }) }()

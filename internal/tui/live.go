@@ -118,7 +118,7 @@ func RunLive(ctx context.Context, client attachv0.AttachClient, conn Connection,
 	}
 	defer closeTerm()
 	m := NewLive(conn, Commands(ctx, client), actor)
-	m.SetFileReader(Files(ctx, client))
+	m.SetFileReader(Files(ctx, client, conn.Dir))
 	programs.Add(1)
 	p := tea.NewProgram(m, tea.WithContext(ctx), tea.WithInput(in), tea.WithOutput(out))
 	go func() { _ = Feed(ctx, client, p.Send) }()

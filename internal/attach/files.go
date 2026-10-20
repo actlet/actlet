@@ -31,12 +31,18 @@ func (s *Server) ReadFile(_ context.Context, req *attachv0.ReadFileRequest) (*at
 	if s.dir == "" {
 		return nil, status.Error(codes.Unimplemented, "this box serves no files")
 	}
+	return ReadFile(s.dir, req)
+}
+
+// ReadFile reads a file of the session folder dir as the ReadFile call
+// does, for a viewer on the same machine once the box has gone.
+func ReadFile(dir string, req *attachv0.ReadFileRequest) (*attachv0.ReadFileResponse, error) {
 	if req.GetPath() == "" {
 		return nil, status.Error(codes.InvalidArgument, "no path")
 	}
 	path := req.GetPath()
 	if !filepath.IsAbs(path) {
-		path = filepath.Join(s.dir, "workspace", path)
+		path = filepath.Join(dir, "workspace", path)
 	}
 	// Resolve symbolic links first, so none leads out of the readable
 	// directories.
@@ -47,7 +53,7 @@ func (s *Server) ReadFile(_ context.Context, req *attachv0.ReadFileRequest) (*at
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "%v", err)
 	}
-	rel, ok := s.readable(real)
+	rel, ok := readable(dir, real)
 	if !ok {
 		return nil, status.Errorf(codes.PermissionDenied, "%s is outside inputs/, workspace/ and output/", req.GetPath())
 	}
@@ -76,10 +82,10 @@ func (s *Server) ReadFile(_ context.Context, req *attachv0.ReadFileRequest) (*at
 	return resp, nil
 }
 
-// readable reports whether a resolved path is in a readable directory,
-// and returns it relative to the session folder.
-func (s *Server) readable(real string) (string, bool) {
-	root, err := filepath.EvalSymlinks(s.dir)
+// readable reports whether a resolved path is in a readable directory of
+// the session folder dir, and returns it relative to dir.
+func readable(dir, real string) (string, bool) {
+	root, err := filepath.EvalSymlinks(dir)
 	if err != nil {
 		return "", false
 	}

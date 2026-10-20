@@ -39,6 +39,9 @@ type Connection struct {
 	Kind string
 	// Target is the socket or file.
 	Target string
+	// Dir is the session folder of a box on this machine, to read its
+	// files from once the box has gone.
+	Dir string
 }
 
 // Commander sends a command to the box; nil when there is none, as in a

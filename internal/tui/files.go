@@ -11,7 +11,10 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
+	"github.com/actlet/actlet/internal/attach"
 	"github.com/actlet/actlet/internal/view"
 	attachv0 "github.com/actlet/actlet/proto/actlet/attach/v0"
 )
@@ -20,12 +23,19 @@ import (
 // to the session folder.
 type FileReader func(path string) (*attachv0.ReadFileResponse, error)
 
-// Files returns a FileReader for the box.
-func Files(ctx context.Context, client attachv0.AttachClient) FileReader {
+// Files returns a FileReader for the box. When the box can't be reached,
+// such as after the session ended, it reads the session folder dir
+// itself, if it is given.
+func Files(ctx context.Context, client attachv0.AttachClient, dir string) FileReader {
 	return func(p string) (*attachv0.ReadFileResponse, error) {
 		cctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
-		return client.ReadFile(cctx, &attachv0.ReadFileRequest{Path: view.ToolPath(p)})
+		req := &attachv0.ReadFileRequest{Path: view.ToolPath(p)}
+		resp, err := client.ReadFile(cctx, req)
+		if status.Code(err) == codes.Unavailable && dir != "" {
+			return attach.ReadFile(dir, req)
+		}
+		return resp, err
 	}
 }
 

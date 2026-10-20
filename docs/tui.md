@@ -79,7 +79,7 @@ A refused command shows in the status line, and the session isn't touched.
 
 ## How it attaches
 
-A running box listens on a Unix socket in its session folder, `.actlet/attach.sock`, readable only by its own user. When the folder's path is too long for a socket, the socket goes in the temporary directory instead and `.actlet/attach.addr` names it. Windows 10 and later have Unix sockets too, so it works the same there. `-no-attach` (or `ACTLET_NO_ATTACH=true`) turns it off.
+A running box listens on a Unix socket in its session folder, `.actlet/attach.sock`, readable only by its own user. When the folder's path is too long for a socket, the socket goes in the temporary directory instead and `.actlet/attach.addr` names it. Windows 10 and later have Unix sockets too, so it works the same there. `-no-attach` (or `ACTLET_NO_ATTACH=true`) turns it off. Once the session ends the socket goes away; a viewer still open on the same machine then reads files from the session folder itself, by the same rules.
 
 The socket serves the attach protocol, [`proto/actlet/attach/v0`](../proto/actlet/attach/v0/attach.proto), over gRPC: `Info` describes the session and the box's figures, `Watch` streams the run's activity from a position (what the box still holds, then live events), and `Command` sends a note or, when allowed, a pause or stop. The box keeps the last few thousand events, plus the run's start, state changes and subagent starts and ends, so a late viewer still sees the run's shape; a viewer told it missed events shows that in the Session tab. Remote viewers will use the same protocol.
 

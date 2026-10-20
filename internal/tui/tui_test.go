@@ -15,6 +15,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -469,5 +470,39 @@ func TestTruncateLeft(t *testing.T) {
 		if got := truncateLeft(tt.in, tt.width); got != tt.want {
 			t.Errorf("truncateLeft(%q, %d) = %q, want %q", tt.in, tt.width, got, tt.want)
 		}
+	}
+}
+
+// goneBox is a box that has stopped serving.
+type goneBox struct{ attachv0.AttachClient }
+
+func (goneBox) ReadFile(context.Context, *attachv0.ReadFileRequest, ...grpc.CallOption) (*attachv0.ReadFileResponse, error) {
+	return nil, status.Error(codes.Unavailable, "connection refused")
+}
+
+// Once the session ends the box stops serving, but a viewer on the same
+// machine can still open the files, by the same rules.
+func TestFilesAfterTheBoxEnds(t *testing.T) {
+	dir := t.TempDir()
+	for _, d := range []string{"workspace", "output", ".actlet"} {
+		if err := os.MkdirAll(filepath.Join(dir, d), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for name, data := range map[string]string{"output/report.md": "Total: 12\n", ".actlet/run.log": "private\n"} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(data), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	read := Files(t.Context(), goneBox{}, dir)
+	resp, err := read("output/report.md")
+	if err != nil || string(resp.GetContent()) != "Total: 12\n" || resp.GetPath() != "output/report.md" {
+		t.Errorf("report: %v, %v", resp, err)
+	}
+	if _, err := read(".actlet/run.log"); status.Code(err) != codes.PermissionDenied {
+		t.Errorf("state file: %v", err)
+	}
+	if _, err := Files(t.Context(), goneBox{}, "")("output/report.md"); status.Code(err) != codes.Unavailable {
+		t.Errorf("without a folder: %v", err)
 	}
 }
