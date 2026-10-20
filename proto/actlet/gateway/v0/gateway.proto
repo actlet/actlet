@@ -71,6 +71,78 @@ message Profile {
   // Grace period for stop commands that don't give one.
   google.protobuf.Duration stop_grace = 5;
   DisconnectBehavior on_disconnect = 6;
+  // Features a worker must support to honour this profile, as named in
+  // RegisterRequest.capabilities. A worker that lacks any refuses the
+  // profile, and the gateway should not assign it to such a worker.
+  repeated string required_features = 7;
+  // Budgets limit the session's use of time, money, tokens and disk.
+  // Not enforced by v0 workers yet.
+  repeated Budget budgets = 8;
+  // The models the session may use, by alias. Workers never see provider
+  // names or credentials. Not used by v0 workers yet.
+  ModelCatalog models = 9;
+  // The tools the session may use. Not enforced by v0 workers yet.
+  repeated ToolGrant tools = 10;
+}
+
+message Budget {
+  BudgetKind kind = 1;
+  // The limit in the kind's unit: seconds for TIME, currency units for
+  // MONEY, tokens for TOKENS, bytes for DISK.
+  double limit = 2;
+  // ISO 4217 currency code, for MONEY budgets.
+  string currency = 3;
+  // Report when this percentage of the limit is used; 0 for never.
+  uint32 alert_at_percent = 4;
+  // What happens when the limit is reached.
+  BudgetAction on_exhaust = 5;
+  // How to wait, when on_exhaust is WAIT.
+  BudgetWaitMode wait_mode = 6;
+}
+
+enum BudgetKind {
+  BUDGET_KIND_UNSPECIFIED = 0;
+  BUDGET_KIND_TIME = 1;
+  BUDGET_KIND_MONEY = 2;
+  BUDGET_KIND_TOKENS = 3;
+  BUDGET_KIND_DISK = 4;
+}
+
+enum BudgetAction {
+  BUDGET_ACTION_UNSPECIFIED = 0;
+  // End the task.
+  BUDGET_ACTION_KILL = 1;
+  // Wait until the budget is reset.
+  BUDGET_ACTION_WAIT = 2;
+}
+
+enum BudgetWaitMode {
+  BUDGET_WAIT_MODE_UNSPECIFIED = 0;
+  // Pause the session: persist and exit.
+  BUDGET_WAIT_MODE_PAUSE = 1;
+  // Stay running but start no new work.
+  BUDGET_WAIT_MODE_IDLE = 2;
+}
+
+// ModelCatalog names the models a session may use by alias: a real model
+// name or a tier such as "large" or "fast", resolved by the orchestrator.
+message ModelCatalog {
+  repeated ModelAlias aliases = 1;
+  // Which alias each role uses, for example "main", "subagent" or "llm".
+  map<string, string> roles = 2;
+}
+
+message ModelAlias {
+  string alias = 1;
+  string description = 2;
+  repeated string capabilities = 3;
+}
+
+// ToolGrant allows the session to use a tool.
+message ToolGrant {
+  string name = 1;
+  // Tool-specific settings.
+  map<string, string> settings = 2;
 }
 
 message Limits {

@@ -236,6 +236,9 @@ func (s *Server) Register(ctx context.Context, req *gatewayv0.RegisterRequest) (
 	if !ValidSessionID(resp.SessionId) {
 		return nil, status.Errorf(codes.Internal, "assigned invalid session ID %q", resp.SessionId)
 	}
+	if missing := MissingFeatures(resp.GetProfile().GetRequiredFeatures(), req.GetCapabilities()); len(missing) > 0 {
+		return nil, status.Errorf(codes.FailedPrecondition, "the profile requires features this worker doesn't support: %s", strings.Join(missing, ", "))
+	}
 	sess := s.sessionFor(resp.SessionId)
 	sess.registered(req)
 	s.log.Info("worker registered", "session", resp.SessionId, "worker", req.GetWorkerId(), "epoch", req.GetEpoch())
@@ -377,3 +380,19 @@ func (s *Server) intakeBatch(ctx context.Context, lock *sync.Mutex, sid string, 
 // EventID returns the ID of the activity event with the given epoch and
 // sequence number.
 func EventID(epoch, seq uint64) string { return fmt.Sprintf("%d.%d", epoch, seq) }
+
+// MissingFeatures returns the required features that are not among the
+// supported ones.
+func MissingFeatures(required, supported []string) []string {
+	have := make(map[string]bool, len(supported))
+	for _, f := range supported {
+		have[f] = true
+	}
+	var missing []string
+	for _, f := range required {
+		if !have[f] {
+			missing = append(missing, f)
+		}
+	}
+	return missing
+}

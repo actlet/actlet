@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"slices"
 	"sync"
 	"time"
 
@@ -121,6 +122,9 @@ func Run(ctx context.Context, cfg Config, signals <-chan os.Signal) int {
 		return fail("the gateway assigned a different session to this folder", "folder", sessionID, "gateway", resp.GetSessionId())
 	}
 	sessionID = resp.GetSessionId()
+	if missing := missingFeatures(resp.GetProfile().GetRequiredFeatures()); len(missing) > 0 {
+		return fail("the profile requires features this worker doesn't support", "missing", missing)
+	}
 	log.Info("registered", "session", sessionID, "epoch", epoch, "profile", resp.GetProfile().GetId())
 
 	task, err := loadTask(folder, resp.GetTask())
@@ -202,6 +206,17 @@ func Run(ctx context.Context, cfg Config, signals <-chan os.Signal) int {
 		log.Error("closing the session journal", "err", err)
 	}
 	return outcome.ExitCode()
+}
+
+// missingFeatures returns the required features this worker lacks.
+func missingFeatures(required []string) []string {
+	var missing []string
+	for _, f := range required {
+		if !slices.Contains(Capabilities, f) {
+			missing = append(missing, f)
+		}
+	}
+	return missing
 }
 
 // loadTask uses task.json if the folder has one, or else the gateway's task,

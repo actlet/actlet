@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log/slog"
 	"net"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -450,5 +451,20 @@ func waitFor(t *testing.T, cond func() bool) {
 			t.Fatal("condition not met in time")
 		}
 		time.Sleep(5 * time.Millisecond)
+	}
+}
+
+func TestRegisterRefusesUnsupportedProfile(t *testing.T) {
+	h := newHarness(t, Options{Assign: func(context.Context, *gatewayv0.RegisterRequest) (*gatewayv0.RegisterResponse, error) {
+		return &gatewayv0.RegisterResponse{Profile: &gatewayv0.Profile{RequiredFeatures: []string{"control.pause", "budgets.v1"}}}, nil
+	}})
+	req := &gatewayv0.RegisterRequest{ProtocolVersion: ProtocolVersion, Capabilities: []string{"control.pause"}}
+	_, err := h.client.Register(authed(t.Context()), req)
+	if status.Code(err) != codes.FailedPrecondition || !strings.Contains(err.Error(), "budgets.v1") {
+		t.Fatalf("err = %v, want FailedPrecondition naming budgets.v1", err)
+	}
+	req.Capabilities = append(req.Capabilities, "budgets.v1")
+	if _, err := h.client.Register(authed(t.Context()), req); err != nil {
+		t.Fatalf("with the feature: %v", err)
 	}
 }

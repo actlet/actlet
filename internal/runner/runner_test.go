@@ -503,3 +503,12 @@ func testLogger() *slog.Logger {
 	}
 	return slog.New(slog.DiscardHandler)
 }
+
+func TestMissingFeatures(t *testing.T) {
+	if m := missingFeatures([]string{"control.pause", "activity.v0"}); len(m) != 0 {
+		t.Errorf("supported features reported missing: %v", m)
+	}
+	if m := missingFeatures([]string{"control.pause", "budgets.v1"}); len(m) != 1 || m[0] != "budgets.v1" {
+		t.Errorf("missing = %v, want [budgets.v1]", m)
+	}
+}
