@@ -114,6 +114,29 @@ message Profile {
   // When and how workers compact their context. Unset compacts by
   // default.
   CompactionPolicy compaction = 16;
+  // Skills for the agent, besides those in the image. A skill of the same
+  // name replaces the image's.
+  repeated Skill skills = 17;
+}
+
+// Skill is a Claude-style skill folder: SKILL.md, whose front matter
+// gives the skill's name and description and whose body its
+// instructions, and optional scripts and resources. The agent sees the
+// descriptions and loads a skill when it needs it.
+message Skill {
+  // The folder's name: 1 to 64 lowercase letters, digits and hyphens.
+  string name = 1;
+  // The folder's files, SKILL.md among them.
+  repeated SkillFile files = 2;
+}
+
+message SkillFile {
+  // The path in the skill's folder, such as "SKILL.md" or
+  // "scripts/extract.py", with forward slashes.
+  string path = 1;
+  bytes content = 2;
+  // Make it executable, as for a script.
+  bool executable = 3;
 }
 
 // CompactionPolicy controls context compaction: when a worker's context

@@ -57,6 +57,10 @@ func TestLoadProfileYAMLAndJSONAgree(t *testing.T) {
 	if tools := pb.GetTools(); len(tools) != 2 || tools[1].GetSettings()["route"] != "humans" {
 		t.Errorf("tools %v", tools)
 	}
+	if sk := pb.GetSkills(); len(sk) != 1 || sk[0].GetName() != "csv-report" || len(sk[0].GetFiles()) != 2 ||
+		sk[0].GetFiles()[1].GetPath() != "scripts/report.sh" || !sk[0].GetFiles()[1].GetExecutable() {
+		t.Errorf("skills %v", sk)
+	}
 	if c := pb.GetCompaction(); c.GetThresholdPercent() != 75 || c.GetModel() != "fast" || c.GetKeepTurns() != 3 {
 		t.Errorf("compaction %v", c)
 	}
@@ -133,6 +137,7 @@ func TestProfileValidation(t *testing.T) {
 		"empty tool":                    func(p *Profile) { p.Tools = []ToolGrant{{}} },
 		"unknown compaction strategy":   func(p *Profile) { p.Compaction = &Compaction{Strategy: "truncate"} },
 		"compaction threshold over 100": func(p *Profile) { p.Compaction = &Compaction{ThresholdPercent: 101} },
+		"skill without dir":             func(p *Profile) { p.Skills = []SkillSource{{}} },
 		"compaction by unknown alias": func(p *Profile) {
 			p.Models = &Models{Aliases: []ModelAlias{{Alias: "a"}}}
 			p.Compaction = &Compaction{Model: "b"}
@@ -177,6 +182,39 @@ reset_budgets: [money, tokens]
 	for _, bad := range []string{`{}`, `reset_budgets: [fun]`, `budgets: [{kind: money, limit: 1, on_exhaust: kill}]`, `nonsense: 1`} {
 		if _, err := ParseProfileUpdate([]byte(bad)); err == nil {
 			t.Errorf("%s: no error", bad)
+		}
+	}
+}
+
+// A profile's skill folders are read when it is sent: one that isn't a
+// skill, the same skill twice, or too much in all is refused.
+func TestProfileSkills(t *testing.T) {
+	dir := t.TempDir()
+	write := func(name, content string) {
+		p := filepath.Join(dir, filepath.FromSlash(name))
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("big/SKILL.md", "---\ndescription: Big.\n---\n")
+	for i := range 3 {
+		write(fmt.Sprintf("big/data%d.txt", i), strings.Repeat("x", 900<<10))
+	}
+	write("plain/README.md", "not a skill")
+	for name, skills := range map[string][]SkillSource{
+		"not a skill": {{Dir: filepath.Join(dir, "plain")}},
+		"missing":     {{Dir: filepath.Join(dir, "none")}},
+		"twice":       {{Dir: "testdata/skills/csv-report"}, {Dir: "testdata/skills/csv-report"}},
+		"too large":   {{Dir: filepath.Join(dir, "big")}},
+	} {
+		p := &Profile{Schema: ProfileSchema, ID: "p", Skills: skills}
+		if _, err := p.Proto(); err == nil {
+			t.Errorf("%s: accepted", name)
+		} else if name == "too large" && !strings.Contains(err.Error(), "in all") {
+			t.Errorf("too large: %v", err)
 		}
 	}
 }

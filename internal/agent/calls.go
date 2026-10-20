@@ -367,7 +367,7 @@ func (w *worker) createChild(call *gatewayv0.ToolCall, in spawnInput) (child, re
 		}
 		model = in.Model
 	}
-	sys, version := s.Prompt.system(b.tools, true)
+	sys, version := s.Prompt.system(b.tools, s.Skills, true)
 	_, _, subagents, _ := b.limits.get()
 
 	b.mu.Lock()

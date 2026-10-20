@@ -45,3 +45,5 @@ compaction:
   threshold_percent: 75
   model: fast
   keep_turns: 3
+skills:
+  - dir: skills/csv-report

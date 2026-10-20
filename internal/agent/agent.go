@@ -35,6 +35,7 @@ import (
 	"github.com/actlet/actlet/internal/gwclient"
 	"github.com/actlet/actlet/internal/journal"
 	"github.com/actlet/actlet/internal/sessionfs"
+	"github.com/actlet/actlet/internal/skill"
 	"github.com/actlet/actlet/internal/tools"
 	gatewayv0 "github.com/actlet/actlet/proto/actlet/gateway/v0"
 )
@@ -111,6 +112,8 @@ type Settings struct {
 	// ContextWindows the aliases' context windows in tokens, where known.
 	Compaction     CompactionPolicy
 	ContextWindows map[string]uint64
+	// Skills are the skills the agent may load.
+	Skills []skill.Skill
 }
 
 // CallToolFunc calls a bridged tool through the gateway.
@@ -350,6 +353,9 @@ func toolOptions(s Settings, f sessionfs.Folder) tools.Options {
 	o := s.Tools
 	o.Workspace = f.Workspace()
 	o.ReadOnly = []string{f.Inputs(), f.State(), f.TaskFile()}
+	for _, sk := range s.Skills {
+		o.ReadOnly = append(o.ReadOnly, sk.Dir)
+	}
 	o.TempDir = filepath.Join(f.State(), "tmp")
 	return o
 }
@@ -379,7 +385,7 @@ func Tools(s Settings, f sessionfs.Folder) ([]*gatewayv0.ToolInfo, []string, err
 // start builds the root worker's prompt and records it as the first
 // checkpoint.
 func (b *box) start() error {
-	sys, version := b.env.Settings.Prompt.system(b.tools, false)
+	sys, version := b.env.Settings.Prompt.system(b.tools, b.env.Settings.Skills, false)
 	b.st.add(&agentpb.WorkerState{
 		WorkerId: RootWorker, Model: b.env.Settings.Model, System: sys, PromptVersion: version,
 		Messages: []*gatewayv0.Message{userText(taskMessage(b.env.Task, listInputs(b.env.Folder.Inputs())))},

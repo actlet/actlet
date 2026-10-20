@@ -27,6 +27,7 @@ The system prompt has layers:
 1. **Actlet's base prompt**: how the box works: the session folder, the tools, `outcome_unknown`, and how to finish. Its version (`actlet-base-v0.1`) is recorded in the journal. A profile's `base_prompt` replaces it.
 2. **The implementor's instructions**: the profile's `instructions`.
 3. **What is installed**: the image's tools manifest (`actlet run -tools-manifest`, by default `/etc/actlet/tools.md` if it exists), the profile's `tools_manifest`, and notes such as a missing `bash`.
+4. **Skills**: the name and description of each [skill](#skills).
 
 The first user message is the task's input, followed by the list of input files.
 
@@ -65,6 +66,12 @@ Actlet also has standard tools, offered only when the profile's `tools` list nam
 | `llm` | Calls another model for side work, such as summarising, with a prompt and no tools: the profile's `llm` role alias (or its `processing` one), or one the agent picks from `models.selectable`. Not offered when there is neither | ask again |
 
 `decide` and `llm` go through the gateway: `decide` with the `CallTool` call, which the orchestrator implements, and `llm` as a model call with purpose `llm`. Both carry the tool call's intent ID. A `decide` call can wait a long time: a pause or stop ends the wait without an outcome, and the next run asks again with the same intent ID, also after a crash, so the orchestrator answers it once. What both use counts towards the session's [budgets](profiles.md#budgets), and both wait while a budget holds work back.
+
+### Skills
+
+Skills are Claude-style skill folders: a `SKILL.md`, whose front matter gives the skill's `name` and `description` and whose body its instructions, and optional scripts and resources. They come from the image, as folders in `actlet run -skills` (by default `/etc/actlet/skills`), and from the profile's `skills`, which the worker writes to `.actlet/skills/` in the session folder at the start of each run. A profile's skill replaces the image's of the same name.
+
+The prompt lists each skill's description, and the `skill` tool, offered whenever there are skills, loads one: its instructions, its folder and its files, or with `file` one of those files, never from outside its folder. The agent runs a skill's scripts with the `shell` or `python` tools. Skill folders can't be written. Calls of `skill` are journaled and published like any other tool's, and run again after a crash.
 
 ### Calls in parallel
 

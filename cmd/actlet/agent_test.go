@@ -46,11 +46,16 @@ type agentGateway struct {
 	// compaction policy.
 	models     *gatewayv0.ModelCatalog
 	compaction *gatewayv0.CompactionPolicy
+	// skills are the profile's skills, and skillsDir the image's.
+	skills    []*gatewayv0.Skill
+	skillsDir string
 
 	mu     sync.Mutex
 	events []*gatewayv0.ActivityEvent
 	// asked are the intent IDs of the decide calls, as they come.
 	asked []string
+	// requests are the model calls, as they come.
+	requests []*gatewayv0.InferenceRequest
 }
 
 func newAgentGateway(t *testing.T, script string, opts ...func(*agentGateway)) *agentGateway {
@@ -87,7 +92,12 @@ func (g *agentGateway) start() {
 		Store:        g.store,
 		Authenticate: sdk.StaticToken("tok"),
 		Logger:       slog.New(slog.DiscardHandler),
-		OnInference:  g.model.Serve,
+		OnInference: func(ctx context.Context, call *sdk.InferenceCall) error {
+			g.mu.Lock()
+			g.requests = append(g.requests, call.Request)
+			g.mu.Unlock()
+			return g.model.Serve(ctx, call)
+		},
 		OnDecide: func(ctx context.Context, d *sdk.DecideRequest) (*sdk.Decision, error) {
 			g.mu.Lock()
 			g.asked = append(g.asked, d.IntentID)
@@ -107,7 +117,7 @@ func (g *agentGateway) start() {
 			return &gatewayv0.RegisterResponse{
 				SessionId: req.GetSessionId(),
 				Profile: &gatewayv0.Profile{Id: "agent", Models: models, Limits: &gatewayv0.Limits{MaxWorkers: 4, MaxToolConcurrency: 4},
-					LocalAttach: g.local, Budgets: g.budgets, Tools: g.tools, Compaction: g.compaction},
+					LocalAttach: g.local, Budgets: g.budgets, Tools: g.tools, Compaction: g.compaction, Skills: g.skills},
 				Task: g.task,
 			}, nil
 		},
@@ -137,7 +147,7 @@ func (g *agentGateway) worker(dir, crashAt string) *exec.Cmd {
 	g.t.Helper()
 	cmd := exec.Command(os.Args[0], "-test.run=^TestRunHelper$")
 	cmd.Env = append(os.Environ(), runHelperEnv+"=1", crashpointEnv+"="+crashAt,
-		"ACTLET_SESSION="+dir, "ACTLET_GATEWAY="+g.addr, "ACTLET_TOKEN=tok", "ACTLET_TOOLS_MANIFEST=")
+		"ACTLET_SESSION="+dir, "ACTLET_GATEWAY="+g.addr, "ACTLET_TOKEN=tok", "ACTLET_TOOLS_MANIFEST=", "ACTLET_SKILLS="+g.skillsDir)
 	cmd.Stdout, cmd.Stderr = os.Stderr, os.Stderr
 	if err := cmd.Start(); err != nil {
 		g.t.Fatal(err)

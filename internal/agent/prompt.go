@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/actlet/actlet/internal/sessionfs"
+	"github.com/actlet/actlet/internal/skill"
 	"github.com/actlet/actlet/internal/tools"
 )
 
@@ -57,7 +58,7 @@ const subagentNote = `## You are a subagent
 Another agent gave you a subtask, below. Work on it with your tools. Your final answer, without tool calls, is returned to that agent as the result, so make it complete and to the point. You share the workspace with other agents working in parallel: write only the files your subtask is about.`
 
 // system builds the system prompt, for the root worker or a subagent.
-func (p Prompt) system(ts *tools.Set, subagent bool) (text, version string) {
+func (p Prompt) system(ts *tools.Set, skills []skill.Skill, subagent bool) (text, version string) {
 	var sb strings.Builder
 	version = PromptVersion
 	if p.Base != "" {
@@ -84,6 +85,10 @@ func (p Prompt) system(ts *tools.Set, subagent bool) (text, version string) {
 	if len(notes) > 0 {
 		sb.WriteString("\n\n## What is installed\n\n")
 		sb.WriteString(strings.Join(notes, "\n\n"))
+	}
+	if s := skillsPrompt(skills); s != "" {
+		sb.WriteString("\n\n")
+		sb.WriteString(s)
 	}
 	return sb.String(), version
 }

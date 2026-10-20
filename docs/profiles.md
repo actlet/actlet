@@ -53,6 +53,8 @@ instructions: |                 # the implementor's layer of the agent's prompt
 tools_manifest: |               # what is installed, for the agent
   Go 1.27, Node 22 and jq are installed.
 checkpoint_every_turns: 1       # model turns between checkpoints
+skills:                         # skill folders sent with the profile, besides the image's
+  - dir: skills/csv-report      # with a SKILL.md; relative to the profile file; 2 MiB in all
 compaction:                     # when the context nears the model's window; on by default
   strategy: summarize           # summarize (default) or off
   threshold_percent: 80         # of the alias's context_window; 0 or missing: 80

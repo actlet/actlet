@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"net"
 	"os"
+	"path/filepath"
 	"slices"
 	"sync"
 	"time"
@@ -25,6 +26,7 @@ import (
 	"github.com/actlet/actlet/internal/session"
 	"github.com/actlet/actlet/internal/session/sessionpb"
 	"github.com/actlet/actlet/internal/sessionfs"
+	"github.com/actlet/actlet/internal/skill"
 	"github.com/actlet/actlet/internal/tools"
 	attachv0 "github.com/actlet/actlet/proto/actlet/attach/v0"
 	gatewayv0 "github.com/actlet/actlet/proto/actlet/gateway/v0"
@@ -56,6 +58,9 @@ type Config struct {
 	// ToolsManifest is a file in the image describing what is installed,
 	// for the agent's prompt. A missing file is no manifest.
 	ToolsManifest string
+	// SkillsDir is a directory in the image of skill folders for the
+	// agent. A missing directory has none.
+	SkillsDir string
 	// Tools overrides the programs the agent's tools use, such as the
 	// shell; see tools.Options.
 	Tools tools.Options
@@ -161,6 +166,9 @@ func Run(ctx context.Context, cfg Config, signals <-chan os.Signal) int {
 	agentSettings, err := agentSettings(cfg, resp.GetProfile(), effective)
 	if err != nil {
 		return fail("agent settings", "err", err)
+	}
+	if agentSettings.Skills, err = skills(cfg, folder, resp.GetProfile(), log); err != nil {
+		return fail("skills", "err", err)
 	}
 
 	// The attach port opens before the session starts, so a port that
@@ -433,6 +441,30 @@ func (h controlHandler) ReadFile(req *gatewayv0.FileRequest) *gatewayv0.FileResp
 	}
 	return &gatewayv0.FileResponse{Path: resp.GetPath(), Content: resp.GetContent(), Size: resp.GetSize(),
 		Truncated: resp.GetTruncated(), Binary: resp.GetBinary()}
+}
+
+// skills writes the profile's skills to the session folder, replacing
+// those of earlier runs, and finds them and the image's. The profile's
+// replace the image's of the same name.
+func skills(cfg Config, folder sessionfs.Folder, p *gatewayv0.Profile, log *slog.Logger) ([]skill.Skill, error) {
+	dir := filepath.Join(folder.State(), "skills")
+	if err := os.RemoveAll(dir); err != nil {
+		return nil, err
+	}
+	size := 0
+	for _, s := range p.GetSkills() {
+		if size += skill.Size(s); size > skill.MaxProfile {
+			return nil, fmt.Errorf("the profile's skills are larger than %d bytes", skill.MaxProfile)
+		}
+		if err := skill.Write(dir, s); err != nil {
+			return nil, err
+		}
+	}
+	found, warnings := skill.Discover(cfg.SkillsDir, dir)
+	for _, w := range warnings {
+		log.Warn("skills: " + w)
+	}
+	return found, nil
 }
 
 // agentSettings configures agent tasks from the profile and the image.

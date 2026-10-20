@@ -15,6 +15,7 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 	"sigs.k8s.io/yaml"
 
+	"github.com/actlet/actlet/internal/skill"
 	gatewayv0 "github.com/actlet/actlet/proto/actlet/gateway/v0"
 )
 
@@ -59,7 +60,25 @@ type Profile struct {
 	// Compaction is when and how workers compact their context. Unset
 	// compacts by default.
 	Compaction *Compaction `json:"compaction,omitempty"`
+	// Skills are skill folders sent with the profile, besides those in
+	// the worker's image.
+	Skills []SkillSource `json:"skills,omitempty"`
+
+	// base is the profile file's directory, against which skill folders
+	// are found.
+	base string
 }
+
+// SkillSource is a skill folder, with a SKILL.md, to send with the
+// profile.
+type SkillSource struct {
+	// Dir is the folder: absolute, or relative to the profile file.
+	Dir string `json:"dir"`
+}
+
+// LoadSkill reads a skill folder, with a SKILL.md, for a profile's
+// skills.
+func LoadSkill(dir string) (*gatewayv0.Skill, error) { return skill.Load(dir) }
 
 // Compaction is when and how workers compact their context: when it
 // nears the model's context window, a model summarises the older turns.
@@ -274,6 +293,11 @@ func (p *Profile) Validate() error {
 			bad("compaction.model: unknown alias %q", c.Model)
 		}
 	}
+	for i, sk := range p.Skills {
+		if sk.Dir == "" {
+			bad("skills[%d]: no dir", i)
+		}
+	}
 	tools := map[string]bool{}
 	for i, t := range p.Tools {
 		if t.Name == "" {
@@ -324,6 +348,24 @@ func (p *Profile) Proto() (*gatewayv0.Profile, error) {
 	}
 	if la := p.LocalAttach; la != nil {
 		out.LocalAttach = &gatewayv0.LocalAttach{Commands: la.Commands, Disabled: la.Disabled}
+	}
+	size := 0
+	for _, src := range p.Skills {
+		dir := src.Dir
+		if !filepath.IsAbs(dir) {
+			dir = filepath.Join(p.base, dir)
+		}
+		sk, err := LoadSkill(dir)
+		if err != nil {
+			return nil, err
+		}
+		if slices.ContainsFunc(out.Skills, func(o *gatewayv0.Skill) bool { return o.GetName() == sk.GetName() }) {
+			return nil, fmt.Errorf("skills: %q twice", sk.GetName())
+		}
+		if size += skill.Size(sk); size > skill.MaxProfile {
+			return nil, fmt.Errorf("skills: larger than %d bytes in all; put larger skills in the worker's image", skill.MaxProfile)
+		}
+		out.Skills = append(out.Skills, sk)
 	}
 	if c := p.Compaction; c != nil {
 		out.Compaction = &gatewayv0.CompactionPolicy{Strategy: c.Strategy, ThresholdPercent: c.ThresholdPercent, Model: c.Model, KeepTurns: c.KeepTurns}
@@ -417,6 +459,7 @@ func LoadProfile(path string) (*Profile, error) {
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", path, err)
 	}
+	p.base = filepath.Dir(path)
 	return p, nil
 }
 

@@ -89,13 +89,16 @@ func (b *box) standardTools() map[string]*standardTool {
 			out[g.Name] = t
 		}
 	}
+	if len(b.env.Settings.Skills) > 0 {
+		out[SkillTool] = b.skillTool()
+	}
 	return out
 }
 
 // standardSpecs are the granted standard tools' specs, by name.
 func (b *box) standardSpecs() []*gatewayv0.ToolSpec {
 	var out []*gatewayv0.ToolSpec
-	for _, name := range StandardTools {
+	for _, name := range append(StandardTools, SkillTool) {
 		if t := b.standard[name]; t != nil {
 			out = append(out, t.spec)
 		}

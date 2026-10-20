@@ -76,6 +76,8 @@ func runRun(args []string, stdout, stderr io.Writer, signals <-chan os.Signal) i
 			"let the attach port listen on an address other than loopback [ACTLET_ATTACH_ALLOW_REMOTE=true]")
 		manifest = fs.String("tools-manifest", envDefault("ACTLET_TOOLS_MANIFEST", "/etc/actlet/tools.md"),
 			"file describing what is installed, for the agent's prompt; ignored if missing [ACTLET_TOOLS_MANIFEST]")
+		skillsDir = fs.String("skills", envDefault("ACTLET_SKILLS", "/etc/actlet/skills"),
+			"directory of skill folders, each with a SKILL.md, for the agent; ignored if missing [ACTLET_SKILLS]")
 	)
 	durationFlag := func(name, env string, def time.Duration, usage string) *time.Duration {
 		d := def
@@ -169,6 +171,7 @@ func runRun(args []string, stdout, stderr io.Writer, signals <-chan os.Signal) i
 		ActivitySpillMax:   *spillMax,
 		FlushTimeout:       *flushTimeout,
 		ToolsManifest:      *manifest,
+		SkillsDir:          *skillsDir,
 		NoAttach:           *noAttach,
 		AttachListen:       *attachOn,
 		AttachToken:        attachToken,
