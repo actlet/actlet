@@ -6,16 +6,43 @@ Actlet is deliberately not a web app, a model-provider gateway, a sandbox manage
 
 ## Status
 
-Early development. Nothing is usable yet. So far the repository holds the build, test and CI scaffolding and an experimental session journal: the crash-recoverable file Actlet will use to resume sessions ([format and guarantees](docs/journal-format.md)). `actlet journal inspect` and `actlet journal export --jsonl` read journals.
+Early development: there is no real agent yet. What works today:
+
+- `actlet run` connects to a gateway, registers its session, and runs a built-in demo task in place of agent work. It takes pause, stop and steer commands, streams activity, and recovers from its journal. See the [gateway protocol](docs/gateway-protocol.md).
+- `actlet-devgw` is a development gateway to run it against, built on the orchestrator SDK in [`sdk/`](sdk).
+- The session journal is the crash-recoverable record each session keeps ([format and guarantees](docs/journal-format.md)). `actlet journal inspect` and `actlet journal export --jsonl` read journals and activity recordings.
+
+All protocols and formats are experimental (v0).
+
+## Running a session
+
+```sh
+make build
+bin/actlet-devgw -token dev &
+ACTLET_GATEWAY=127.0.0.1:7400 ACTLET_TOKEN=dev bin/actlet run -session ./demo-session
+```
+
+Type `pause drain`, `stop kill` or `steer <note>` into `actlet-devgw` to control the session. `actlet run` exits with 0 when the task completes, 3 when it pauses and 4 when it is stopped. Run it again on the same folder to resume a paused session. `actlet run -h` lists every flag and its environment variable.
+
+A session lives in one folder:
+
+```
+task.json     the task definition and input (written from the gateway's task if missing)
+inputs/       input files
+workspace/    the working directory
+output/       deliverables
+.actlet/      the journal, a status marker and the activity spill
+```
 
 ## Building and testing
 
-Requirements: Go 1.27 or newer and GNU Make. `make setup` installs the pinned versions of `golangci-lint`, used by `make check`, and `protoc-gen-go`, used by `make generate` (which also needs `protoc`).
+Requirements: Go 1.27 or newer and GNU Make. `make setup` installs the pinned versions of `golangci-lint`, used by `make check`, and of `protoc-gen-go` and `protoc-gen-go-grpc`, used by `make generate` (which also needs `protoc`).
 
 ```sh
 make setup   # download modules, install development tools
-make build   # build bin/actlet
-make test    # run the tests with the race detector
+make build   # build bin/actlet and bin/actlet-devgw
+make test    # run the tests with the race detector, and a short fuzz run
+make test-docker  # recovery across container replacement (needs Docker)
 make check   # gofmt, go vet, golangci-lint, go.mod tidiness
 make bench   # run the benchmarks
 make help    # list every target
