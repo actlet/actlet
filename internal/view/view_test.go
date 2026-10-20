@@ -122,7 +122,7 @@ func TestFoldSubagentRun(t *testing.T) {
 	if spawn := root.Items[0].Turn.Calls[0]; spawn.Child != "root.1" || spawn.Status != ToolOK || spawn.Name != "spawn_subagent" {
 		t.Errorf("spawn call %+v", spawn)
 	}
-	if files := s.Files(); len(files) != 1 || files[0].Path != "a" {
+	if files := s.Files(); len(files) != 1 || files[0].Path != "workspace/a" {
 		t.Errorf("files %+v", files)
 	}
 	if s.Usage.Input != 2400 || s.Usage.Output != 28 || fmt.Sprint(s.Models()) != "[fast large]" {
@@ -192,6 +192,45 @@ func TestBounded(t *testing.T) {
 	}
 	if len(s.Log) != MaxLog || s.LogDropped != 10 {
 		t.Errorf("%d log lines, %d dropped", len(s.Log), s.LogDropped)
+	}
+}
+
+// The sidebar's files: paths relative to the session folder, and every
+// change of a file counted, in the order the changes were made.
+func TestFiles(t *testing.T) {
+	var e events
+	e.add("root", &gatewayv0.ToolStarted{CallId: "w", Tool: "write_file"})
+	e.add("root", &gatewayv0.FileChange{CallId: "w", Path: "../output/report.md", Created: true, Diff: "+a\n+b\n+c\n"})
+	e.add("root.1", &gatewayv0.ToolStarted{CallId: "e", Tool: "edit_file"})
+	e.add("root.1", &gatewayv0.FileChange{CallId: "e", Path: "../output/report.md", Diff: "@@ -2 +2 @@\n-b\n+B\n"})
+	e.add("root", &gatewayv0.ToolStarted{CallId: "t", Tool: "write_file"})
+	e.add("root", &gatewayv0.FileChange{CallId: "t", Path: "./totals.py", Created: true, Diff: "+x\n"})
+	s := fold(e.out)
+	want := []File{{Path: "output/report.md", Added: 4, Removed: 1, Changes: 2}, {Path: "workspace/totals.py", Added: 1, Changes: 1}}
+	if got := s.Files(); !reflect.DeepEqual(got, want) {
+		t.Errorf("files %+v, want %+v", got, want)
+	}
+	// The subagent's edit came after the root's write, though root.1 is
+	// listed after root.
+	if h := s.FileHistory("output/report.md"); len(h) != 2 || !h[0].Created || h[1].Created {
+		t.Errorf("history %+v", h)
+	}
+}
+
+func TestSessionPath(t *testing.T) {
+	for _, tt := range []struct{ tool, session string }{
+		{"totals.py", "workspace/totals.py"},
+		{"./a/b.md", "workspace/a/b.md"},
+		{"../output/report.md", "output/report.md"},
+		{"../inputs/sales.csv", "inputs/sales.csv"},
+		{"/abs/file", "/abs/file"},
+	} {
+		if got := SessionPath(tt.tool); got != tt.session {
+			t.Errorf("SessionPath(%q) = %q, want %q", tt.tool, got, tt.session)
+		}
+		if got := SessionPath(ToolPath(tt.session)); got != tt.session {
+			t.Errorf("SessionPath(ToolPath(%q)) = %q", tt.session, got)
+		}
 	}
 }
 

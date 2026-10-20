@@ -24,7 +24,7 @@ make demo-attach   # in a second terminal: another viewer on the same box
  ▌ subagent so they can work in parallel.                                 │●  root.1 fast 1 turn
    ⠋ Subagent root.1  Region west: summarise the west's Q3 sales…  running│
      ┊ ▌ Subagent root.1 · turn 1 · fast · 2.1k in / 90 out              │ FILES
-     ┊ ▌ Reading the west's rows.                                         │ totals.py +9 −0
+     ┊ ▌ Reading the west's rows.                                         │ workspace/totals.py +9 −0
      ┊   ✓ Grep ^west  in ../inputs/sales.csv                         24ms│
      ┊     │ ../inputs/sales.csv:8:west,2026-07,widget,150,4500           │
  ────────────────────────────────────────────────────────────────────────────────────────────────
@@ -32,7 +32,7 @@ make demo-attach   # in a second terminal: another viewer on the same box
   ⠋ running · large · ctx 3% · 0.08 EUR · 22s · local box                                  ? keys
 ```
 
-The **Chat** tab is the conversation, one model turn at a time: who speaks (the agent, a subagent, the operator, or Actlet itself, each in its own colour), what the model said, then each tool call as one block with its result. A block shows the tool, its key arguments, how it went (✓, ✗, a spinner while it runs, ? when the outcome is unknown after a crash) and how long it took, then the start of its output or its diff. A subagent is shown inside the `Subagent` call that started it, with its own turns, and its final answer under it. The sidebar lists the workers and the files changed so far; it hides when the terminal is narrow.
+The **Chat** tab is the conversation, one model turn at a time: who speaks (the agent, a subagent, the operator, or Actlet itself, each in its own colour), what the model said, then each tool call as one block with its result. A block shows the tool, its key arguments, how it went (✓, ✗, a spinner while it runs, ? when the outcome is unknown after a crash) and how long it took, then the start of its output or its diff. A subagent is shown inside the `Subagent` call that started it, with its own turns, and its final answer under it. The sidebar lists the workers and the files changed so far, by their path in the session folder, with the lines added and removed by all their changes together; it hides when the terminal is narrow.
 
 The **status line** keeps to what matters at a glance: the session's state, the model, how full its context is, the cost so far, the time, and what the viewer is connected to. The rest is in the other tabs:
 

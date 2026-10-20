@@ -4,7 +4,7 @@
  ▌ Agent · turn 1 · large · 12k in / 400 out · 22:13:24              │✓  root.1 fast 2 turns         
  ▌ I'll hand the file to a subagent.                                 │                               
    ✓ Subagent root.1  Write the report.                          4.0s│FILES                          
-     ┊                                                               │report.md +1 −0                
+     ┊                                                               │workspace/report.md +1 −0      
      ┊ ▌ Subagent root.1 · an earlier turn                           │o or a click opens a file      
      ┊   ✓ Write report.md  +1 −0                                12ms│                               
      ┊     │ @@ -0,0 +1 @@                                           │                               

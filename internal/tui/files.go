@@ -16,7 +16,8 @@ import (
 	attachv0 "github.com/actlet/actlet/proto/actlet/attach/v0"
 )
 
-// FileReader reads a file of the session from the box.
+// FileReader reads a file of the session from the box, given relative
+// to the session folder.
 type FileReader func(path string) (*attachv0.ReadFileResponse, error)
 
 // Files returns a FileReader for the box.
@@ -24,7 +25,7 @@ func Files(ctx context.Context, client attachv0.AttachClient) FileReader {
 	return func(p string) (*attachv0.ReadFileResponse, error) {
 		cctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
-		return client.ReadFile(cctx, &attachv0.ReadFileRequest{Path: p})
+		return client.ReadFile(cctx, &attachv0.ReadFileRequest{Path: view.ToolPath(p)})
 	}
 }
 

@@ -4,7 +4,7 @@
    ✓ Write report.md  +1 −0                                      12ms│✓  root.1 fast 2 turns         
      │ @@ -0,0 +1 @@                                                 │                               
      │ +Total: 12                                                    │FILES                          
-                                                                     │report.md +1 −0                
+                                                                     │workspace/report.md +1 −0      
                                                                      │o or a click opens a file      
                                                                      │                               
                                                                      │                               

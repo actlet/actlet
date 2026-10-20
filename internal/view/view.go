@@ -11,6 +11,8 @@ package view
 import (
 	"encoding/json"
 	"fmt"
+	"path"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -146,8 +148,8 @@ type ToolCall struct {
 	Took   time.Duration
 	Diffs  []Diff
 	// Child is the subagent a spawn_subagent call started.
-	Child string
-	Seq   uint64
+	Child      string
+	Epoch, Seq uint64
 }
 
 // ToolStatus is how a tool call went.
@@ -320,7 +322,7 @@ func (w *Worker) turn(ev *gatewayv0.ActivityEvent) *Turn {
 func (w *Worker) call(ev *gatewayv0.ActivityEvent, id, name string) *ToolCall {
 	c := w.calls[id]
 	if c == nil {
-		c = &ToolCall{CallID: Sanitize(id), Name: Sanitize(name), Seq: ev.GetSeq()}
+		c = &ToolCall{CallID: Sanitize(id), Name: Sanitize(name), Epoch: ev.GetEpoch(), Seq: ev.GetSeq()}
 		t := w.turn(ev)
 		t.Calls = append(t.Calls, c)
 		w.calls[id] = c
@@ -569,50 +571,91 @@ func (s *Session) Running() (*Worker, *ToolCall, int) {
 	return bw, bc, n
 }
 
-// Files returns the files changed so far, each with its latest change.
-func (s *Session) Files() []Diff {
-	latest := map[string]Diff{}
-	var order []string
-	for _, w := range s.Workers() {
-		for _, it := range w.Items {
-			if it.Turn == nil {
-				continue
-			}
-			for _, c := range it.Turn.Calls {
-				for _, d := range c.Diffs {
-					if _, ok := latest[d.Path]; !ok {
-						order = append(order, d.Path)
-					}
-					latest[d.Path] = d
-				}
-			}
+// File is a file changed in the session.
+type File struct {
+	// Path is relative to the session folder, such as
+	// "workspace/totals.py" or "output/report.md".
+	Path string
+	// Added and Removed count the lines of all its changes together.
+	Added, Removed int
+	// Changes counts its changes.
+	Changes int
+}
+
+// SessionPath turns a path as tools show it, relative to workspace/, into
+// one relative to the session folder. Absolute paths are kept.
+func SessionPath(p string) string {
+	if path.IsAbs(p) || filepath.IsAbs(p) {
+		return p
+	}
+	return path.Clean(path.Join("workspace", filepath.ToSlash(p)))
+}
+
+// ToolPath turns a path relative to the session folder back into one
+// relative to workspace/, as tools take it.
+func ToolPath(p string) string {
+	if path.IsAbs(p) || filepath.IsAbs(p) {
+		return p
+	}
+	if rest, ok := strings.CutPrefix(p, "workspace/"); ok {
+		return rest
+	}
+	return "../" + p
+}
+
+// Files returns the files changed so far, in the order they were first
+// changed.
+func (s *Session) Files() []File {
+	at := map[string]int{}
+	var out []File
+	s.eachDiff(func(d Diff) {
+		p := SessionPath(d.Path)
+		i, ok := at[p]
+		if !ok {
+			i = len(out)
+			at[p] = i
+			out = append(out, File{Path: p})
 		}
-	}
-	out := make([]Diff, 0, len(order))
-	for _, p := range order {
-		out = append(out, latest[p])
-	}
+		add, del := d.Stat()
+		out[i].Added += add
+		out[i].Removed += del
+		out[i].Changes++
+	})
 	return out
 }
 
-// FileHistory returns a file's changes, in order.
-func (s *Session) FileHistory(path string) []Diff {
+// FileHistory returns the changes of a file, given relative to the
+// session folder, in order.
+func (s *Session) FileHistory(p string) []Diff {
 	var out []Diff
+	s.eachDiff(func(d Diff) {
+		if SessionPath(d.Path) == p {
+			out = append(out, d)
+		}
+	})
+	return out
+}
+
+// eachDiff calls fn with every file change, in the order the tool calls
+// started.
+func (s *Session) eachDiff(fn func(Diff)) {
+	var calls []*ToolCall
 	for _, w := range s.Workers() {
 		for _, it := range w.Items {
-			if it.Turn == nil {
-				continue
-			}
-			for _, c := range it.Turn.Calls {
-				for _, d := range c.Diffs {
-					if d.Path == path {
-						out = append(out, d)
-					}
-				}
+			if it.Turn != nil {
+				calls = append(calls, it.Turn.Calls...)
 			}
 		}
 	}
-	return out
+	sort.SliceStable(calls, func(i, j int) bool {
+		a, b := calls[i], calls[j]
+		return a.Epoch < b.Epoch || a.Epoch == b.Epoch && a.Seq < b.Seq
+	})
+	for _, c := range calls {
+		for _, d := range c.Diffs {
+			fn(d)
+		}
+	}
 }
 
 // ContextWindow returns a model alias's context window from the

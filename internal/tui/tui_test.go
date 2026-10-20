@@ -403,11 +403,11 @@ func TestFileViewer(t *testing.T) {
 	p.Seek(p.Len())
 	replay := NewReplay(p)
 	replay.SetSize(120, 30)
-	replay.Open("report.md")
+	replay.Open("workspace/report.md")
 	if d := replay.Dump(); !strings.Contains(d, "1 Total: 12") || !strings.Contains(d, "from the recording") {
 		t.Errorf("replayed file:\n%s", d)
 	}
-	replay.Open("never-changed.txt")
+	replay.Open("workspace/never-changed.txt")
 	if !strings.Contains(replay.Dump(), "not in the recording") {
 		t.Error("a file the recording lacks")
 	}
@@ -417,17 +417,17 @@ func TestFileViewer(t *testing.T) {
 	var asked []string
 	live.SetFileReader(func(path string) (*attachv0.ReadFileResponse, error) {
 		asked = append(asked, path)
-		return &attachv0.ReadFileResponse{Path: "workspace/" + path, Content: []byte("\x1b]0;evil\x07Total: 12\n"), Size: 10}, nil
+		return &attachv0.ReadFileResponse{Path: path, Content: []byte("\x1b]0;evil\x07Total: 12\n"), Size: 10}, nil
 	})
 	live.Render()
 	row := -1
 	for y, path := range live.fileRows {
-		if path == "report.md" {
+		if path == "workspace/report.md" {
 			row = y
 		}
 	}
 	if row < 0 {
-		t.Fatalf("no sidebar row for report.md: %v", live.fileRows)
+		t.Fatalf("no sidebar row for workspace/report.md: %v", live.fileRows)
 	}
 	_, cmd := live.Update(tea.MouseClickMsg{X: live.sideX + 2, Y: row, Button: tea.MouseLeft})
 	if cmd == nil || live.popup == nil {
@@ -445,7 +445,7 @@ func TestFileViewer(t *testing.T) {
 	// The keyboard way.
 	live.Update(tea.KeyPressMsg{Code: 'o', Text: "o"})
 	_, cmd = live.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
-	if cmd == nil || live.popup == nil || live.popup.path != "report.md" {
+	if cmd == nil || live.popup == nil || live.popup.path != "workspace/report.md" {
 		t.Fatalf("o and enter: %+v", live.popup)
 	}
 }
@@ -454,4 +454,20 @@ func TestSeparators(t *testing.T) {
 	m := liveModel()
 	m.SetSeparators(true)
 	golden(t, "live-chat-separators", m.Dump())
+}
+
+func TestTruncateLeft(t *testing.T) {
+	for _, tt := range []struct {
+		in    string
+		width int
+		want  string
+	}{
+		{"output/report.md", 20, "output/report.md"},
+		{"workspace/analysis/north.md", 20, "…e/analysis/north.md"},
+		{"workspace/analysis/north.md", 1, "w"},
+	} {
+		if got := truncateLeft(tt.in, tt.width); got != tt.want {
+			t.Errorf("truncateLeft(%q, %d) = %q, want %q", tt.in, tt.width, got, tt.want)
+		}
+	}
 }

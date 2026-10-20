@@ -528,14 +528,13 @@ func (m *Model) sidebarLines(w int) []string {
 	for k := range m.fileRows {
 		delete(m.fileRows, k)
 	}
-	for i, d := range files {
-		add, del := d.Stat()
-		stat := styleAdd.Render(fmt.Sprintf("+%d", add)) + " " + styleDel.Render(fmt.Sprintf("−%d", del))
-		name := ansi.Truncate(d.Path, w-lipgloss.Width(stat)-1, "…")
+	for i, f := range files {
+		stat := styleAdd.Render(fmt.Sprintf("+%d", f.Added)) + " " + styleDel.Render(fmt.Sprintf("−%d", f.Removed))
+		name := truncateLeft(f.Path, w-lipgloss.Width(stat)-1)
 		if m.filesFocus && i == m.fileSel {
 			name = styleSelect.Render(name)
 		}
-		m.fileRows[len(out)+1] = d.Path // screen row: under the header line
+		m.fileRows[len(out)+1] = f.Path // screen row: under the header line
 		out = append(out, name+" "+stat)
 	}
 	if len(files) > 0 {
@@ -1049,3 +1048,16 @@ func sizeOf(n int64) string {
 
 // Dump renders the screen as plain text, without colours.
 func (m *Model) Dump() string { return ansi.Strip(m.Render()) }
+
+// truncateLeft shortens s to width cells by cutting its start, so a
+// path keeps its file name.
+func truncateLeft(s string, width int) string {
+	over := lipgloss.Width(s) - width
+	if over <= 0 {
+		return s
+	}
+	if width < 2 {
+		return ansi.Truncate(s, width, "")
+	}
+	return ansi.TruncateLeft(s, over+1, "…")
+}
