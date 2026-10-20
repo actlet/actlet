@@ -263,6 +263,7 @@ func (e *Env) writeFileTool() *tool {
 			return e.planChange(path, old, existed, []byte(*args.Content))
 		},
 		reconcile: func(_ json.RawMessage, check []byte) Recovery { return reconcileFile(e, check) },
+		writes:    e.pathWrites,
 	}
 }
 
@@ -333,5 +334,6 @@ func (e *Env) editFileTool() *tool {
 			return call, nil
 		},
 		reconcile: func(_ json.RawMessage, check []byte) Recovery { return reconcileFile(e, check) },
+		writes:    e.pathWrites,
 	}
 }

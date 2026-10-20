@@ -25,6 +25,7 @@ func (e *Env) shellTool() *tool {
 				`"required":["command"],"additionalProperties":false}`),
 			Policy: PolicyNever,
 		},
+		writes: e.programWrites,
 		prepare: func(in json.RawMessage) (*Call, error) {
 			var args struct {
 				Command string   `json:"command"`

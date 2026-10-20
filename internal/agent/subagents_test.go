@@ -330,3 +330,24 @@ func TestSubagentPanic(t *testing.T) {
 		t.Errorf("result.md = %q", s.file("output/result.md"))
 	}
 }
+
+// Calls in one turn that depend on each other through a file run in the
+// order the model made them: an edit of a file the turn creates waits for
+// the write, and a command reading it waits for both.
+func TestDependentCallsInOneTurn(t *testing.T) {
+	if !hasShell() {
+		t.Skip("no shell")
+	}
+	s := newSandbox(t,
+		turn{calls: [][2]string{
+			{"write_file", `{"path":"report.md","content":"Total: TBD\n"}`},
+			{"edit_file", `{"path":"report.md","old_string":"TBD","new_string":"12"}`},
+			{"shell", `{"command":"cat report.md"}`},
+		}},
+		turn{check: expect("created report.md", "+Total: 12", "stdout:\nTotal: 12\n"), text: "done"},
+	)
+	for range 5 { // the race it guards against was timing-dependent
+		s.mustFinish()
+		s = newSandbox(t, s.model.turns...)
+	}
+}

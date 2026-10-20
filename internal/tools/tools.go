@@ -128,6 +128,9 @@ type tool struct {
 	prepare func(in json.RawMessage) (*Call, error)
 	// reconcile decides about an interrupted PolicyReconcile call.
 	reconcile func(in json.RawMessage, check []byte) Recovery
+	// writes says what a call writes, from its input alone. Nil writes
+	// nothing.
+	writes func(in json.RawMessage) (all bool, paths []string)
 }
 
 // Set is the tools available to a session.
@@ -173,6 +176,19 @@ func (s *Set) Prepare(name string, input json.RawMessage) (*Call, error) {
 		return nil, fmt.Errorf("%w %q; the tools are: %s", ErrUnknownTool, name, strings.Join(s.names(), ", "))
 	}
 	return t.prepare(input)
+}
+
+// Writes describes what a call with this input would write, for Locks,
+// without planning it: a call that can't be planned yet, such as an edit
+// of a file an earlier call creates, still waits for the calls it
+// conflicts with. Input that can't be read is taken to write everything.
+func (s *Set) Writes(name string, input json.RawMessage) *Call {
+	t := s.tools[name]
+	if t == nil || t.writes == nil {
+		return &Call{}
+	}
+	all, paths := t.writes(input)
+	return &Call{writesAll: all, writes: paths}
 }
 
 // Recover decides what to do with a call whose intent was journaled but

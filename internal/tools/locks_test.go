@@ -125,3 +125,36 @@ func TestShellWriteSets(t *testing.T) {
 		}
 	}
 }
+
+// A call's write set comes from its input, even when the call can't be
+// planned yet.
+func TestWritesFromInput(t *testing.T) {
+	s, root := session(t, Options{})
+	ws := filepath.Join(root, "workspace")
+	tests := []struct {
+		tool, input string
+		all         bool
+		path        string
+	}{
+		{EditFile, `{"path":"not-yet.txt","old_string":"a","new_string":"b"}`, false, "not-yet.txt"},
+		{WriteFile, `{"path":"sub/x.txt","content":"x"}`, false, "sub/x.txt"},
+		{Shell, `{"command":"make"}`, true, ""},
+		{Shell, `{"command":"make","writes":["out"]}`, false, "out"},
+		{Shell, `not json`, true, ""},
+		{ReadFile, `{"path":"a"}`, false, ""},
+		{"no_such_tool", `{}`, false, ""},
+	}
+	for _, tt := range tests {
+		all, paths := s.Writes(tt.tool, []byte(tt.input)).Writes()
+		if all != tt.all || (tt.path == "") != (len(paths) == 0) {
+			t.Errorf("%s %s: all %v, paths %v", tt.tool, tt.input, all, paths)
+			continue
+		}
+		if tt.path != "" {
+			want, _ := realPath(filepath.Join(ws, tt.path))
+			if paths[0] != want {
+				t.Errorf("%s %s: writes %s, want %s", tt.tool, tt.input, paths[0], want)
+			}
+		}
+	}
+}

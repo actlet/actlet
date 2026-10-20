@@ -111,14 +111,10 @@ func (w *worker) runTools(st *agentpb.WorkerState) error {
 			})
 			continue
 		}
-		// Plan the call now to learn what it writes, and take its place in
-		// the lock queue in call order.
-		input := json.RawMessage(call.GetInput())
-		planned, perr := b.tools.Prepare(call.GetName(), input)
-		ticket := b.locks.Enqueue(&tools.Call{})
-		if perr == nil {
-			ticket = b.locks.Enqueue(planned)
-		}
+		// Take the call's place in the lock queue, in call order, by what
+		// its input says it writes. It is planned once it holds its lock,
+		// after the calls it waited for have changed what they change.
+		ticket := b.locks.Enqueue(b.tools.Writes(call.GetName(), json.RawMessage(call.GetInput())))
 		wg.Go(func() {
 			select {
 			case sem <- struct{}{}:

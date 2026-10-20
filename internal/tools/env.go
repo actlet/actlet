@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -326,4 +327,39 @@ func (e *Env) writeSet(paths []string) ([]string, error) {
 		out = append(out, real)
 	}
 	return out, nil
+}
+
+// pathWrites is the write set of a file tool: the file in its input.
+func (e *Env) pathWrites(in json.RawMessage) (bool, []string) {
+	var args struct {
+		Path string `json:"path"`
+	}
+	if json.Unmarshal(in, &args) != nil {
+		return true, nil
+	}
+	path, err := e.resolve(args.Path)
+	if err != nil {
+		return true, nil
+	}
+	real, err := realPath(path)
+	if err != nil {
+		return true, nil
+	}
+	return false, []string{real}
+}
+
+// programWrites is the write set of a shell or Python call: what it
+// declares in writes, or everything.
+func (e *Env) programWrites(in json.RawMessage) (bool, []string) {
+	var args struct {
+		Writes []string `json:"writes"`
+	}
+	if json.Unmarshal(in, &args) != nil {
+		return true, nil
+	}
+	paths, err := e.writeSet(args.Writes)
+	if err != nil || paths == nil {
+		return true, nil
+	}
+	return false, paths
 }

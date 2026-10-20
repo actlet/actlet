@@ -77,6 +77,7 @@ func (e *Env) pythonTool() *tool {
 				`"additionalProperties":false}`),
 			Policy: PolicyNever,
 		},
+		writes: e.programWrites,
 		prepare: func(in json.RawMessage) (*Call, error) {
 			var args struct {
 				Code    *string  `json:"code"`

@@ -58,9 +58,9 @@ When the model calls several tools in one answer, they run together, up to the p
 
 - `write_file` and `edit_file` write their file;
 - `shell` and `python` may write anything, unless the call lists what it writes in `writes` (for example `"writes": ["build/"]`, or `[]` for a command that only reads);
-- the read and search tools write nothing and never wait.
+- the read and search tools write nothing and never wait, so a read in the same answer as a write of that file may see the file before or after it.
 
-Two calls conflict when one writes a path the other writes, or a directory containing it, or when either may write anything. A call waits only for earlier calls it conflicts with, so conflicting calls run in the order the model made them. Subagents share the workspace and the same locks, so the rule holds across them too. Results go back to the model in the order of the calls, whichever finished first.
+What a call writes is taken from its input, so an edit of a file that an earlier call in the same answer creates waits for it. Two calls conflict when one writes a path the other writes, or a directory containing it, or when either may write anything. A call waits only for earlier calls it conflicts with, so conflicting calls run in the order the model made them. Subagents share the workspace and the same locks, so the rule holds across them too. Results go back to the model in the order of the calls, whichever finished first.
 
 ## Subagents
 
