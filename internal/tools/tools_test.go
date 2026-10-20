@@ -475,6 +475,7 @@ func TestPython(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			r := call(t, s, Python, tt.input)
+			r.Output = strings.ReplaceAll(r.Output, "\r\n", "\n") // Windows
 			if r.IsError != tt.isError {
 				t.Errorf("IsError = %v", r.IsError)
 			}
