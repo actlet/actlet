@@ -38,6 +38,12 @@ service Gateway {
   // resolves the model alias to a provider and model of its choosing; the
   // worker never sees providers or credentials.
   rpc Infer(InferenceRequest) returns (stream InferenceResponse);
+
+  // CallTool runs a bridged tool for a session's agent: a tool the
+  // orchestrator implements, such as "decide". The intent ID is an
+  // idempotency key, as for Infer. The call may wait a long time, such as
+  // for a person to decide.
+  rpc CallTool(ToolCallRequest) returns (ToolCallResponse);
 }
 
 // --- Registration ---
@@ -82,13 +88,14 @@ message Profile {
   // profile, and the gateway should not assign it to such a worker.
   repeated string required_features = 7;
   // Budgets limit the session's use of time, money, tokens and disk.
-  // Not enforced by v0 workers yet.
   repeated Budget budgets = 8;
   // The models the session may use, by alias. Workers never see provider
   // names or credentials. The agent uses the alias of the "main" role.
   ModelCatalog models = 9;
-  // The local tools the session may use, with their settings. Empty
-  // allows all of them with default settings.
+  // The tools the session may use, with their settings. Empty allows all
+  // the local tools with default settings. The standard tools
+  // (report_progress, send_feedback, budget_status, decide and llm) are
+  // offered only when granted by name.
   repeated ToolGrant tools = 10;
   // The implementor's instructions to the agent, added to Actlet's base
   // prompt.
@@ -116,6 +123,10 @@ message LocalAttach {
   bool disabled = 2;
 }
 
+// Budget limits the session's use of one resource, over all its runs:
+// TIME counts active run time, MONEY the cost the gateway reports with
+// model and bridged tool calls, TOKENS the models' input and output
+// tokens, and DISK the session folder's size.
 message Budget {
   BudgetKind kind = 1;
   // The limit in the kind's unit: seconds for TIME, currency units for
@@ -288,6 +299,7 @@ message Command {
     Pause pause = 10;
     Stop stop = 11;
     Steer steer = 12;
+    ProfileUpdate profile_update = 13;
   }
 }
 
@@ -329,6 +341,21 @@ message Stop {
 // Steer passes an operator note to the session.
 message Steer {
   string note = 1;
+}
+
+// ProfileUpdate changes some of the profile's fields mid-session. Only
+// these may change: limits.max_workers, limits.max_tool_concurrency,
+// limits.max_subagents, budgets and local_attach. A command naming any
+// other field is rejected as a whole. The worker records the new
+// configuration before it takes effect.
+message ProfileUpdate {
+  // The new values, in a profile; only the fields named are read.
+  Profile profile = 1;
+  // The fields to change, such as "limits.max_workers" or "budgets".
+  repeated string fields = 2;
+  // Budgets whose usage starts again from zero, such as at the start of a
+  // new billing period.
+  repeated BudgetKind reset_budgets = 3;
 }
 
 message CommandAck {
@@ -420,6 +447,9 @@ message ActivityEvent {
     SubagentSpawned subagent_spawned = 20;
     SubagentFinished subagent_finished = 21;
     SessionInfo session_info = 22;
+    Progress progress = 23;
+    Feedback feedback = 24;
+    BudgetStatus budget_status = 25;
   }
 }
 
@@ -521,6 +551,8 @@ message ToolFinished {
   // What the model is told, possibly cut short.
   string output = 5;
   google.protobuf.Duration took = 6;
+  // What a call through the gateway used, such as an llm call.
+  Usage usage = 7;
 }
 
 // FileChange is a file a tool changed.
@@ -553,6 +585,41 @@ message SubagentFinished {
   uint64 turns = 3;
 }
 
+// Progress is the agent reporting how its task is going, with the
+// report_progress tool.
+message Progress {
+  string message = 1;
+  // How far along it is, from 0 to 100; unset when it doesn't say.
+  optional uint32 percent = 2;
+}
+
+// Feedback is the agent telling the orchestrator something about the
+// task or its setup, with the send_feedback tool.
+message Feedback {
+  // "problem", "suggestion", "question" or "other".
+  string kind = 1;
+  string message = 2;
+}
+
+// BudgetStatus reports the session's budgets: at the start of a run, when
+// a budget reaches its alert threshold or its limit, and when a limit
+// changes or a budget is reset.
+message BudgetStatus {
+  repeated BudgetUsage budgets = 1;
+  // Why it was sent: "start", "alert", "exhausted", "update" or "reset".
+  string reason = 2;
+}
+
+message BudgetUsage {
+  BudgetKind kind = 1;
+  double limit = 2;
+  double used = 3;
+  string currency = 4;
+  // "ok", "alerted" (past the alert threshold), "exhausted", or
+  // "waiting" (exhausted, and work waits for the budget to be raised).
+  string state = 5;
+}
+
 // --- Inference ---
 
 // InferenceRequest is one model call. The conversation is provider
@@ -576,6 +643,11 @@ message InferenceRequest {
   bytes continuation = 8;
   // 0 lets the gateway choose.
   uint32 max_output_tokens = 9;
+  // Why the model is called: "agent" for a worker's turn, "llm" for the
+  // agent's llm tool, a one-off call with no tools.
+  string purpose = 10;
+  // The worker making the call: "root", "root.1", and so on.
+  string worker = 11;
 }
 
 message Message {
@@ -658,4 +730,34 @@ message Usage {
   // What the call cost, in currency, when the gateway knows.
   double cost = 5;
   string currency = 6;
+}
+
+// --- Bridged tools ---
+
+// ToolCallRequest is one call of a bridged tool.
+message ToolCallRequest {
+  string session_id = 1;
+  uint64 epoch = 2;
+  // Identifies the call. The worker records it before calling and sends
+  // the same ID when it asks again, also after a crash, a pause or a
+  // restart, so the gateway can answer a call once: a call with an ID it
+  // has answered should get the same answer.
+  string intent_id = 3;
+  // The worker making the call: "root", "root.1", and so on.
+  string worker = 4;
+  // The tool, such as "decide".
+  string tool = 5;
+  // The input, a JSON object.
+  string input = 6;
+}
+
+message ToolCallResponse {
+  // The result, a JSON object.
+  string output = 1;
+  // The tool failed; output says why.
+  bool is_error = 2;
+  // What the call used, such as tokens and cost, when it used a model.
+  Usage usage = 3;
+  // The gateway answered from an earlier call with the same intent ID.
+  bool replayed = 4;
 }

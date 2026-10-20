@@ -8,6 +8,7 @@ syntax = "proto3";
 
 package actlet.session.v0;
 
+import "actlet/gateway/v0/gateway.proto";
 import "google/protobuf/duration.proto";
 
 option go_package = "github.com/actlet/actlet/internal/session/sessionpb";
@@ -45,16 +46,19 @@ message Config {
   string subagent_model = 11;
   uint32 max_subagent_depth = 12;
   uint32 max_subagents = 13;
+  // The budgets, and the commands a local viewer may send.
+  repeated actlet.gateway.v0.Budget budgets = 14;
+  repeated string local_commands = 15;
 }
 
 // Command is a control command the session received, and what it did with
 // it (kind "command"). It is written before the command is acknowledged.
 message Command {
   string id = 1;
-  // "orchestrator" or "local".
+  // "orchestrator", "local" or "remote".
   string origin = 2;
   string actor = 3;
-  // "pause", "stop", "steer", or "unknown".
+  // "pause", "stop", "steer", "profile_update", or "unknown".
   string action = 4;
   // Pause: "drain" or "interrupt"; empty if none was given.
   string pause_mode = 5;
@@ -65,6 +69,31 @@ message Command {
   string note = 8;
   bool accepted = 9;
   string message = 10;
+}
+
+// ConfigRevision is the configuration after a profile update (kind
+// "config.revision"), written before the update takes effect.
+message ConfigRevision {
+  // The update's command ID.
+  string command_id = 1;
+  Config config = 2;
+  // The fields the update changed.
+  repeated string fields = 3;
+}
+
+// BudgetEvent is a budget reaching its alert threshold or its limit, or
+// being reset (kind "budget").
+message BudgetEvent {
+  actlet.gateway.v0.BudgetKind kind = 1;
+  // "alert", "exhausted" or "reset".
+  string event = 2;
+  double used = 3;
+  double limit = 4;
+  // For "exhausted": "kill", "pause" or "idle".
+  string action = 5;
+  // For "reset": the total usage, over all runs, from which the budget
+  // counts again.
+  double offset = 6;
 }
 
 // StepDone records a completed step of the task (kind "task.step").

@@ -32,6 +32,7 @@ const (
 	Gateway_Control_FullMethodName         = "/actlet.gateway.v0.Gateway/Control"
 	Gateway_PublishActivity_FullMethodName = "/actlet.gateway.v0.Gateway/PublishActivity"
 	Gateway_Infer_FullMethodName           = "/actlet.gateway.v0.Gateway/Infer"
+	Gateway_CallTool_FullMethodName        = "/actlet.gateway.v0.Gateway/CallTool"
 )
 
 // GatewayClient is the client API for Gateway service.
@@ -57,6 +58,11 @@ type GatewayClient interface {
 	// resolves the model alias to a provider and model of its choosing; the
 	// worker never sees providers or credentials.
 	Infer(ctx context.Context, in *InferenceRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[InferenceResponse], error)
+	// CallTool runs a bridged tool for a session's agent: a tool the
+	// orchestrator implements, such as "decide". The intent ID is an
+	// idempotency key, as for Infer. The call may wait a long time, such as
+	// for a person to decide.
+	CallTool(ctx context.Context, in *ToolCallRequest, opts ...grpc.CallOption) (*ToolCallResponse, error)
 }
 
 type gatewayClient struct {
@@ -122,6 +128,16 @@ func (c *gatewayClient) Infer(ctx context.Context, in *InferenceRequest, opts ..
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type Gateway_InferClient = grpc.ServerStreamingClient[InferenceResponse]
 
+func (c *gatewayClient) CallTool(ctx context.Context, in *ToolCallRequest, opts ...grpc.CallOption) (*ToolCallResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ToolCallResponse)
+	err := c.cc.Invoke(ctx, Gateway_CallTool_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // GatewayServer is the server API for Gateway service.
 // All implementations must embed UnimplementedGatewayServer
 // for forward compatibility.
@@ -145,6 +161,11 @@ type GatewayServer interface {
 	// resolves the model alias to a provider and model of its choosing; the
 	// worker never sees providers or credentials.
 	Infer(*InferenceRequest, grpc.ServerStreamingServer[InferenceResponse]) error
+	// CallTool runs a bridged tool for a session's agent: a tool the
+	// orchestrator implements, such as "decide". The intent ID is an
+	// idempotency key, as for Infer. The call may wait a long time, such as
+	// for a person to decide.
+	CallTool(context.Context, *ToolCallRequest) (*ToolCallResponse, error)
 	mustEmbedUnimplementedGatewayServer()
 }
 
@@ -166,6 +187,9 @@ func (UnimplementedGatewayServer) PublishActivity(grpc.BidiStreamingServer[Activ
 }
 func (UnimplementedGatewayServer) Infer(*InferenceRequest, grpc.ServerStreamingServer[InferenceResponse]) error {
 	return status.Error(codes.Unimplemented, "method Infer not implemented")
+}
+func (UnimplementedGatewayServer) CallTool(context.Context, *ToolCallRequest) (*ToolCallResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method CallTool not implemented")
 }
 func (UnimplementedGatewayServer) mustEmbedUnimplementedGatewayServer() {}
 func (UnimplementedGatewayServer) testEmbeddedByValue()                 {}
@@ -231,6 +255,24 @@ func _Gateway_Infer_Handler(srv interface{}, stream grpc.ServerStream) error {
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type Gateway_InferServer = grpc.ServerStreamingServer[InferenceResponse]
 
+func _Gateway_CallTool_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ToolCallRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(GatewayServer).CallTool(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Gateway_CallTool_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(GatewayServer).CallTool(ctx, req.(*ToolCallRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Gateway_ServiceDesc is the grpc.ServiceDesc for Gateway service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -241,6 +283,10 @@ var Gateway_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Register",
 			Handler:    _Gateway_Register_Handler,
+		},
+		{
+			MethodName: "CallTool",
+			Handler:    _Gateway_CallTool_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

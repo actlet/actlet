@@ -13,6 +13,7 @@
 package sessionpb
 
 import (
+	v0 "github.com/actlet/actlet/proto/actlet/gateway/v0"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	durationpb "google.golang.org/protobuf/types/known/durationpb"
@@ -137,8 +138,11 @@ type Config struct {
 	SubagentModel    string `protobuf:"bytes,11,opt,name=subagent_model,json=subagentModel,proto3" json:"subagent_model,omitempty"`
 	MaxSubagentDepth uint32 `protobuf:"varint,12,opt,name=max_subagent_depth,json=maxSubagentDepth,proto3" json:"max_subagent_depth,omitempty"`
 	MaxSubagents     uint32 `protobuf:"varint,13,opt,name=max_subagents,json=maxSubagents,proto3" json:"max_subagents,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	// The budgets, and the commands a local viewer may send.
+	Budgets       []*v0.Budget `protobuf:"bytes,14,rep,name=budgets,proto3" json:"budgets,omitempty"`
+	LocalCommands []string     `protobuf:"bytes,15,rep,name=local_commands,json=localCommands,proto3" json:"local_commands,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Config) Reset() {
@@ -262,15 +266,29 @@ func (x *Config) GetMaxSubagents() uint32 {
 	return 0
 }
 
+func (x *Config) GetBudgets() []*v0.Budget {
+	if x != nil {
+		return x.Budgets
+	}
+	return nil
+}
+
+func (x *Config) GetLocalCommands() []string {
+	if x != nil {
+		return x.LocalCommands
+	}
+	return nil
+}
+
 // Command is a control command the session received, and what it did with
 // it (kind "command"). It is written before the command is acknowledged.
 type Command struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Id    string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	// "orchestrator" or "local".
+	// "orchestrator", "local" or "remote".
 	Origin string `protobuf:"bytes,2,opt,name=origin,proto3" json:"origin,omitempty"`
 	Actor  string `protobuf:"bytes,3,opt,name=actor,proto3" json:"actor,omitempty"`
-	// "pause", "stop", "steer", or "unknown".
+	// "pause", "stop", "steer", "profile_update", or "unknown".
 	Action string `protobuf:"bytes,4,opt,name=action,proto3" json:"action,omitempty"`
 	// Pause: "drain" or "interrupt"; empty if none was given.
 	PauseMode string `protobuf:"bytes,5,opt,name=pause_mode,json=pauseMode,proto3" json:"pause_mode,omitempty"`
@@ -385,6 +403,160 @@ func (x *Command) GetMessage() string {
 	return ""
 }
 
+// ConfigRevision is the configuration after a profile update (kind
+// "config.revision"), written before the update takes effect.
+type ConfigRevision struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The update's command ID.
+	CommandId string  `protobuf:"bytes,1,opt,name=command_id,json=commandId,proto3" json:"command_id,omitempty"`
+	Config    *Config `protobuf:"bytes,2,opt,name=config,proto3" json:"config,omitempty"`
+	// The fields the update changed.
+	Fields        []string `protobuf:"bytes,3,rep,name=fields,proto3" json:"fields,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ConfigRevision) Reset() {
+	*x = ConfigRevision{}
+	mi := &file_internal_session_sessionpb_session_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ConfigRevision) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ConfigRevision) ProtoMessage() {}
+
+func (x *ConfigRevision) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_session_sessionpb_session_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ConfigRevision.ProtoReflect.Descriptor instead.
+func (*ConfigRevision) Descriptor() ([]byte, []int) {
+	return file_internal_session_sessionpb_session_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *ConfigRevision) GetCommandId() string {
+	if x != nil {
+		return x.CommandId
+	}
+	return ""
+}
+
+func (x *ConfigRevision) GetConfig() *Config {
+	if x != nil {
+		return x.Config
+	}
+	return nil
+}
+
+func (x *ConfigRevision) GetFields() []string {
+	if x != nil {
+		return x.Fields
+	}
+	return nil
+}
+
+// BudgetEvent is a budget reaching its alert threshold or its limit, or
+// being reset (kind "budget").
+type BudgetEvent struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Kind  v0.BudgetKind          `protobuf:"varint,1,opt,name=kind,proto3,enum=actlet.gateway.v0.BudgetKind" json:"kind,omitempty"`
+	// "alert", "exhausted" or "reset".
+	Event string  `protobuf:"bytes,2,opt,name=event,proto3" json:"event,omitempty"`
+	Used  float64 `protobuf:"fixed64,3,opt,name=used,proto3" json:"used,omitempty"`
+	Limit float64 `protobuf:"fixed64,4,opt,name=limit,proto3" json:"limit,omitempty"`
+	// For "exhausted": "kill", "pause" or "idle".
+	Action string `protobuf:"bytes,5,opt,name=action,proto3" json:"action,omitempty"`
+	// For "reset": the total usage, over all runs, from which the budget
+	// counts again.
+	Offset        float64 `protobuf:"fixed64,6,opt,name=offset,proto3" json:"offset,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BudgetEvent) Reset() {
+	*x = BudgetEvent{}
+	mi := &file_internal_session_sessionpb_session_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BudgetEvent) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BudgetEvent) ProtoMessage() {}
+
+func (x *BudgetEvent) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_session_sessionpb_session_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BudgetEvent.ProtoReflect.Descriptor instead.
+func (*BudgetEvent) Descriptor() ([]byte, []int) {
+	return file_internal_session_sessionpb_session_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *BudgetEvent) GetKind() v0.BudgetKind {
+	if x != nil {
+		return x.Kind
+	}
+	return v0.BudgetKind(0)
+}
+
+func (x *BudgetEvent) GetEvent() string {
+	if x != nil {
+		return x.Event
+	}
+	return ""
+}
+
+func (x *BudgetEvent) GetUsed() float64 {
+	if x != nil {
+		return x.Used
+	}
+	return 0
+}
+
+func (x *BudgetEvent) GetLimit() float64 {
+	if x != nil {
+		return x.Limit
+	}
+	return 0
+}
+
+func (x *BudgetEvent) GetAction() string {
+	if x != nil {
+		return x.Action
+	}
+	return ""
+}
+
+func (x *BudgetEvent) GetOffset() float64 {
+	if x != nil {
+		return x.Offset
+	}
+	return 0
+}
+
 // StepDone records a completed step of the task (kind "task.step").
 type StepDone struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -395,7 +567,7 @@ type StepDone struct {
 
 func (x *StepDone) Reset() {
 	*x = StepDone{}
-	mi := &file_internal_session_sessionpb_session_proto_msgTypes[3]
+	mi := &file_internal_session_sessionpb_session_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -407,7 +579,7 @@ func (x *StepDone) String() string {
 func (*StepDone) ProtoMessage() {}
 
 func (x *StepDone) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_session_sessionpb_session_proto_msgTypes[3]
+	mi := &file_internal_session_sessionpb_session_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -420,7 +592,7 @@ func (x *StepDone) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StepDone.ProtoReflect.Descriptor instead.
 func (*StepDone) Descriptor() ([]byte, []int) {
-	return file_internal_session_sessionpb_session_proto_rawDescGZIP(), []int{3}
+	return file_internal_session_sessionpb_session_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *StepDone) GetStep() uint64 {
@@ -442,7 +614,7 @@ type Ended struct {
 
 func (x *Ended) Reset() {
 	*x = Ended{}
-	mi := &file_internal_session_sessionpb_session_proto_msgTypes[4]
+	mi := &file_internal_session_sessionpb_session_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -454,7 +626,7 @@ func (x *Ended) String() string {
 func (*Ended) ProtoMessage() {}
 
 func (x *Ended) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_session_sessionpb_session_proto_msgTypes[4]
+	mi := &file_internal_session_sessionpb_session_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -467,7 +639,7 @@ func (x *Ended) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Ended.ProtoReflect.Descriptor instead.
 func (*Ended) Descriptor() ([]byte, []int) {
-	return file_internal_session_sessionpb_session_proto_rawDescGZIP(), []int{4}
+	return file_internal_session_sessionpb_session_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *Ended) GetState() string {
@@ -488,7 +660,7 @@ var File_internal_session_sessionpb_session_proto protoreflect.FileDescriptor
 
 const file_internal_session_sessionpb_session_proto_rawDesc = "" +
 	"\n" +
-	"(internal/session/sessionpb/session.proto\x12\x11actlet.session.v0\x1a\x1egoogle/protobuf/duration.proto\"\xcf\x01\n" +
+	"(internal/session/sessionpb/session.proto\x12\x11actlet.session.v0\x1a\x1factlet/gateway/v0/gateway.proto\x1a\x1egoogle/protobuf/duration.proto\"\xcf\x01\n" +
 	"\aStarted\x12\x14\n" +
 	"\x05epoch\x18\x01 \x01(\x04R\x05epoch\x12\x1d\n" +
 	"\n" +
@@ -496,7 +668,7 @@ const file_internal_session_sessionpb_session_proto_rawDesc = "" +
 	"\x06config\x18\x03 \x01(\v2\x19.actlet.session.v0.ConfigR\x06config\x12\x18\n" +
 	"\aresumed\x18\x04 \x01(\bR\aresumed\x12\x1b\n" +
 	"\tworker_id\x18\x05 \x01(\tR\bworkerId\x12%\n" +
-	"\x0eactlet_version\x18\x06 \x01(\tR\ractletVersion\"\xab\x04\n" +
+	"\x0eactlet_version\x18\x06 \x01(\tR\ractletVersion\"\x87\x05\n" +
 	"\x06Config\x12\x1d\n" +
 	"\n" +
 	"profile_id\x18\x01 \x01(\tR\tprofileId\x12'\n" +
@@ -514,7 +686,9 @@ const file_internal_session_sessionpb_session_proto_rawDesc = "" +
 	" \x03(\tR\x05tools\x12%\n" +
 	"\x0esubagent_model\x18\v \x01(\tR\rsubagentModel\x12,\n" +
 	"\x12max_subagent_depth\x18\f \x01(\rR\x10maxSubagentDepth\x12#\n" +
-	"\rmax_subagents\x18\r \x01(\rR\fmaxSubagents\"\x9f\x02\n" +
+	"\rmax_subagents\x18\r \x01(\rR\fmaxSubagents\x123\n" +
+	"\abudgets\x18\x0e \x03(\v2\x19.actlet.gateway.v0.BudgetR\abudgets\x12%\n" +
+	"\x0elocal_commands\x18\x0f \x03(\tR\rlocalCommands\"\x9f\x02\n" +
 	"\aCommand\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x16\n" +
 	"\x06origin\x18\x02 \x01(\tR\x06origin\x12\x14\n" +
@@ -528,7 +702,19 @@ const file_internal_session_sessionpb_session_proto_rawDesc = "" +
 	"\x04note\x18\b \x01(\tR\x04note\x12\x1a\n" +
 	"\baccepted\x18\t \x01(\bR\baccepted\x12\x18\n" +
 	"\amessage\x18\n" +
-	" \x01(\tR\amessage\"\x1e\n" +
+	" \x01(\tR\amessage\"z\n" +
+	"\x0eConfigRevision\x12\x1d\n" +
+	"\n" +
+	"command_id\x18\x01 \x01(\tR\tcommandId\x121\n" +
+	"\x06config\x18\x02 \x01(\v2\x19.actlet.session.v0.ConfigR\x06config\x12\x16\n" +
+	"\x06fields\x18\x03 \x03(\tR\x06fields\"\xb0\x01\n" +
+	"\vBudgetEvent\x121\n" +
+	"\x04kind\x18\x01 \x01(\x0e2\x1d.actlet.gateway.v0.BudgetKindR\x04kind\x12\x14\n" +
+	"\x05event\x18\x02 \x01(\tR\x05event\x12\x12\n" +
+	"\x04used\x18\x03 \x01(\x01R\x04used\x12\x14\n" +
+	"\x05limit\x18\x04 \x01(\x01R\x05limit\x12\x16\n" +
+	"\x06action\x18\x05 \x01(\tR\x06action\x12\x16\n" +
+	"\x06offset\x18\x06 \x01(\x01R\x06offset\"\x1e\n" +
 	"\bStepDone\x12\x12\n" +
 	"\x04step\x18\x01 \x01(\x04R\x04step\"5\n" +
 	"\x05Ended\x12\x14\n" +
@@ -547,25 +733,32 @@ func file_internal_session_sessionpb_session_proto_rawDescGZIP() []byte {
 	return file_internal_session_sessionpb_session_proto_rawDescData
 }
 
-var file_internal_session_sessionpb_session_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
+var file_internal_session_sessionpb_session_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
 var file_internal_session_sessionpb_session_proto_goTypes = []any{
 	(*Started)(nil),             // 0: actlet.session.v0.Started
 	(*Config)(nil),              // 1: actlet.session.v0.Config
 	(*Command)(nil),             // 2: actlet.session.v0.Command
-	(*StepDone)(nil),            // 3: actlet.session.v0.StepDone
-	(*Ended)(nil),               // 4: actlet.session.v0.Ended
-	(*durationpb.Duration)(nil), // 5: google.protobuf.Duration
+	(*ConfigRevision)(nil),      // 3: actlet.session.v0.ConfigRevision
+	(*BudgetEvent)(nil),         // 4: actlet.session.v0.BudgetEvent
+	(*StepDone)(nil),            // 5: actlet.session.v0.StepDone
+	(*Ended)(nil),               // 6: actlet.session.v0.Ended
+	(*durationpb.Duration)(nil), // 7: google.protobuf.Duration
+	(*v0.Budget)(nil),           // 8: actlet.gateway.v0.Budget
+	(v0.BudgetKind)(0),          // 9: actlet.gateway.v0.BudgetKind
 }
 var file_internal_session_sessionpb_session_proto_depIdxs = []int32{
 	1, // 0: actlet.session.v0.Started.config:type_name -> actlet.session.v0.Config
-	5, // 1: actlet.session.v0.Config.stop_grace:type_name -> google.protobuf.Duration
-	5, // 2: actlet.session.v0.Config.signal_deadline:type_name -> google.protobuf.Duration
-	5, // 3: actlet.session.v0.Command.stop_grace:type_name -> google.protobuf.Duration
-	4, // [4:4] is the sub-list for method output_type
-	4, // [4:4] is the sub-list for method input_type
-	4, // [4:4] is the sub-list for extension type_name
-	4, // [4:4] is the sub-list for extension extendee
-	0, // [0:4] is the sub-list for field type_name
+	7, // 1: actlet.session.v0.Config.stop_grace:type_name -> google.protobuf.Duration
+	7, // 2: actlet.session.v0.Config.signal_deadline:type_name -> google.protobuf.Duration
+	8, // 3: actlet.session.v0.Config.budgets:type_name -> actlet.gateway.v0.Budget
+	7, // 4: actlet.session.v0.Command.stop_grace:type_name -> google.protobuf.Duration
+	1, // 5: actlet.session.v0.ConfigRevision.config:type_name -> actlet.session.v0.Config
+	9, // 6: actlet.session.v0.BudgetEvent.kind:type_name -> actlet.gateway.v0.BudgetKind
+	7, // [7:7] is the sub-list for method output_type
+	7, // [7:7] is the sub-list for method input_type
+	7, // [7:7] is the sub-list for extension type_name
+	7, // [7:7] is the sub-list for extension extendee
+	0, // [0:7] is the sub-list for field type_name
 }
 
 func init() { file_internal_session_sessionpb_session_proto_init() }
@@ -579,7 +772,7 @@ func file_internal_session_sessionpb_session_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_internal_session_sessionpb_session_proto_rawDesc), len(file_internal_session_sessionpb_session_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   5,
+			NumMessages:   7,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
