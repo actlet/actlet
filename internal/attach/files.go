@@ -56,15 +56,23 @@ func ReadFile(dir string, req *attachv0.ReadFileRequest) (*attachv0.ReadFileResp
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "%v", err)
 	}
-	rel, ok := readable(dir, real)
+	name, base, inside, ok := readable(dir, real)
 	if !ok {
 		return nil, status.Errorf(codes.PermissionDenied, "%s is outside inputs/, workspace/ and output/", req.GetPath())
 	}
-	f, err := os.Open(real)
+	// Open within the readable directory, which a symbolic link swapped in
+	// since the check can't lead out of: the agent controls workspace/.
+	root, err := os.OpenRoot(base)
 	if err != nil {
 		return nil, status.Errorf(codes.NotFound, "%v", err)
 	}
+	defer func() { _ = root.Close() }()
+	f, err := root.Open(inside)
+	if err != nil {
+		return nil, status.Errorf(codes.PermissionDenied, "%s: %v", req.GetPath(), err)
+	}
 	defer func() { _ = f.Close() }()
+	rel := filepath.ToSlash(filepath.Join(name, inside))
 	fi, err := f.Stat()
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "%v", err)
@@ -86,11 +94,12 @@ func ReadFile(dir string, req *attachv0.ReadFileRequest) (*attachv0.ReadFileResp
 }
 
 // readable reports whether a resolved path is in a readable directory of
-// the session folder dir, and returns it relative to dir.
-func readable(dir, real string) (string, bool) {
+// the session folder dir, and returns that directory's name, the
+// directory resolved, and the path inside it.
+func readable(dir, real string) (name, base, inside string, ok bool) {
 	root, err := filepath.EvalSymlinks(dir)
 	if err != nil {
-		return "", false
+		return "", "", "", false
 	}
 	for _, d := range readableDirs {
 		base, err := filepath.EvalSymlinks(filepath.Join(root, d))
@@ -101,7 +110,7 @@ func readable(dir, real string) (string, bool) {
 		if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 			continue
 		}
-		return filepath.ToSlash(filepath.Join(d, rel)), true
+		return d, base, rel, true
 	}
-	return "", false
+	return "", "", "", false
 }
