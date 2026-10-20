@@ -43,6 +43,9 @@ commands on standard input:
   pause drain|interrupt      pause the session; run actlet again to resume it
   stop [<grace>|kill]        stop the session, e.g. "stop 5s" or "stop kill"
   steer <note>               send an operator note
+  profile-update <file>      change the profile mid-session: a YAML or JSON
+                             file of the fields to change, such as budgets,
+                             and reset_budgets: [money]
   store-delay <duration>     slow down storing activity, to try a slow consumer (0: off)
   help                       show this help
   quit                       stop the gateway
@@ -450,6 +453,19 @@ func (g *gateway) handle(ctx context.Context, f []string) {
 		note := strings.Join(f[1:], " ")
 		g.send(ctx, "steer", func(ctx context.Context, s *sdk.Session) (*gatewayv0.CommandAck, error) {
 			return s.Steer(ctx, note)
+		})
+	case "profile-update":
+		if len(f) != 2 {
+			g.printf("usage: profile-update <file>")
+			return
+		}
+		u, err := sdk.LoadProfileUpdate(f[1])
+		if err != nil {
+			g.printf("%v", err)
+			return
+		}
+		g.send(ctx, "profile-update "+f[1], func(ctx context.Context, s *sdk.Session) (*gatewayv0.CommandAck, error) {
+			return s.UpdateProfile(ctx, u)
 		})
 	case "store-delay":
 		d, err := time.ParseDuration(strings.Join(f[1:], ""))

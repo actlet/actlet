@@ -116,6 +116,42 @@ type Steer struct {
 	System bool
 }
 
+// Limits are the limits a profile update may change while the agent
+// runs: the workers running at once, the tool calls of one turn running
+// at once, and the subagents a session may create.
+type Limits struct {
+	mu                            sync.Mutex
+	workers, toolCalls, subagents int
+	changed                       chan struct{}
+}
+
+// NewLimits returns limits.
+func NewLimits(workers, toolCalls, subagents int) *Limits {
+	return &Limits{workers: workers, toolCalls: toolCalls, subagents: subagents, changed: make(chan struct{})}
+}
+
+// Set changes the limits. Workers waiting for a slot see a raised limit
+// at once; lowering it lets running workers finish.
+func (l *Limits) Set(workers, toolCalls, subagents int) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.workers, l.toolCalls, l.subagents = workers, toolCalls, subagents
+	close(l.changed)
+	l.changed = make(chan struct{})
+}
+
+// Get returns the limits.
+func (l *Limits) Get() (workers, toolCalls, subagents int) {
+	w, t, s, _ := l.get()
+	return w, t, s
+}
+
+func (l *Limits) get() (workers, toolCalls, subagents int, changed <-chan struct{}) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.workers, l.toolCalls, l.subagents, l.changed
+}
+
 // Budget is the session's budgets, as the agent sees them.
 type Budget interface {
 	// Spent sets what the model and bridged tool calls have used in all.
@@ -155,6 +191,9 @@ type Env struct {
 	// Budget, if set, is told what the agent uses, and holds model calls
 	// back while a budget is used up.
 	Budget Budget
+	// Limits, if set, are limits that may change while the agent runs;
+	// they override those in Settings.
+	Limits *Limits
 	Logger *slog.Logger
 }
 
@@ -180,7 +219,11 @@ type box struct {
 	tools    *tools.Set
 	standard map[string]*standardTool
 	locks    *tools.Locks
-	slots    chan struct{} // running workers
+	limits   *Limits
+
+	slotMu    sync.Mutex
+	slotsUsed int           // running workers
+	slotFree  chan struct{} // closed and replaced when a slot is freed
 
 	mu         sync.Mutex
 	st         *stateSet
@@ -198,7 +241,7 @@ type worker struct {
 	id   string
 	done chan struct{} // closed when its goroutine ends
 	err  error         // why it ended, once done is closed
-	slot bool          // it holds a slot in b.slots
+	slot bool          // it holds one of the box's slots
 }
 
 // Run runs the agent until the root worker ends the task, which it
@@ -215,7 +258,11 @@ func Run(env Env) (done bool, err error) {
 	if b.def.MaxTurns == 0 {
 		b.def.MaxTurns = defaultMaxTurns
 	}
-	b.slots = make(chan struct{}, max(env.Settings.MaxWorkers, 1))
+	b.limits = env.Limits
+	if b.limits == nil {
+		b.limits = NewLimits(env.Settings.MaxWorkers, env.Settings.MaxToolConcurrency, env.Settings.MaxSubagents)
+	}
+	b.slotFree = make(chan struct{})
 	topts := toolOptions(env.Settings, env.Folder)
 	if err := os.MkdirAll(topts.TempDir, 0o700); err != nil {
 		return false, err
@@ -631,21 +678,38 @@ func (b *box) finish(final string) error {
 }
 
 func (w *worker) acquireSlot() error {
-	select {
-	case w.b.slots <- struct{}{}:
-		w.slot = true
-		return nil
-	case <-w.b.env.Stopping:
-		return errStopped
-	case <-w.b.stopAll:
-		return errStopped
+	b := w.b
+	for {
+		workers, _, _, changed := b.limits.get()
+		b.slotMu.Lock()
+		if b.slotsUsed < max(workers, 1) {
+			b.slotsUsed++
+			b.slotMu.Unlock()
+			w.slot = true
+			return nil
+		}
+		free := b.slotFree
+		b.slotMu.Unlock()
+		select {
+		case <-free:
+		case <-changed:
+		case <-b.env.Stopping:
+			return errStopped
+		case <-b.stopAll:
+			return errStopped
+		}
 	}
 }
 
 func (w *worker) releaseSlot() {
 	if w.slot {
 		w.slot = false
-		<-w.b.slots
+		b := w.b
+		b.slotMu.Lock()
+		b.slotsUsed--
+		close(b.slotFree)
+		b.slotFree = make(chan struct{})
+		b.slotMu.Unlock()
 	}
 }
 

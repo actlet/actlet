@@ -15,6 +15,7 @@ import (
 	"log/slog"
 	"os"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -281,7 +282,13 @@ type Params struct {
 	Config    *sessionpb.Config
 	// MaxStopGrace caps the grace period of stop commands.
 	MaxStopGrace time.Duration
-	Task         *sessionfs.Task
+	// MaxWorkers and MaxToolConcurrency cap what a profile update may set;
+	// 0 means no cap.
+	MaxWorkers, MaxToolConcurrency uint32
+	// OnConfig, if set, is told the configuration after a profile update,
+	// once it is recorded.
+	OnConfig func(*sessionpb.Config)
+	Task     *sessionfs.Task
 	// Info describes the run for viewers; it is published at the start.
 	Info *gatewayv0.SessionInfo
 	// Agent configures agent tasks, and Infer makes their model calls.
@@ -302,11 +309,13 @@ type Session struct {
 
 	cmdMu    sync.Mutex // serialises commands
 	commands map[string]*sessionpb.Command
+	steerMu  sync.Mutex
 	steers   []agent.Steer     // accepted steer notes and budget notices, in order
 	config   *sessionpb.Config // the effective configuration, after updates
 
 	budget       *budget.Tracker
 	stopTracking context.CancelFunc
+	limits       *agent.Limits
 
 	mu         sync.Mutex
 	state      gatewayv0.SessionState
@@ -356,6 +365,7 @@ func Start(p Params) (*Session, error) {
 		j:        j,
 		commands: map[string]*sessionpb.Command{},
 		config:   p.Config,
+		limits:   agent.NewLimits(int(p.Config.GetMaxWorkers()), int(p.Config.GetMaxToolConcurrency()), int(p.Config.GetMaxSubagents())),
 		state:    gatewayv0.SessionState_SESSION_STATE_RUNNING,
 		done:     make(chan struct{}),
 		stopping: make(chan struct{}),
@@ -408,9 +418,9 @@ func (s *Session) startBudgets() {
 			s.p.Emit(&gatewayv0.ActivityEvent{Body: &gatewayv0.ActivityEvent_BudgetStatus{BudgetStatus: st}})
 		},
 		Notify: func(id, text string) {
-			s.cmdMu.Lock()
+			s.steerMu.Lock()
 			s.steers = append(s.steers, agent.Steer{CommandID: id, Note: text, System: true})
-			s.cmdMu.Unlock()
+			s.steerMu.Unlock()
 		},
 		Stop: func(reason string) {
 			s.emitText("%s: stopping the session", reason)
@@ -511,10 +521,16 @@ func (s *Session) Apply(ctx context.Context, cmd *gatewayv0.Command) (*gatewayv0
 				rec.Message = msg
 			}
 		case *gatewayv0.Command_Steer:
+			s.steerMu.Lock()
 			s.steers = append(s.steers, steerOf(rec))
+			s.steerMu.Unlock()
 			s.p.Emit(&gatewayv0.ActivityEvent{Body: &gatewayv0.ActivityEvent_Steer{Steer: &gatewayv0.SteerNote{
 				Note: rec.Note, Origin: cmd.GetOrigin(), Actor: cmd.GetActor(),
 			}}})
+		case *gatewayv0.Command_ProfileUpdate:
+			if err := s.updateProfile(ctx, rec.GetId(), a.ProfileUpdate); err != nil {
+				return nil, err
+			}
 		}
 	}
 	result := gatewayv0.CommandResult_COMMAND_RESULT_REJECTED
@@ -581,6 +597,12 @@ func (s *Session) check(cmd *gatewayv0.Command) *sessionpb.Command {
 			rec.Note = rec.Note[:MaxNoteLen]
 			return reject(fmt.Sprintf("steer note longer than %d bytes", MaxNoteLen))
 		}
+	case *gatewayv0.Command_ProfileUpdate:
+		rec.Action = "profile_update"
+		if _, err := s.planUpdate(a.ProfileUpdate); err != nil {
+			return reject(err.Error())
+		}
+		rec.Message = "changed " + strings.Join(changed(a.ProfileUpdate), ", ")
 	default:
 		rec.Action = "unknown"
 		return reject("unknown command")
@@ -697,8 +719,8 @@ func (s *Session) setStateLocked(to gatewayv0.SessionState, reason string) {
 
 // steerNotes returns the accepted steer notes so far.
 func (s *Session) steerNotes() []agent.Steer {
-	s.cmdMu.Lock()
-	defer s.cmdMu.Unlock()
+	s.steerMu.Lock()
+	defer s.steerMu.Unlock()
 	return slices.Clone(s.steers)
 }
 
@@ -782,7 +804,7 @@ func (s *Session) runAgent() Outcome {
 	done, err := agent.Run(agent.Env{
 		Settings: s.p.Agent, Folder: s.p.Folder, Task: s.p.Task, SessionID: s.p.SessionID, Epoch: s.p.Epoch,
 		Records: records, Record: s.record, Emit: s.p.Emit, Infer: s.p.Infer,
-		Soft: s.soft, Hard: s.hard, Stopping: s.stopping, Steers: s.steerNotes, Budget: s.budget, Logger: s.log,
+		Soft: s.soft, Hard: s.hard, Stopping: s.stopping, Steers: s.steerNotes, Budget: s.budget, Limits: s.limits, Logger: s.log,
 	})
 	switch {
 	case err != nil:

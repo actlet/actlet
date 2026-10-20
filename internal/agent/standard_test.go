@@ -155,3 +155,33 @@ func TestAgentBudget(t *testing.T) {
 		t.Errorf("waits %d, tokens %d, tool calls %d", fb.waits, fb.tokens, fb.tools)
 	}
 }
+
+// Raising the worker limit lets a waiting worker start at once.
+func TestLimitsRaised(t *testing.T) {
+	b := &box{env: Env{Stopping: make(chan struct{})}, stopAll: make(chan struct{}), limits: NewLimits(1, 1, 0), slotFree: make(chan struct{})}
+	first, second := &worker{b: b}, &worker{b: b}
+	if err := first.acquireSlot(); err != nil {
+		t.Fatal(err)
+	}
+	got := make(chan error, 1)
+	go func() { got <- second.acquireSlot() }()
+	select {
+	case err := <-got:
+		t.Fatalf("a second worker ran with a limit of one (%v)", err)
+	case <-time.After(50 * time.Millisecond):
+	}
+	b.limits.Set(2, 1, 0)
+	select {
+	case err := <-got:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("raising the limit didn't let the worker start")
+	}
+	first.releaseSlot()
+	second.releaseSlot()
+	if b.slotsUsed != 0 {
+		t.Errorf("%d slots used", b.slotsUsed)
+	}
+}

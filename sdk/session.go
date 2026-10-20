@@ -9,6 +9,7 @@ import (
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -43,6 +44,14 @@ type Session struct {
 	// worker's answer.
 	fileQueue []*gatewayv0.FileRequest
 	files     map[string]chan *gatewayv0.FileResponse
+	// Profile updates not refused, by command ID, in order: applied to the
+	// profile again when the worker registers again.
+	updates []*profileUpdate
+}
+
+type profileUpdate struct {
+	id string
+	u  *gatewayv0.ProfileUpdate
 }
 
 type pendingCommand struct {
@@ -167,6 +176,75 @@ func (s *Session) Stop(ctx context.Context, opts StopOptions) (*gatewayv0.Comman
 		stop.Grace = durationpb.New(opts.Grace)
 	}
 	return s.Send(ctx, &gatewayv0.Command{Action: &gatewayv0.Command_Stop{Stop: stop}})
+}
+
+// UpdateProfile changes some of the session's profile mid-session: the
+// fields u names, which must be ones the worker lets change (see
+// gatewayv0.ProfileUpdate), and budgets to reset. Like any command, it is
+// queued until the worker acknowledges it; the worker records the new
+// configuration before it takes effect, and refuses an update naming
+// other fields as a whole.
+//
+// The server also applies the update to the profile Assign returns when
+// the worker registers again, so a box that resumes, such as after
+// pausing for a budget, starts with it. Budget resets aren't applied
+// again.
+func (s *Session) UpdateProfile(ctx context.Context, u *gatewayv0.ProfileUpdate) (*gatewayv0.CommandAck, error) {
+	cmd := &gatewayv0.Command{Id: NewID(), Action: &gatewayv0.Command_ProfileUpdate{ProfileUpdate: u}}
+	keep := proto.Clone(u).(*gatewayv0.ProfileUpdate)
+	keep.ResetBudgets = nil
+	s.mu.Lock()
+	s.updates = append(s.updates, &profileUpdate{id: cmd.Id, u: keep})
+	s.mu.Unlock()
+	ack, err := s.Send(ctx, cmd)
+	if err == nil && ack.GetResult() != gatewayv0.CommandResult_COMMAND_RESULT_ACCEPTED {
+		s.mu.Lock()
+		s.updates = slices.DeleteFunc(s.updates, func(p *profileUpdate) bool { return p.id == cmd.Id })
+		s.mu.Unlock()
+	}
+	return ack, err
+}
+
+// withUpdates returns the profile with the session's profile updates
+// applied, leaving p as it is.
+func (s *Session) withUpdates(p *gatewayv0.Profile) *gatewayv0.Profile {
+	s.mu.Lock()
+	updates := slices.Clone(s.updates)
+	s.mu.Unlock()
+	if len(updates) == 0 || p == nil {
+		return p
+	}
+	p = proto.Clone(p).(*gatewayv0.Profile)
+	for _, pu := range updates {
+		ApplyProfileUpdate(p, pu.u)
+	}
+	return p
+}
+
+// ApplyProfileUpdate sets the fields an update names in a profile, as a
+// worker does. Fields a worker doesn't let change are left alone.
+func ApplyProfileUpdate(p *gatewayv0.Profile, u *gatewayv0.ProfileUpdate) {
+	from := u.GetProfile()
+	limits := func() *gatewayv0.Limits {
+		if p.Limits == nil {
+			p.Limits = &gatewayv0.Limits{}
+		}
+		return p.Limits
+	}
+	for _, f := range u.GetFields() {
+		switch f {
+		case "limits.max_workers":
+			limits().MaxWorkers = from.GetLimits().GetMaxWorkers()
+		case "limits.max_tool_concurrency":
+			limits().MaxToolConcurrency = from.GetLimits().GetMaxToolConcurrency()
+		case "limits.max_subagents":
+			limits().MaxSubagents = from.GetLimits().GetMaxSubagents()
+		case "budgets":
+			p.Budgets = from.GetBudgets()
+		case "local_attach":
+			p.LocalAttach = from.GetLocalAttach()
+		}
+	}
 }
 
 // Steer passes an operator note to the session.

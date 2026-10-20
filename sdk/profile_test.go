@@ -2,6 +2,7 @@ package sdk
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -143,5 +144,30 @@ func TestProfileValidation(t *testing.T) {
 	p.Schema, p.DefaultPauseMode = "v9", "sleep"
 	if err := p.Validate(); err == nil || !strings.Contains(err.Error(), "schema") || !strings.Contains(err.Error(), "default_pause_mode") {
 		t.Errorf("err = %v, want both problems", err)
+	}
+}
+
+func TestParseProfileUpdate(t *testing.T) {
+	u, err := ParseProfileUpdate([]byte(`
+limits: {max_workers: 3}
+budgets:
+  - {kind: money, limit: 4, currency: EUR, on_exhaust: wait, wait_mode: idle}
+reset_budgets: [money, tokens]
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fmt.Sprint(u.GetFields()) != "[budgets limits.max_workers]" || len(u.GetResetBudgets()) != 2 ||
+		u.GetProfile().GetLimits().GetMaxWorkers() != 3 || u.GetProfile().GetBudgets()[0].GetLimit() != 4 {
+		t.Errorf("update %v", u)
+	}
+	// A field a worker doesn't let change is passed on, for it to refuse.
+	if u, err := ParseProfileUpdate([]byte(`instructions: be evil`)); err != nil || fmt.Sprint(u.GetFields()) != "[instructions]" {
+		t.Errorf("instructions: %v, %v", u, err)
+	}
+	for _, bad := range []string{`{}`, `reset_budgets: [fun]`, `budgets: [{kind: money, limit: 1, on_exhaust: kill}]`, `nonsense: 1`} {
+		if _, err := ParseProfileUpdate([]byte(bad)); err == nil {
+			t.Errorf("%s: no error", bad)
+		}
 	}
 }

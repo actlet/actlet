@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 
@@ -25,9 +26,6 @@ const ProfileSchema = "v0"
 // Build one in Go, or load it from a JSON or YAML file with LoadProfile; both
 // describe the same schema. Proto converts it to the wire form for
 // Assign.
-//
-// Budgets, Models and Tools are part of the schema but not yet enforced by
-// workers.
 type Profile struct {
 	// Schema must be ProfileSchema.
 	Schema  string `json:"schema"`
@@ -385,4 +383,80 @@ func LoadProfile(path string) (*Profile, error) {
 		return nil, fmt.Errorf("%s: %w", path, err)
 	}
 	return p, nil
+}
+
+// ParseProfileUpdate reads a profile update, in YAML or JSON: a partial
+// profile document with the fields to change, and optionally
+// reset_budgets, the budget kinds to reset. Each field present is
+// changed, and nested limits are changed one by one, such as
+// "limits.max_workers". A field a worker doesn't let change is passed
+// on, for the worker to refuse the update.
+func ParseProfileUpdate(data []byte) (*gatewayv0.ProfileUpdate, error) {
+	j, err := yaml.YAMLToJSONStrict(data)
+	if err != nil {
+		return nil, fmt.Errorf("profile update: %w", err)
+	}
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(j, &raw); err != nil {
+		return nil, fmt.Errorf("profile update: %w", err)
+	}
+	u := &gatewayv0.ProfileUpdate{}
+	if r, ok := raw["reset_budgets"]; ok {
+		var kinds []string
+		if err := json.Unmarshal(r, &kinds); err != nil {
+			return nil, fmt.Errorf("profile update: reset_budgets: %w", err)
+		}
+		for _, k := range kinds {
+			kind, ok := budgetKinds[k]
+			if !ok {
+				return nil, fmt.Errorf("profile update: reset_budgets: kind %q: use time, money, tokens or disk", k)
+			}
+			u.ResetBudgets = append(u.ResetBudgets, kind)
+		}
+		delete(raw, "reset_budgets")
+	}
+	for key, value := range raw {
+		if key == "limits" {
+			var limits map[string]json.RawMessage
+			if err := json.Unmarshal(value, &limits); err != nil {
+				return nil, fmt.Errorf("profile update: limits: %w", err)
+			}
+			for k := range limits {
+				u.Fields = append(u.Fields, "limits."+k)
+			}
+			continue
+		}
+		u.Fields = append(u.Fields, key)
+	}
+	slices.Sort(u.Fields)
+	// The rest is a profile, given a schema and an ID to validate.
+	raw["schema"], raw["id"] = json.RawMessage(`"`+ProfileSchema+`"`), json.RawMessage(`"update"`)
+	doc, err := json.Marshal(raw)
+	if err != nil {
+		return nil, err
+	}
+	p, err := ParseProfileJSON(doc)
+	if err != nil {
+		return nil, fmt.Errorf("profile update: %w", err)
+	}
+	if u.Profile, err = p.Proto(); err != nil {
+		return nil, fmt.Errorf("profile update: %w", err)
+	}
+	if len(u.Fields) == 0 && len(u.ResetBudgets) == 0 {
+		return nil, errors.New("profile update: it changes nothing")
+	}
+	return u, nil
+}
+
+// LoadProfileUpdate reads a profile update file, YAML or JSON.
+func LoadProfileUpdate(path string) (*gatewayv0.ProfileUpdate, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	u, err := ParseProfileUpdate(data)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", path, err)
+	}
+	return u, nil
 }

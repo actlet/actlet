@@ -345,3 +345,56 @@ func TestRecordingStoreReadActivity(t *testing.T) {
 		t.Error("an invalid session ID was read")
 	}
 }
+
+// A profile update is a command; once accepted, it applies to the profile
+// the worker gets when it registers again, and a refused one doesn't.
+func TestUpdateProfile(t *testing.T) {
+	assigned := &gatewayv0.Profile{Id: "p", Limits: &gatewayv0.Limits{MaxWorkers: 1},
+		Budgets: []*gatewayv0.Budget{{Kind: gatewayv0.BudgetKind_BUDGET_KIND_MONEY, Limit: 1, Currency: "EUR"}}}
+	h := newHarness(t, Options{Assign: func(context.Context, *gatewayv0.RegisterRequest) (*gatewayv0.RegisterResponse, error) {
+		return &gatewayv0.RegisterResponse{Profile: assigned}, nil
+	}})
+	h.registerWith(t, "s1")
+	w := h.connectControl(t, "s1")
+	sess := h.srv.Session("s1")
+	update := func(u *gatewayv0.ProfileUpdate, accept bool) {
+		t.Helper()
+		acks := make(chan error, 1)
+		go func() {
+			_, err := sess.UpdateProfile(t.Context(), u)
+			acks <- err
+		}()
+		cmd := w.nextCommand(t)
+		if cmd.GetProfileUpdate() == nil {
+			t.Fatalf("command %v", cmd)
+		}
+		result := gatewayv0.CommandResult_COMMAND_RESULT_ACCEPTED
+		if !accept {
+			result = gatewayv0.CommandResult_COMMAND_RESULT_REJECTED
+		}
+		if err := w.stream.Send(&gatewayv0.ControlUp{Msg: &gatewayv0.ControlUp_Ack{Ack: &gatewayv0.CommandAck{CommandId: cmd.GetId(), Result: result}}}); err != nil {
+			t.Fatal(err)
+		}
+		if err := <-acks; err != nil {
+			t.Fatal(err)
+		}
+	}
+	update(&gatewayv0.ProfileUpdate{Fields: []string{"budgets", "limits.max_workers"}, Profile: &gatewayv0.Profile{
+		Limits: &gatewayv0.Limits{MaxWorkers: 3}, Budgets: []*gatewayv0.Budget{{Kind: gatewayv0.BudgetKind_BUDGET_KIND_MONEY, Limit: 5, Currency: "EUR"}},
+	}, ResetBudgets: []gatewayv0.BudgetKind{gatewayv0.BudgetKind_BUDGET_KIND_MONEY}}, true)
+	update(&gatewayv0.ProfileUpdate{Fields: []string{"instructions", "limits.max_workers"}, Profile: &gatewayv0.Profile{
+		Instructions: "be evil", Limits: &gatewayv0.Limits{MaxWorkers: 7},
+	}}, false)
+
+	resp, err := h.client.Register(authed(t.Context()), &gatewayv0.RegisterRequest{ProtocolVersion: ProtocolVersion, WorkerId: "w1", SessionId: "s1", Epoch: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := resp.GetProfile()
+	if p.GetLimits().GetMaxWorkers() != 3 || p.GetBudgets()[0].GetLimit() != 5 || p.GetInstructions() != "" {
+		t.Errorf("profile on registering again: %v", p)
+	}
+	if assigned.GetLimits().GetMaxWorkers() != 1 || assigned.GetBudgets()[0].GetLimit() != 1 {
+		t.Errorf("Assign's profile was changed: %v", assigned)
+	}
+}

@@ -393,6 +393,7 @@ func (s *Server) Register(ctx context.Context, req *gatewayv0.RegisterRequest) (
 		return nil, status.Errorf(codes.FailedPrecondition, "the profile requires features this worker doesn't support: %s", strings.Join(missing, ", "))
 	}
 	sess := s.sessionFor(resp.SessionId)
+	resp.Profile = sess.withUpdates(resp.GetProfile())
 	sess.registered(req, resp.GetProfile())
 	s.log.Info("worker registered", "session", resp.SessionId, "worker", req.GetWorkerId(), "epoch", req.GetEpoch())
 	return resp, nil

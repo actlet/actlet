@@ -39,6 +39,8 @@ type agentGateway struct {
 	task  *gatewayv0.Task
 	// local is the profile's local attach setting.
 	local *gatewayv0.LocalAttach
+	// budgets are the profile's budgets.
+	budgets []*gatewayv0.Budget
 
 	mu     sync.Mutex
 	events []*gatewayv0.ActivityEvent
@@ -89,7 +91,7 @@ func (g *agentGateway) start() {
 				SessionId: req.GetSessionId(),
 				Profile: &gatewayv0.Profile{Id: "agent", Models: &gatewayv0.ModelCatalog{
 					Aliases: []*gatewayv0.ModelAlias{{Alias: "scripted"}}, Roles: map[string]string{"main": "scripted"},
-				}, Limits: &gatewayv0.Limits{MaxWorkers: 4, MaxToolConcurrency: 4}, LocalAttach: g.local},
+				}, Limits: &gatewayv0.Limits{MaxWorkers: 4, MaxToolConcurrency: 4}, LocalAttach: g.local, Budgets: g.budgets},
 				Task: g.task,
 			}, nil
 		},

@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"google.golang.org/grpc"
@@ -80,7 +81,7 @@ type Server struct {
 	attachv0.UnimplementedAttachServer
 	hub       *Hub
 	box       Box
-	commands  []string
+	commands  *commandSet
 	log       *slog.Logger
 	dir       string // the session folder, for ReadFile
 	sessionID string
@@ -93,7 +94,28 @@ func NewServer(sessionID string, hub *Hub, box Box, commands []string, log *slog
 	if log == nil {
 		log = slog.Default()
 	}
-	return &Server{hub: hub, box: box, commands: commands, log: log, sessionID: sessionID, origin: gatewayv0.Origin_ORIGIN_LOCAL}
+	return &Server{hub: hub, box: box, commands: &commandSet{list: commands}, log: log, sessionID: sessionID, origin: gatewayv0.Origin_ORIGIN_LOCAL}
+}
+
+// commandSet is the commands viewers may send, which a profile update may
+// change.
+type commandSet struct {
+	mu   sync.Mutex
+	list []string
+}
+
+func (c *commandSet) get() []string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.list
+}
+
+// SetCommands changes the commands viewers may send, for this server and
+// those Remote made from it.
+func (s *Server) SetCommands(commands []string) {
+	s.commands.mu.Lock()
+	defer s.commands.mu.Unlock()
+	s.commands.list = commands
 }
 
 // Remote returns a server like s for viewers elsewhere: their commands
@@ -121,7 +143,7 @@ func (s *Server) Info(ctx context.Context, _ *attachv0.InfoRequest) (*attachv0.I
 		return nil, err
 	}
 	resp := s.box.Info()
-	resp.Commands = s.commands
+	resp.Commands = s.commands.get()
 	return resp, nil
 }
 
@@ -172,7 +194,7 @@ func (s *Server) Command(ctx context.Context, req *attachv0.CommandRequest) (*ga
 		return nil, err
 	}
 	cmd.Id = who + "-" + newID()
-	if !slices.Contains(s.commands, what) {
+	if !slices.Contains(s.commands.get(), what) {
 		return nil, status.Errorf(codes.PermissionDenied, "the profile doesn't let a %s viewer %s the session", who, what)
 	}
 	s.log.Info("attach: viewer command", "command", what, "origin", who, "actor", cmd.Actor)

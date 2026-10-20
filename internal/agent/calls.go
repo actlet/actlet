@@ -41,8 +41,8 @@ func (b *box) specs(depth uint32) []*gatewayv0.ToolSpec {
 		out = append(out, &gatewayv0.ToolSpec{Name: sp.Name, Description: sp.Description, InputSchema: string(sp.Schema)})
 	}
 	out = append(out, b.standardSpecs()...)
-	s := b.env.Settings
-	if int(depth) < s.MaxSubagentDepth && s.MaxSubagents > 0 {
+	_, _, subagents, _ := b.limits.get()
+	if int(depth) < b.env.Settings.MaxSubagentDepth && subagents > 0 {
 		out = append(out, b.spawnSpec())
 	}
 	return out
@@ -72,7 +72,8 @@ func (b *box) spawnSpec() *gatewayv0.ToolSpec {
 // or stop starts no new call.
 func (w *worker) runTools(st *agentpb.WorkerState) error {
 	b := w.b
-	sem := make(chan struct{}, max(b.env.Settings.MaxToolConcurrency, 1))
+	_, concurrency, _, _ := b.limits.get()
+	sem := make(chan struct{}, max(concurrency, 1))
 	var wg sync.WaitGroup
 	var mu sync.Mutex
 	var firstErr error
@@ -361,6 +362,7 @@ func (w *worker) createChild(call *gatewayv0.ToolCall, in spawnInput) (child, re
 		model = in.Model
 	}
 	sys, version := s.Prompt.system(b.tools, true)
+	_, _, subagents, _ := b.limits.get()
 
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -368,8 +370,8 @@ func (w *worker) createChild(call *gatewayv0.ToolCall, in spawnInput) (child, re
 	switch {
 	case int(parent.GetDepth()) >= s.MaxSubagentDepth:
 		return "", fmt.Sprintf("subagents may nest at most %d deep; this worker is at depth %d, so it can't spawn one. Do the subtask yourself", s.MaxSubagentDepth, parent.GetDepth()), nil
-	case int(b.st.spawned) >= s.MaxSubagents:
-		return "", fmt.Sprintf("the session may create at most %d subagents and has created %d. Do the subtask yourself", s.MaxSubagents, b.st.spawned), nil
+	case int(b.st.spawned) >= subagents:
+		return "", fmt.Sprintf("the session may create at most %d subagents and has created %d. Do the subtask yourself", subagents, b.st.spawned), nil
 	}
 	n := 1
 	for _, id := range b.st.order {

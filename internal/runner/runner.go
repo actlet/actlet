@@ -194,9 +194,18 @@ func Run(ctx context.Context, cfg Config, signals <-chan os.Signal) int {
 	}
 	commands := attach.AllowedCommands(resp.GetProfile().GetLocalAttach())
 	info := sessionInfo(cfg, folder, task, resp.GetProfile(), effective, agentSettings, commands, log)
+	// Viewers' permissions follow profile updates. Updates arrive on the
+	// control stream, which starts after the attach server exists.
+	var as *attach.Server
 	sess, err := session.Start(session.Params{
 		Folder: folder, SessionID: sessionID, Epoch: epoch, Recovered: recovered,
 		Config: effective, MaxStopGrace: cfg.MaxStopGrace, Task: task, Info: info,
+		MaxWorkers: cfg.MaxWorkers, MaxToolConcurrency: cfg.MaxToolConcurrency,
+		OnConfig: func(c *sessionpb.Config) {
+			if as != nil {
+				as.SetCommands(c.GetLocalCommands())
+			}
+		},
 		Agent: agentSettings, Infer: infer,
 		WorkerID: cfg.WorkerID, Version: cfg.Version, Emit: pub.Emit, Logger: log,
 	})
@@ -208,7 +217,7 @@ func Run(ctx context.Context, cfg Config, signals <-chan os.Signal) int {
 	// ones, if the deployment opens it, to the attach port. Closing the
 	// hub ends the viewers' feeds after the last events, so the servers
 	// stop gracefully.
-	as := attach.NewServer(sessionID, hub, &box{sess: sess, sessionID: sessionID, epoch: epoch, cfg: cfg, folder: folder, client: client, started: time.Now()}, commands, log)
+	as = attach.NewServer(sessionID, hub, &box{sess: sess, sessionID: sessionID, epoch: epoch, cfg: cfg, folder: folder, client: client, started: time.Now()}, commands, log)
 	as.ServeFiles(folder.Dir)
 	if !cfg.NoAttach && !resp.GetProfile().GetLocalAttach().GetDisabled() {
 		lis, err := attach.Listen(folder.State())
