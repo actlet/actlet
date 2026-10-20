@@ -37,12 +37,14 @@ type agentGateway struct {
 	data  string
 	model *scripted.Model
 	task  *gatewayv0.Task
+	// local is the profile's local attach setting.
+	local *gatewayv0.LocalAttach
 
 	mu     sync.Mutex
 	events []*gatewayv0.ActivityEvent
 }
 
-func newAgentGateway(t *testing.T, script string) *agentGateway {
+func newAgentGateway(t *testing.T, script string, opts ...func(*agentGateway)) *agentGateway {
 	t.Helper()
 	model, err := scripted.Parse([]byte(script))
 	if err != nil {
@@ -50,6 +52,9 @@ func newAgentGateway(t *testing.T, script string) *agentGateway {
 	}
 	g := &agentGateway{t: t, model: model, addr: "127.0.0.1:0", data: t.TempDir(),
 		task: &gatewayv0.Task{Schema: "v0", Id: "sum", Kind: "agent", Input: []byte(`"Add up the numbers in the input file and write a report."`)}}
+	for _, o := range opts {
+		o(g)
+	}
 	g.start()
 	t.Cleanup(g.stop)
 	return g
@@ -84,7 +89,7 @@ func (g *agentGateway) start() {
 				SessionId: req.GetSessionId(),
 				Profile: &gatewayv0.Profile{Id: "agent", Models: &gatewayv0.ModelCatalog{
 					Aliases: []*gatewayv0.ModelAlias{{Alias: "scripted"}}, Roles: map[string]string{"main": "scripted"},
-				}, Limits: &gatewayv0.Limits{MaxWorkers: 4, MaxToolConcurrency: 4}},
+				}, Limits: &gatewayv0.Limits{MaxWorkers: 4, MaxToolConcurrency: 4}, LocalAttach: g.local},
 				Task: g.task,
 			}, nil
 		},
@@ -433,8 +438,9 @@ func TestAgentExample(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	g := newAgentGateway(t, string(script))
-	g.task = &gatewayv0.Task{Schema: task.Schema, Id: task.ID, Kind: task.Kind, Definition: task.Definition, Input: task.Input}
+	g := newAgentGateway(t, string(script), func(g *agentGateway) {
+		g.task = &gatewayv0.Task{Schema: task.Schema, Id: task.ID, Kind: task.Kind, Definition: task.Definition, Input: task.Input}
+	})
 	session := sessionDir(t, map[string]string{"numbers.txt": string(numbers)})
 	if code := exitCode(t, g.worker(session, "")); code != 0 {
 		t.Fatalf("exit code %d, want 0", code)

@@ -10,6 +10,7 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"strconv"
 	"syscall"
 	"testing"
 	"time"
@@ -19,11 +20,16 @@ import (
 	"github.com/actlet/actlet/internal/crashpoint"
 	"github.com/actlet/actlet/internal/session"
 	"github.com/actlet/actlet/internal/sessionfs"
+	"github.com/actlet/actlet/internal/tui"
 	gatewayv0 "github.com/actlet/actlet/proto/actlet/gateway/v0"
 	"github.com/actlet/actlet/sdk"
 )
 
 const runHelperEnv = "ACTLET_RUN_HELPER"
+
+// tuiReportEnv names a file the helper writes the number of viewers it
+// started to.
+const tuiReportEnv = "ACTLET_TEST_TUI_REPORT"
 
 // crashpointEnv names the crash point the helper process dies at.
 const crashpointEnv = "ACTLET_TEST_CRASHPOINT"
@@ -36,7 +42,11 @@ func TestRunHelper(t *testing.T) {
 	if p := os.Getenv(crashpointEnv); p != "" {
 		crashpoint.Set(p)
 	}
-	os.Exit(run([]string{"run", "-log-level", "warn"}, os.Stdout, os.Stderr))
+	code := run([]string{"run", "-log-level", "warn"}, os.Stdout, os.Stderr)
+	if f := os.Getenv(tuiReportEnv); f != "" {
+		_ = os.WriteFile(f, []byte(strconv.Itoa(tui.Programs())), 0o600)
+	}
+	os.Exit(code)
 }
 
 // A command is journaled before it is acknowledged: killing the process

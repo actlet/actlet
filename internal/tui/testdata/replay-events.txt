@@ -1,0 +1,32 @@
+ actlet  sum                                            Chat  Session  Task  Profile  Tools  Events 
+1.1    session  started: run 1, resumed false                                                       
+1.2    session  session_info: task sum                                                              
+1.3    session  state: starting → running (started)                                                 
+1.4    root     model_turn 1 (large): I'll hand the file to a subagent. → spawn_subagent            
+1.5    root.1   subagent_spawned by root (call s1): Write the report.                               
+1.6    root.1   tool_started write_file c1: {"path":"report.md"}                                    
+1.7    root.1   file_change report.md (call c1)                                                     
+1.8    root.1   tool_finished write_file c1 error=false unknown=false: created report.md (10 bytes) 
+1.9    session  steer: use metric units                                                             
+1.10   root.1   subagent_finished error=false: Wrote report.md.                                     
+1.11   root     tool_finished spawn_subagent s1 error=false unknown=false: Wrote report.md.         
+1.12   root     model_turn 2 (large): Now the totals. → shell                                       
+1.13   root     tool_started shell c2: {"command":"sleep 5"}                                        
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+────────────────────────────────────────────────────────────────────────────────────────────────────
+ a recording · space play/pause · ←/→ seek · +/- speed                                              
+ ⠋ running · large · ctx 6% · 0.08 EUR · 12s · replay at the end 1x 100%                     ? keys 

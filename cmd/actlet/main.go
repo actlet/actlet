@@ -17,6 +17,7 @@ Usage:
 
 Commands:
   run        Run a session: connect to the gateway and run its task
+  attach     Watch the box running in a session folder, and send notes
   version    Print version information
   help       Print this help
 
@@ -46,6 +47,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 	switch cmd {
 	case "run":
 		return runRun(rest, stdout, stderr, nil)
+	case "attach":
+		return runAttach(rest, stdout, stderr)
 	case "version":
 		return buildinfo.RunVersion("actlet", rest, stdout, stderr)
 	case "help", "-h", "-help", "--help":

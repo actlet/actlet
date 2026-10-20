@@ -1,0 +1,32 @@
+ actlet  sum                                            Chat  Session  Task  Profile  Tools  Events 
+Session                                                                                             
+  id           sess-1234abcd                                                                        
+  state        running: started                                                                     
+  run          1                                                                                    
+  elapsed      12s                                                                                  
+  viewing      recording run.actrec                                                                 
+  events       13                                                                                   
+                                                                                                    
+Box                                                                                                 
+  folder       n/a                                                                                  
+  output       n/a                                                                                  
+  memory       n/a                                                                                  
+  cpu          n/a                                                                                  
+  gateway      n/a                                                                                  
+                                                                                                    
+Usage                                                                                               
+  tokens       25k in, 500 out                                                                      
+  cost         0.0820 EUR                                                                           
+  worker     model     turns  context   tokens      cost                                            
+  root       large         2       6%      26k    0.0820                                            
+  root.1     fast          2        0        0       n/a                                            
+                                                                                                    
+Budgets (not enforced yet)                                                                          
+  money  limit 5 EUR      used 0.08 (2%)                                                            
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+────────────────────────────────────────────────────────────────────────────────────────────────────
+ a recording · space play/pause · ←/→ seek · +/- speed                                              
+ ⠋ running · large · ctx 6% · 0.08 EUR · 12s · replay at the end 1x 100%                     ? keys 

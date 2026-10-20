@@ -1,0 +1,32 @@
+ actlet  sum                                            Chat  Session  Task  Profile  Tools  Events 
+Effective configuration (profile coding)                                                            
+  {                                                                                                 
+    "model": "large"                                                                                
+  }                                                                                                 
+                                                                                                    
+Models                                                                                              
+  large  200k context                                                                               
+  fast  128k context                                                                                
+  roles: main → large, subagent → fast                                                              
+  selectable: fast                                                                                  
+                                                                                                    
+Budgets (not enforced yet)                                                                          
+  money  limit 5 EUR      used 0.08 (2%)                                                            
+                                                                                                    
+Local viewers may                                                                                   
+  steer                                                                                             
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+────────────────────────────────────────────────────────────────────────────────────────────────────
+ a recording · space play/pause · ←/→ seek · +/- speed                                              
+ ⠋ running · large · ctx 6% · 0.08 EUR · 12s · replay at the end 1x 100%                     ? keys 

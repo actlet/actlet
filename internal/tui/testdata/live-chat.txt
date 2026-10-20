@@ -1,0 +1,32 @@
+ actlet  sum                                            Chat  Session  Task  Profile  Tools  Events  
+ · run 1 started                                                     │ WORKERS                       
+                                                                     │● root large 2 turns           
+ ▌ Agent · turn 1 · large · 12k in / 400 out · 22:13:24              │✓  root.1 fast 2 turns         
+ ▌ I'll hand the file to a subagent.                                 │                               
+   ✓ Subagent root.1  Write the report.                          4.0s│FILES                          
+     ┊                                                               │report.md +1 −0                
+     ┊ ▌ Subagent root.1 · an earlier turn                           │o or a click opens a file      
+     ┊   ✓ Write report.md  +1 −0                                12ms│                               
+     ┊     │ @@ -0,0 +1 @@                                           │                               
+     ┊     │ +Total: 12                                              │                               
+     │ ↳ Wrote report.md.                                            │                               
+                                                                     │                               
+ ▌ Operator · alice · 22:13:29                                       │                               
+ ▌ use metric units                                                  │                               
+                                                                     │                               
+ ▌ Agent · turn 2 · large · 13k in / 100 out · 22:13:32              │                               
+ ▌ Now the totals.                                                   │                               
+   ⠋ Shell $ sleep 5                                          running│                               
+                                                                     │                               
+                                                                     │                               
+                                                                     │                               
+                                                                     │                               
+                                                                     │                               
+                                                                     │                               
+                                                                     │                               
+                                                                     │                               
+                                                                     │                               
+                                                                     │                               
+──────────────────────────────────────────────────────────────────────────────────────────────────── 
+ › press i to send the agent a note                                                                  
+ ⠋ running · large · ctx 6% · 0.08 EUR · 30s · local box                                     ? keys  

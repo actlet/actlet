@@ -1,0 +1,32 @@
+ actlet  sum                                            Chat  Session  Task  Profile  Tools  Events 
+Task sum (agent)                                                                                    
+                                                                                                    
+  {                                                                                                 
+    "id": "sum",                                                                                    
+    "input": "Add up the numbers."                                                                  
+  }                                                                                                 
+                                                                                                    
+Workers                                                                                             
+  root  running  2 turns  model large                                                               
+    root.1  finished  2 turns  model fast                                                           
+      task: Write the report.                                                                       
+      result: Wrote report.md.                                                                      
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+────────────────────────────────────────────────────────────────────────────────────────────────────
+ a recording · space play/pause · ←/→ seek · +/- speed                                              
+ ⠋ running · large · ctx 6% · 0.08 EUR · 12s · replay at the end 1x 100%                     ? keys 

@@ -9,14 +9,19 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strconv"
+	"sync/atomic"
 	"syscall"
 	"time"
 
+	"github.com/actlet/actlet/internal/attach"
 	"github.com/actlet/actlet/internal/buildinfo"
 	"github.com/actlet/actlet/internal/gwclient"
 	"github.com/actlet/actlet/internal/runner"
 	"github.com/actlet/actlet/internal/session"
+	"github.com/actlet/actlet/internal/sessionfs"
+	"github.com/actlet/actlet/internal/tui"
 )
 
 const runUsage = `Usage: actlet run [flags]
@@ -63,6 +68,8 @@ func runRun(args []string, stdout, stderr io.Writer, signals <-chan os.Signal) i
 		workerID  = fs.String("worker-id", envDefault("ACTLET_WORKER_ID", hostname), "worker identity [ACTLET_WORKER_ID]")
 		logLevel  = fs.String("log-level", envDefault("ACTLET_LOG_LEVEL", "info"), "log level: debug, info, warn or error [ACTLET_LOG_LEVEL]")
 		logFormat = fs.String("log-format", envDefault("ACTLET_LOG_FORMAT", "text"), "log format: text or json [ACTLET_LOG_FORMAT]")
+		withTUI   = fs.Bool("tui", false, "show the session in a terminal viewer while it runs; logs go to .actlet/run.log")
+		noAttach  = fs.Bool("no-attach", envDefault("ACTLET_NO_ATTACH", "") == "true", "don't let local viewers attach [ACTLET_NO_ATTACH=true]")
 		manifest  = fs.String("tools-manifest", envDefault("ACTLET_TOOLS_MANIFEST", "/etc/actlet/tools.md"),
 			"file describing what is installed, for the agent's prompt; ignored if missing [ACTLET_TOOLS_MANIFEST]")
 	)
@@ -110,7 +117,30 @@ func runRun(args []string, stdout, stderr io.Writer, signals <-chan os.Signal) i
 		fmt.Fprintln(stderr, "actlet run: a gateway address is required: -gateway or ACTLET_GATEWAY")
 		return session.ExitUsage
 	}
-	log, err := newLogger(stderr, *logLevel, *logFormat)
+	logOut := stderr
+	if *withTUI {
+		if *noAttach {
+			fmt.Fprintln(stderr, "actlet run: -tui needs local attach; drop -no-attach")
+			return session.ExitUsage
+		}
+		if err := tui.CheckTerminal(); err != nil {
+			fmt.Fprintf(stderr, "actlet run: -tui: %v\n", err)
+			return session.ExitUsage
+		}
+		folder, err := sessionfs.Open(*dir)
+		if err != nil {
+			fmt.Fprintf(stderr, "actlet run: %v\n", err)
+			return session.ExitFailed
+		}
+		f, err := os.OpenFile(filepath.Join(folder.State(), "run.log"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
+		if err != nil {
+			fmt.Fprintf(stderr, "actlet run: %v\n", err)
+			return session.ExitFailed
+		}
+		defer func() { _ = f.Close() }()
+		logOut = f
+	}
+	log, err := newLogger(logOut, *logLevel, *logFormat)
 	if err != nil {
 		fmt.Fprintf(stderr, "actlet run: %v\n", err)
 		return session.ExitUsage
@@ -130,7 +160,34 @@ func runRun(args []string, stdout, stderr io.Writer, signals <-chan os.Signal) i
 		ActivitySpillMax:   *spillMax,
 		FlushTimeout:       *flushTimeout,
 		ToolsManifest:      *manifest,
+		NoAttach:           *noAttach,
 		Logger:             log,
+	}
+	// With -tui, the viewer attaches to this run's own socket, like any
+	// other. Quitting it detaches and the run carries on; when the run
+	// ends first, the viewer stays until it is quit.
+	viewerDone := make(chan struct{})
+	var viewerStarted, runEnded atomic.Bool
+	if *withTUI {
+		cfg.Attached = func(string) {
+			viewerStarted.Store(true)
+			go func() {
+				defer close(viewerDone)
+				client, closeClient, err := attach.Dial(sessionfs.Folder{Dir: *dir}.State())
+				if err != nil {
+					log.Error("tui", "err", err)
+					return
+				}
+				defer func() { _ = closeClient() }()
+				conn := tui.Connection{Kind: "this process", Target: absPath(*dir)}
+				if err := tui.RunLive(context.Background(), client, conn, viewerName()); err != nil {
+					log.Error("tui", "err", err)
+				}
+				if !runEnded.Load() {
+					fmt.Fprintln(stderr, "actlet run: the viewer detached; the session carries on (Ctrl-C pauses it; logs: .actlet/run.log)")
+				}
+			}()
+		}
 	}
 	if signals == nil {
 		ch := make(chan os.Signal, 2)
@@ -138,7 +195,12 @@ func runRun(args []string, stdout, stderr io.Writer, signals <-chan os.Signal) i
 		defer signal.Stop(ch)
 		signals = ch
 	}
-	return runner.Run(context.Background(), cfg, signals)
+	code := runner.Run(context.Background(), cfg, signals)
+	runEnded.Store(true)
+	if viewerStarted.Load() {
+		<-viewerDone // the viewer says the run ended; q quits it
+	}
+	return code
 }
 
 func newLogger(w io.Writer, level, format string) (*slog.Logger, error) {

@@ -23,6 +23,7 @@ const replayUsage = `Usage:
 Commands:
   inspect    Summarise an activity recording: epochs, event kinds, gaps
   export     Export its events
+  play       Play it back in a terminal viewer
 
 Activity recordings (.actrec) are written by gateways, and by a worker that
 spills activity to its session folder while the gateway is unreachable.
@@ -39,6 +40,8 @@ func runReplay(args []string, stdout, stderr io.Writer) int {
 		return runReplayInspect(rest, stdout, stderr)
 	case "export":
 		return runReplayExport(rest, stdout, stderr)
+	case "play":
+		return runReplayPlay(rest, stdout, stderr)
 	case "help", "-h", "-help", "--help":
 		fmt.Fprint(stdout, replayUsage)
 		return 0
