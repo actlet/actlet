@@ -297,6 +297,25 @@ func mustReplay(t *testing.T, evs []*gatewayv0.ActivityEvent) *Model {
 	return NewReplay(p)
 }
 
+// Playing at 1x in short ticks crosses the recording's one-second gaps.
+func TestPlayerCrossesGaps(t *testing.T) {
+	evs := run()
+	p, err := OpenPlayer(recording(t, evs))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer p.Close()
+	now := time.Now()
+	p.Play(now, 1)
+	for range int(time.Duration(len(evs)+1) * time.Second / (120 * time.Millisecond)) {
+		now = now.Add(120 * time.Millisecond)
+		p.Advance(now)
+	}
+	if p.Pos() != len(evs) {
+		t.Errorf("played %d of %d events", p.Pos(), len(evs))
+	}
+}
+
 func TestPlayer(t *testing.T) {
 	evs := run()
 	path := recording(t, evs[:5])

@@ -138,17 +138,22 @@ func (p *Player) Events() []*gatewayv0.ActivityEvent { return p.events }
 // View returns the view at the position.
 func (p *Player) View() *view.Session { return p.sess }
 
-// Seek shows the first n events.
+// Seek shows the first n events, and plays on from the last of them.
 func (p *Player) Seek(n int) {
+	p.show(n)
+	if p.pos > 0 {
+		p.cursor = p.events[p.pos-1].GetTime().AsTime()
+	}
+}
+
+// show folds the view to the first n events.
+func (p *Player) show(n int) {
 	n = max(0, min(n, len(p.events)))
 	if n < p.pos {
 		p.sess, p.pos = p.newView(), 0
 	}
 	for ; p.pos < n; p.pos++ {
 		p.sess.Apply(p.events[p.pos])
-	}
-	if p.pos > 0 {
-		p.cursor = p.events[p.pos-1].GetTime().AsTime()
 	}
 }
 
@@ -225,6 +230,8 @@ func (p *Player) Advance(now time.Time) bool {
 	for n < len(p.events) && !p.events[n].GetTime().AsTime().After(p.cursor) {
 		n++
 	}
-	p.Seek(n)
+	// The cursor keeps its place between events, so playing crosses gaps
+	// longer than a tick.
+	p.show(n)
 	return p.pos != before
 }
