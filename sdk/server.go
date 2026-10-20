@@ -104,6 +104,11 @@ type Server struct {
 	mu       sync.Mutex
 	sessions map[string]*Session
 	intake   map[intakeKey]*sync.Mutex
+
+	// Draining: set once by Shutdown; streams watch drain and end.
+	drainOnce sync.Once
+	drain     chan struct{}
+	streams   sync.WaitGroup
 }
 
 type intakeKey struct {
@@ -127,6 +132,7 @@ func NewServer(opts Options) (*Server, error) {
 		log:      opts.Logger,
 		sessions: map[string]*Session{},
 		intake:   map[intakeKey]*sync.Mutex{},
+		drain:    make(chan struct{}),
 	}, nil
 }
 
@@ -209,10 +215,76 @@ func NewID() string {
 	return hex.EncodeToString(b[:])
 }
 
+// errDraining tells a worker to go elsewhere: it reconnects, and a new
+// connection reaches another replica.
+var errDraining = status.Error(codes.Unavailable, "gateway draining: reconnect")
+
+func (s *Server) draining() bool {
+	select {
+	case <-s.drain:
+		return true
+	default:
+		return false
+	}
+}
+
+// Shutdown drains the gateway. It refuses new registrations and streams,
+// ends every control stream, and lets each activity stream finish the batch
+// it is storing and acknowledge it before ending. Workers see their streams
+// end as unavailable and reconnect; behind a load balancer they reach
+// another replica. Shutdown returns when all streams have ended, or with
+// ctx's error.
+//
+// Commands still waiting for an acknowledgement stay queued in this
+// server: an orchestrator running several replicas must hand them over
+// itself, or resend them; workers recognise resent command IDs.
+//
+// Use Drain to drain and stop a grpc.Server in the right order.
+func (s *Server) Shutdown(ctx context.Context) error {
+	s.drainOnce.Do(func() { close(s.drain) })
+	done := make(chan struct{})
+	go func() {
+		s.streams.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+// Drain stops gs gracefully. It first stops gs from accepting new streams
+// on existing connections (a GOAWAY), so that reconnecting workers open new
+// connections, then drains the gateway's streams with Shutdown. If ctx ends
+// first, gs is stopped forcibly.
+func (s *Server) Drain(ctx context.Context, gs *grpc.Server) error {
+	stopped := make(chan struct{})
+	go func() {
+		gs.GracefulStop()
+		close(stopped)
+	}()
+	err := s.Shutdown(ctx)
+	select {
+	case <-stopped:
+	case <-ctx.Done():
+		gs.Stop()
+		<-stopped
+		if err == nil {
+			err = ctx.Err()
+		}
+	}
+	return err
+}
+
 // Register implements the gateway's Register call.
 func (s *Server) Register(ctx context.Context, req *gatewayv0.RegisterRequest) (*gatewayv0.RegisterResponse, error) {
 	if err := s.authenticate(ctx); err != nil {
 		return nil, err
+	}
+	if s.draining() {
+		return nil, errDraining
 	}
 	if req.GetProtocolVersion() != ProtocolVersion {
 		return nil, status.Errorf(codes.FailedPrecondition, "unsupported protocol version %q, this gateway speaks %q", req.GetProtocolVersion(), ProtocolVersion)
@@ -250,6 +322,11 @@ func (s *Server) Control(stream gatewayv0.Gateway_ControlServer) error {
 	if err := s.authenticate(stream.Context()); err != nil {
 		return err
 	}
+	if s.draining() {
+		return errDraining
+	}
+	s.streams.Add(1)
+	defer s.streams.Done()
 	first, err := stream.Recv()
 	if err != nil {
 		return err
@@ -271,7 +348,12 @@ func (s *Server) Control(stream gatewayv0.Gateway_ControlServer) error {
 	errc := make(chan error, 2)
 	go func() { errc <- sess.sendCommands(ctx, conn, stream) }()
 	go func() { errc <- sess.receiveControl(stream) }()
-	err = <-errc
+	select {
+	case err = <-errc:
+	case <-s.drain:
+		cancel()
+		return errDraining
+	}
 	cancel()
 	if errors.Is(err, io.EOF) || errors.Is(err, context.Canceled) {
 		return nil
@@ -287,6 +369,11 @@ func (s *Server) PublishActivity(stream gatewayv0.Gateway_PublishActivityServer)
 	if err := s.authenticate(ctx); err != nil {
 		return err
 	}
+	if s.draining() {
+		return errDraining
+	}
+	s.streams.Add(1)
+	defer s.streams.Done()
 	first, err := stream.Recv()
 	if err != nil {
 		return err
@@ -314,8 +401,35 @@ func (s *Server) PublishActivity(stream gatewayv0.Gateway_PublishActivityServer)
 		return err
 	}
 
+	// Receive on a separate goroutine, so that draining can end the stream
+	// between batches: a batch being stored is finished and acknowledged
+	// first.
+	type received struct {
+		msg *gatewayv0.ActivityUp
+		err error
+	}
+	recv := make(chan received)
+	go func() {
+		for {
+			msg, err := stream.Recv()
+			select {
+			case recv <- received{msg, err}:
+			case <-ctx.Done():
+				return
+			}
+			if err != nil {
+				return
+			}
+		}
+	}()
 	for {
-		msg, err := stream.Recv()
+		var r received
+		select {
+		case r = <-recv:
+		case <-s.drain:
+			return errDraining
+		}
+		msg, err := r.msg, r.err
 		if errors.Is(err, io.EOF) {
 			return nil
 		}

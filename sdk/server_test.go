@@ -26,6 +26,7 @@ const testToken = "secret"
 // harness runs a Server over an in-memory connection.
 type harness struct {
 	srv    *Server
+	gs     *grpc.Server
 	client gatewayv0.GatewayClient
 }
 
@@ -59,7 +60,7 @@ func newHarness(t *testing.T, opts Options) *harness {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = cc.Close() })
-	return &harness{srv: srv, client: gatewayv0.NewGatewayClient(cc)}
+	return &harness{srv: srv, gs: gs, client: gatewayv0.NewGatewayClient(cc)}
 }
 
 func authed(ctx context.Context) context.Context {
@@ -466,5 +467,66 @@ func TestRegisterRefusesUnsupportedProfile(t *testing.T) {
 	req.Capabilities = append(req.Capabilities, "budgets.v1")
 	if _, err := h.client.Register(authed(t.Context()), req); err != nil {
 		t.Fatalf("with the feature: %v", err)
+	}
+}
+
+// Draining ends every stream as unavailable, so workers reconnect elsewhere,
+// but only after the batch being stored has been acknowledged.
+func TestDrain(t *testing.T) {
+	store := slowStore{NewMemoryStore(), 300 * time.Millisecond}
+	h := newHarness(t, Options{Store: store})
+	id := h.register(t, "")
+	w := h.connectControl(t, id)
+	p := h.connectActivity(t, id, 1)
+	waitFor(t, func() bool { return h.srv.Session(id).Connected() })
+
+	// A batch is being stored (slowly) when draining starts.
+	if err := p.stream.Send(&gatewayv0.ActivityUp{Msg: &gatewayv0.ActivityUp_Batch{Batch: &gatewayv0.ActivityBatch{Events: events(1, 1, 3)}}}); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(50 * time.Millisecond)
+	drained := make(chan error, 1)
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		drained <- h.srv.Drain(ctx, h.gs)
+	}()
+
+	ack, err := p.stream.Recv()
+	if err != nil || ack.GetAckedSeq() != 3 {
+		t.Fatalf("in-flight batch: ack %v, %v; want it acknowledged", ack, err)
+	}
+	if _, err := p.stream.Recv(); status.Code(err) != codes.Unavailable {
+		t.Fatalf("activity stream after drain: %v, want Unavailable", err)
+	}
+	if _, err := w.stream.Recv(); status.Code(err) != codes.Unavailable {
+		t.Fatalf("control stream after drain: %v, want Unavailable", err)
+	}
+	if err := <-drained; err != nil {
+		t.Fatalf("Drain: %v", err)
+	}
+	if n := len(store.Events(id)); n != 3 {
+		t.Fatalf("stored %d events, want 3", n)
+	}
+	_, err = h.client.Register(authed(t.Context()), &gatewayv0.RegisterRequest{ProtocolVersion: ProtocolVersion})
+	if status.Code(err) != codes.Unavailable {
+		t.Fatalf("Register after drain: %v, want Unavailable", err)
+	}
+}
+
+func TestShutdownTimesOut(t *testing.T) {
+	h := newHarness(t, Options{})
+	id := h.register(t, "")
+	h.connectControl(t, id)
+	waitFor(t, func() bool { return h.srv.Session(id).Connected() })
+	// The control stream ends promptly on its own, so Shutdown succeeds.
+	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
+	defer cancel()
+	if err := h.srv.Shutdown(ctx); err != nil {
+		t.Fatalf("Shutdown: %v", err)
+	}
+	// A second call is harmless.
+	if err := h.srv.Shutdown(ctx); err != nil {
+		t.Fatalf("second Shutdown: %v", err)
 	}
 }

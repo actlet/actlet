@@ -512,3 +512,45 @@ func TestMissingFeatures(t *testing.T) {
 		t.Errorf("missing = %v, want [budgets.v1]", m)
 	}
 }
+
+// Draining a gateway sends the worker to another one, here started on the
+// same address with the same store, with nothing lost or duplicated.
+func TestGatewayDrain(t *testing.T) {
+	storeDir := t.TempDir()
+	store, err := sdk.NewRecordingStore(storeDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	task := demoTask(`{"steps":6,"step":"150ms","ticks":5}`)
+	g := startGateway(t, "", store, task)
+	w := run(t, testConfig(t.TempDir(), g.addr))
+	id := g.session(t).ID()
+	accepted(t)(g.session(t).Steer(ctxT(t), "before the drain"))
+	time.Sleep(200 * time.Millisecond)
+
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	if err := g.srv.Drain(ctx, g.gs); err != nil {
+		t.Fatalf("Drain: %v", err)
+	}
+	_ = store.Close()
+
+	store, err = sdk.NewRecordingStore(storeDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = store.Close() }()
+	g2 := startGateway(t, g.addr, store, task)
+	accepted(t)(g2.session(t).Steer(ctxT(t), "after the drain"))
+	if code := w.wait(t); code != session.ExitCompleted {
+		t.Fatalf("exit %d", code)
+	}
+	evs := readRecording(t, store.Path(id))
+	checkSequence(t, evs)
+	if n := count(evs, func(ev *gatewayv0.ActivityEvent) bool { return ev.GetSteer() != nil }); n != 2 {
+		t.Errorf("%d steer notes recorded, want 2", n)
+	}
+	if n := count(evs, func(ev *gatewayv0.ActivityEvent) bool { return strings.Contains(ev.GetText().GetText(), "done") }); n != 6 {
+		t.Errorf("%d step completions recorded, want 6", n)
+	}
+}
