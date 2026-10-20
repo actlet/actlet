@@ -21,6 +21,15 @@ make bench   # run the benchmarks
 make help    # list every target
 ```
 
+Binaries are static and CGO-free, so they run on any Linux base image, or none.
+
+```sh
+make dist    # cross-build dist/actlet_linux_amd64, dist/actlet_linux_arm64, ...
+make image   # build the actlet:dev container image (distroless, non-root)
+```
+
+The image runs as an unprivileged user with its working directory at `/var/lib/actlet`. To keep sessions across container replacement, mount a volume there. The container's own filesystem only survives a restart of the same container.
+
 ```sh
 $ bin/actlet version
 $ bin/actlet help

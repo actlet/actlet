@@ -9,6 +9,12 @@ COMMIT  ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
 DATE    ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 LDFLAGS := -s -w -X main.version=$(VERSION) -X main.commit=$(COMMIT) -X main.date=$(DATE)
 
+# Release binaries are static and CGO-free so they run on any Linux base
+# image. Tests keep CGO, which the race detector needs.
+DIST_DIR       := dist
+DIST_PLATFORMS ?= linux/amd64 linux/arm64 darwin/arm64
+IMAGE          ?= actlet:dev
+
 GOLANGCI_LINT         ?= golangci-lint
 GOLANGCI_LINT_VERSION ?= v2.15.0
 PROTOC_GEN_GO_VERSION ?= v1.36.12
@@ -33,8 +39,21 @@ setup: ## Download modules and install development tools
 ##@ Development
 
 .PHONY: build
-build: ## Build the actlet binary into bin/
-	go build -trimpath -ldflags "$(LDFLAGS)" -o $(BINARY) $(PKG)
+build: ## Build a static actlet binary for this machine into bin/
+	CGO_ENABLED=0 go build -trimpath -ldflags "$(LDFLAGS)" -o $(BINARY) $(PKG)
+
+.PHONY: dist
+dist: ## Cross-build static binaries into dist/ (DIST_PLATFORMS)
+	@mkdir -p $(DIST_DIR)
+	@for p in $(DIST_PLATFORMS); do \
+		os=$${p%/*}; arch=$${p#*/}; out=$(DIST_DIR)/actlet_$${os}_$${arch}; \
+		echo "$$out"; \
+		CGO_ENABLED=0 GOOS=$$os GOARCH=$$arch go build -trimpath -ldflags "$(LDFLAGS)" -o $$out $(PKG) || exit 1; \
+	done
+
+.PHONY: image
+image: ## Build the container image (IMAGE, default actlet:dev)
+	docker build --build-arg VERSION=$(VERSION) --build-arg COMMIT=$(COMMIT) --build-arg DATE=$(DATE) -t $(IMAGE) .
 
 .PHONY: run
 run: build ## Build and run actlet (pass arguments with ARGS="...")
@@ -76,4 +95,4 @@ check: ## Check formatting, vet, lint and go.mod tidiness
 
 .PHONY: clean
 clean: ## Remove build and test output
-	rm -rf $(BIN_DIR) coverage.*
+	rm -rf $(BIN_DIR) $(DIST_DIR) coverage.*
