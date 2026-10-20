@@ -104,6 +104,7 @@ func TestDevGateway(t *testing.T) {
 		t.Fatalf("pause: exit %d", code)
 	}
 	out.waitFor(t, "pause drain: accepted")
+	out.waitFor(t, "(in ")
 
 	// Resume, then stop.
 	exit = runWorker()
@@ -122,6 +123,10 @@ func TestDevGateway(t *testing.T) {
 	}
 	g.handle(ctx, []string{"bogus"})
 	out.waitFor(t, `unknown command "bogus"`)
+	g.handle(ctx, []string{"store-delay", "25ms"})
+	out.waitFor(t, "activity store delay: 25ms")
+	g.handle(ctx, []string{"store-delay", "soon"})
+	out.waitFor(t, "usage: store-delay")
 }
 
 // The dev gateway is built on the SDK's public API only, like any other

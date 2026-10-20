@@ -20,6 +20,7 @@ import (
 	"os/signal"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -41,6 +42,7 @@ commands on standard input:
   pause drain|interrupt      pause the session; run actlet again to resume it
   stop [<grace>|kill]        stop the session, e.g. "stop 5s" or "stop kill"
   steer <note>               send an operator note
+  store-delay <duration>     slow down storing activity, to try a slow consumer (0: off)
   help                       show this help
   quit                       stop the gateway
 
@@ -53,17 +55,18 @@ Flags:
 `
 
 type config struct {
-	listen     string
-	token      string
-	dataDir    string
-	taskFile   string
-	profile    string
-	profileID  string
-	pauseMode  string
-	stopGrace  time.Duration
-	demoDef    string
-	demoInput  string
-	cmdTimeout time.Duration
+	listen       string
+	token        string
+	dataDir      string
+	taskFile     string
+	profile      string
+	profileID    string
+	pauseMode    string
+	stopGrace    time.Duration
+	demoDef      string
+	demoInput    string
+	cmdTimeout   time.Duration
+	drainTimeout time.Duration
 }
 
 func main() {
@@ -98,6 +101,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	fs.StringVar(&cfg.pauseMode, "pause-mode", "drain", "default profile's pause mode on SIGTERM: drain or interrupt")
 	fs.DurationVar(&cfg.stopGrace, "stop-grace", 10*time.Second, "default profile's stop grace period")
 	fs.DurationVar(&cfg.cmdTimeout, "command-timeout", time.Minute, "how long a command waits for the worker's acknowledgement")
+	fs.DurationVar(&cfg.drainTimeout, "drain-timeout", 10*time.Second, "how long draining may take on SIGTERM")
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return 0
@@ -114,8 +118,6 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "actlet-devgw: %v\n", err)
 		return 1
 	}
-	defer func() { _ = gw.store.Close() }()
-
 	lis, err := net.Listen("tcp", cfg.listen)
 	if err != nil {
 		fmt.Fprintf(stderr, "actlet-devgw: %v\n", err)
@@ -138,9 +140,18 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		log.Info("standard input closed: admin commands unavailable; stop with SIGTERM or Ctrl-C")
 	}()
 	<-ctx.Done()
-	log.Info("shutting down")
-	gs.GracefulStop()
+	log.Info("draining: workers will reconnect elsewhere")
+	drainCtx, cancel := context.WithTimeout(context.Background(), cfg.drainTimeout)
+	defer cancel()
+	if err := gw.srv.Drain(drainCtx, gs); err != nil {
+		log.Warn("drain did not finish in time; stopped", "err", err)
+	}
 	gw.wait()
+	// Release the recordings so that another replica can take them over.
+	if err := gw.store.Close(); err != nil {
+		log.Warn("closing recordings", "err", err)
+	}
+	log.Info("stopped")
 	return 0
 }
 
@@ -150,6 +161,7 @@ type gateway struct {
 	log   *slog.Logger
 	srv   *sdk.Server
 	store *sdk.RecordingStore
+	delay *delayStore
 	task  *gatewayv0.Task
 
 	mu      sync.Mutex
@@ -170,9 +182,9 @@ func newGateway(cfg config, out io.Writer, log *slog.Logger) (*gateway, error) {
 	if err != nil {
 		return nil, err
 	}
-	g := &gateway{cfg: cfg, out: out, log: log, store: store, task: task}
+	g := &gateway{cfg: cfg, out: out, log: log, store: store, delay: &delayStore{RecordingStore: store}, task: task}
 	opts := sdk.Options{
-		Store:  store,
+		Store:  g.delay,
 		Logger: log,
 		Assign: func(_ context.Context, req *gatewayv0.RegisterRequest) (*gatewayv0.RegisterResponse, error) {
 			id := req.GetSessionId()
@@ -362,9 +374,36 @@ func (g *gateway) handle(ctx context.Context, f []string) {
 		g.send(ctx, "steer", func(ctx context.Context, s *sdk.Session) (*gatewayv0.CommandAck, error) {
 			return s.Steer(ctx, note)
 		})
+	case "store-delay":
+		d, err := time.ParseDuration(strings.Join(f[1:], ""))
+		if len(f) != 2 || err != nil || d < 0 {
+			g.printf("usage: store-delay <duration>, e.g. store-delay 500ms; 0 turns it off")
+			return
+		}
+		g.delay.set(d)
+		g.printf("activity store delay: %v", d)
 	default:
 		g.printf("unknown command %q; try help", f[0])
 	}
+}
+
+// delayStore slows down storing activity, to try out a slow consumer.
+type delayStore struct {
+	*sdk.RecordingStore
+	delay atomic.Int64
+}
+
+func (s *delayStore) set(d time.Duration) { s.delay.Store(int64(d)) }
+
+func (s *delayStore) Append(ctx context.Context, id string, evs []*gatewayv0.ActivityEvent) error {
+	if d := time.Duration(s.delay.Load()); d > 0 {
+		select {
+		case <-time.After(d):
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+	return s.RecordingStore.Append(ctx, id, evs)
 }
 
 // send runs a command against the current session in the background and
@@ -386,7 +425,9 @@ func (g *gateway) send(ctx context.Context, what string, do func(context.Context
 		defer g.pending.Done()
 		ctx, cancel := context.WithTimeout(ctx, g.cfg.cmdTimeout)
 		defer cancel()
+		start := time.Now()
 		ack, err := do(ctx, s)
+		took := time.Since(start).Round(time.Millisecond)
 		if err != nil {
 			g.printf("%s %s: %v", short(id), what, err)
 			return
@@ -400,6 +441,6 @@ func (g *gateway) send(ctx context.Context, what string, do func(context.Context
 		if ack.GetDuplicate() {
 			dup = " (duplicate)"
 		}
-		g.printf("%s %s: %s%s%s, session %s", short(id), what, result, dup, msg, stateName(ack.GetState()))
+		g.printf("%s %s: %s%s%s, session %s (in %v)", short(id), what, result, dup, msg, stateName(ack.GetState()), took)
 	}()
 }
