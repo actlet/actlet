@@ -4,16 +4,17 @@ Actlet workers connect out to the orchestrator's gateway over gRPC (HTTP/2). Thi
 
 ## What the test runs
 
-`make test-k8s` builds both images and then:
+`make test-k8s` builds the images, the worker's, the gateway's and the worker's with a shell (`test/k8s/Dockerfile.tools`, for the agent's shell tool), and then:
 
 1. Creates a kind cluster named `actlet-e2e`, with a kubeconfig file of its own. Your kubeconfig and its current context are never touched, and the test checks that.
 2. Deploys `actlet-devgw` as a **2-replica Deployment behind a ClusterIP Service**. The replicas share one directory on the node for their activity recordings, so either replica can continue a session's recording.
 3. Starts a worker Pod (`actlet run`), with its session folder on a **PersistentVolumeClaim** and the Service as its gateway address.
-4. Runs four scenarios:
+4. Runs five scenarios:
    - **Long-lived streams.** The control and activity streams stay up for three minutes (`ACTLET_K8S_SOAK` changes this). The test checks that the worker never reconnects and that activity keeps flowing.
    - **Slow consumer.** The connected replica stores activity one second per batch while a command is sent. The command's acknowledgement must arrive in under a second.
    - **Failover.** The Pod of the replica the worker is connected to is deleted. The replica drains, and the worker reconnects to the other one, registers again and carries on.
    - **Pause and resume.** A pause makes the worker Pod exit with code 3. A new Pod on the same volume resumes the session as epoch 2, and is then stopped (exit code 4).
+   - **A box lost mid-command.** A second gateway assigns an agent task whose scripted model runs a long shell command. While it runs, the worker's container is killed at once on the node, as losing the node would, and its Pod deleted: not a pause. A new Pod on a fresh claim's volume, `agent-session`, recovers the session; the model is told the command's outcome is unknown (`outcome_unknown`), checks what it left, and the task completes.
 5. Checks the outcome. The shared recording holds every event of both runs exactly once and in sequence, each operator note appears once, and the worker's journal holds each command once.
 6. Deletes the cluster, even when the test fails (`ACTLET_K8S_KEEP=1` keeps it for debugging).
 
@@ -76,6 +77,7 @@ A gateway must enforce a keepalive minimum no stricter than the worker's 20s pin
 - Keep the session folder on a PersistentVolumeClaim so a paused session can resume in a new Pod.
 - Set `terminationGracePeriodSeconds` above the worker's `-signal-deadline` (default 8s), so a Pod deletion pauses cleanly (exit code 3).
 - Use `restartPolicy: Never` or a Job, and let the orchestrator decide when to resume.
+- A replacement Pod may start while the old one is still shutting down. It waits for the old run to let go of the session journal (`-lock-wait`, a minute by default) before it recovers, rather than failing, so that two runs never write the session at once.
 - To watch a box directly, give it `-attach-listen 127.0.0.1:7600` and an `ACTLET_ATTACH_TOKEN`, and reach it with `kubectl port-forward` ([attaching from elsewhere](tui.md#attaching-from-elsewhere)). Attaching through the orchestrator needs no port at all.
 
 ## Running the test

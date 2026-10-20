@@ -16,6 +16,7 @@ DIST_BINARIES  := actlet actlet-cli actlet-devgw
 IMAGE          ?= actlet:dev
 GO_IMAGE_VERSION ?= 1.27
 DEVGW_IMAGE    ?= actlet-devgw:dev
+TOOLS_IMAGE    ?= actlet-tools:dev
 
 GOLANGCI_LINT         ?= golangci-lint
 GOLANGCI_LINT_VERSION ?= v2.15.0
@@ -100,7 +101,8 @@ test-linux: ## Run the tests of Linux-only behaviour, such as supervising proces
 test-k8s: ## Run the Kubernetes path test in a throwaway kind cluster (needs Docker and kind)
 	@if ! command -v kind >/dev/null || ! docker info >/dev/null 2>&1; then echo "test-k8s: kind or Docker isn't available, skipping"; exit 0; fi; \
 		$(MAKE) image image-devgw && \
-		ACTLET_IMAGE=$(IMAGE) ACTLET_DEVGW_IMAGE=$(DEVGW_IMAGE) go test -tags k8stest -run TestKubernetesPath -count=1 -v -timeout 30m ./test/k8s
+		docker build -t $(TOOLS_IMAGE) --build-arg BASE=$(IMAGE) -f test/k8s/Dockerfile.tools test/k8s && \
+		ACTLET_IMAGE=$(IMAGE) ACTLET_DEVGW_IMAGE=$(DEVGW_IMAGE) ACTLET_TOOLS_IMAGE=$(TOOLS_IMAGE) go test -tags k8stest -run TestKubernetesPath -count=1 -v -timeout 30m ./test/k8s
 
 .PHONY: demo-tui
 demo-tui: build ## Try the TUI: a scripted demo session with the viewer in the foreground

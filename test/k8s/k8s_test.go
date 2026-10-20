@@ -198,6 +198,7 @@ func TestKubernetesPath(t *testing.T) {
 	}
 	workerImage := envOr("ACTLET_IMAGE", "actlet:dev")
 	gatewayImage := envOr("ACTLET_DEVGW_IMAGE", "actlet-devgw:dev")
+	toolsImage := envOr("ACTLET_TOOLS_IMAGE", "actlet-tools:dev")
 	soak := 3 * time.Minute
 	if v := os.Getenv("ACTLET_K8S_SOAK"); v != "" {
 		d, err := time.ParseDuration(v)
@@ -239,7 +240,7 @@ func TestKubernetesPath(t *testing.T) {
 			k.dumpLogs()
 		}
 	})
-	k.must("kind", "load", "docker-image", workerImage, gatewayImage, "--name", clusterName)
+	k.must("kind", "load", "docker-image", workerImage, gatewayImage, toolsImage, "--name", clusterName)
 
 	k.must("kubectl", "create", "namespace", namespace)
 	k.apply(gatewayManifest(gatewayImage))
@@ -363,6 +364,130 @@ func TestKubernetesPath(t *testing.T) {
 	if len(commands) != 5 { // 3 steer notes, pause, stop
 		t.Errorf("journal holds %d commands, want 5", len(commands))
 	}
+
+	// 5. The box's Pod is deleted while a command runs, as when its node
+	// goes away, not paused: a new Pod on the same volume recovers, tells
+	// the model the command's outcome is unknown, and completes the task.
+	k.apply(agentGatewayManifest(gatewayImage))
+	k.apply(strings.ReplaceAll(sessionPVC, "actlet-session", "agent-session"))
+	k.kubectl("rollout", "status", "deployment/agent-gw", "--timeout", "180s")
+	gw := strings.Fields(k.kubectl("get", "pods", "-l", "app=agent-gw", "-o", "jsonpath={.items[*].metadata.name}"))
+	if len(gw) != 1 {
+		t.Fatalf("agent gateway pods %v", gw)
+	}
+	k.apply(workerPodFor("worker-3", toolsImage, "agent-gw", "agent-session"))
+	k.waitFor("worker-3's command to start", 3*time.Minute, func() bool { return strings.Contains(k.logs(gw[0]), "tool shell") })
+	time.Sleep(2 * time.Second)
+	// Kill the container at once, as losing its node would: deleting the
+	// Pod alone sends SIGTERM first, which pauses the session.
+	t.Log("killing worker-3 mid-command, then deleting it")
+	id := strings.TrimSpace(k.must("docker", "exec", node, "crictl", "ps", "-q", "--label", "io.kubernetes.pod.name=worker-3"))
+	if id == "" {
+		t.Fatal("worker-3's container not found")
+	}
+	k.must("docker", "exec", node, "crictl", "stop", "--timeout", "0", id)
+	k.kubectl("delete", "pod", "worker-3", "--grace-period=0", "--force")
+	k.waitFor("worker-3 to be gone", 2*time.Minute, func() bool { _, err := k.run("kubectl", "get", "pod", "worker-3"); return err != nil })
+	k.apply(workerPodFor("worker-4", toolsImage, "agent-gw", "agent-session"))
+	k.waitFor("worker-4 to exit", 5*time.Minute, func() bool { _, ok := k.exitCode("worker-4"); return ok })
+	if code, _ := k.exitCode("worker-4"); code != 0 {
+		t.Fatalf("worker-4 exited with %d, want 0 (completed)\n%s\n%s", code, k.logs("worker-4"), k.logs(gw[0]))
+	}
+	gwLog := k.logs(gw[0])
+	if !strings.Contains(gwLog, "OUTCOME UNKNOWN") || !strings.Contains(gwLog, "state running -> completed") {
+		t.Fatalf("the gateway didn't see the command reported uncertain and the task complete:\n%s", gwLog)
+	}
+	t.Log("worker-4 recovered the session, reported the command's outcome as unknown, and completed it")
+}
+
+// agentScript has the agent run a long command, which the test interrupts
+// by deleting the Pod, then check what it left once told its outcome is
+// unknown.
+const agentScript = `turns:
+  - tool_calls:
+      - name: shell
+        input: {command: "echo started > started; sleep 300; echo finished > finished"}
+  - expect:
+      - contains: outcome_unknown
+    tool_calls:
+      - name: shell
+        input: {command: "ls"}
+  - expect:
+      - contains: started
+    text: The command was cut short; it started but never finished.
+`
+
+// agentGatewayManifest is a gateway of one replica that assigns an agent
+// task and answers its model calls from agentScript.
+func agentGatewayManifest(image string) string {
+	return fmt.Sprintf(`
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: agent-task
+  namespace: %[1]s
+data:
+  task.json: |
+    {"schema": "v0", "id": "interrupted", "kind": "agent", "input": "Run the long command."}
+  model.yaml: |
+%[4]s
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: agent-gw
+  namespace: %[1]s
+spec:
+  selector:
+    app: agent-gw
+  ports:
+    - name: grpc
+      port: 7400
+      targetPort: 7400
+      appProtocol: grpc
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agent-gw
+  namespace: %[1]s
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: agent-gw
+  template:
+    metadata:
+      labels:
+        app: agent-gw
+    spec:
+      containers:
+        - name: actlet-devgw
+          image: %[2]s
+          imagePullPolicy: IfNotPresent
+          args: ["-token", "%[3]s", "-data", "/tmp/devgw-data", "-task", "/cfg/task.json", "-model", "/cfg/model.yaml"]
+          ports:
+            - containerPort: 7400
+          readinessProbe:
+            tcpSocket:
+              port: 7400
+            periodSeconds: 2
+          volumeMounts:
+            - name: cfg
+              mountPath: /cfg
+      volumes:
+        - name: cfg
+          configMap:
+            name: agent-task
+`, namespace, image, token, indent(agentScript, "    "))
+}
+
+func indent(s, prefix string) string {
+	lines := strings.Split(strings.TrimRight(s, "\n"), "\n")
+	for i, l := range lines {
+		lines[i] = prefix + l
+	}
+	return strings.Join(lines, "\n")
 }
 
 func envOr(name, def string) string {
@@ -542,6 +667,12 @@ spec:
 `
 
 func workerPod(name, image string) string {
+	return workerPodFor(name, image, "actlet-devgw", "actlet-session")
+}
+
+// workerPodFor is a worker Pod that connects to a gateway Service and keeps
+// its session folder on a volume claim.
+func workerPodFor(name, image, gateway, claim string) string {
 	return fmt.Sprintf(`
 apiVersion: v1
 kind: Pod
@@ -558,7 +689,7 @@ spec:
       args: ["run"]
       env:
         - name: ACTLET_GATEWAY
-          value: actlet-devgw:7400
+          value: %[5]s:7400
         - name: ACTLET_TOKEN
           value: %[4]s
         - name: ACTLET_SESSION
@@ -569,6 +700,6 @@ spec:
   volumes:
     - name: session
       persistentVolumeClaim:
-        claimName: actlet-session
-`, name, namespace, image, token)
+        claimName: %[6]s
+`, name, namespace, image, token, gateway, claim)
 }
