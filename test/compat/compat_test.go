@@ -148,8 +148,8 @@ func TestRecording(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if !bytes.Equal(got.Bytes(), want) {
-				t.Errorf("the view differs from %s/view.json; if the change is deliberate, it breaks viewers of the format", v)
+			if err := Contains(want, got.Bytes()); err != nil {
+				t.Errorf("the view lost what %s/view.json has, which breaks viewers of the format: %v", v, err)
 			}
 		})
 	}

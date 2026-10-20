@@ -7,7 +7,7 @@ Files in each format version Actlet has written, kept so that later versions can
 | File | What it is | Tested by |
 |---|---|---|
 | `session.actlet` | the session folder's journal | `TestJournal`: it recovers to the completed session, and opens for appending without truncating |
-| `recording.actrec` | the gateway's activity recording | `TestRecording`: it holds the events of `events.jsonl` and folds into `view.json` |
+| `recording.actrec` | the gateway's activity recording | `TestRecording`: it holds the events of `events.jsonl` and folds into a view that has everything `view.json` has; a view may gain fields, never lose or change them |
 | `events.jsonl` | `actlet-cli replay export --jsonl` of the recording | `TestRecording` |
 | `view.json` | `actlet-cli replay view --json` of the recording | `TestRecording`, and `TestReplayViewCompat` in `cmd/actlet-cli`, from both the recording and the export |
 | `profile.yaml`, `profile.json` | the demo's profile in both formats | `TestProfileAndTask`: both load to the same wire profile |

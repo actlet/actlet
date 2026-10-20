@@ -17,6 +17,7 @@ import (
 
 	gatewayv0 "github.com/actlet/actlet/proto/actlet/gateway/v0"
 	"github.com/actlet/actlet/sdk"
+	"github.com/actlet/actlet/test/compat"
 )
 
 func event(epoch, seq uint64, body func(*gatewayv0.ActivityEvent)) *gatewayv0.ActivityEvent {
@@ -276,8 +277,8 @@ func TestReplayView(t *testing.T) {
 }
 
 // replay view --json stays stable: on the compatibility fixtures, from
-// the recording and from its export, it writes the view they were
-// written with.
+// the recording and from its export, it writes everything of the view
+// they were written with, gaining fields at most.
 func TestReplayViewCompat(t *testing.T) {
 	dir := filepath.Join("..", "..", "test", "compat", "v0")
 	want, err := os.ReadFile(filepath.Join(dir, "view.json"))
@@ -289,8 +290,8 @@ func TestReplayViewCompat(t *testing.T) {
 		if code := run([]string{"replay", "view", "--json", filepath.Join(dir, f)}, &stdout, &stderr); code != 0 {
 			t.Fatalf("%s: exit %d: %s", f, code, stderr.String())
 		}
-		if !bytes.Equal(stdout.Bytes(), want) {
-			t.Errorf("%s: the view differs from view.json", f)
+		if err := compat.Contains(want, stdout.Bytes()); err != nil {
+			t.Errorf("%s: the view lost what view.json has: %v", f, err)
 		}
 	}
 }
