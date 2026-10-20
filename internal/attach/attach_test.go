@@ -136,7 +136,7 @@ func serve(t *testing.T, hub *Hub, box Box, commands []string) (attachv0.AttachC
 	if err != nil {
 		t.Fatal(err)
 	}
-	srv := Start(lis, NewServer(hub, box, commands, nil))
+	srv := Start(lis, NewServer("s1", hub, box, commands, nil))
 	t.Cleanup(srv.Stop)
 	client, closeClient, err := Dial(dir)
 	if err != nil {
@@ -320,7 +320,7 @@ func TestReadFile(t *testing.T) {
 		_ = os.Symlink(outside, filepath.Join(dir, "workspace", "escape"))
 		_ = os.Symlink("../.actlet/secret", filepath.Join(dir, "workspace", "secret"))
 	}
-	srv := NewServer(NewHub(HubOptions{}), &fakeBox{}, nil, nil)
+	srv := NewServer("s1", NewHub(HubOptions{}), &fakeBox{}, nil, nil)
 	srv.ServeFiles(dir)
 	tests := []struct {
 		path    string
@@ -366,5 +366,104 @@ func TestReadFile(t *testing.T) {
 	}
 	if bin, err := srv.ReadFile(t.Context(), &attachv0.ReadFileRequest{Path: "blob.bin"}); err != nil || !bin.GetBinary() || len(bin.GetContent()) != 0 {
 		t.Errorf("binary file: %v %v", bin, err)
+	}
+}
+
+// An orchestrator's hub holds several runs, each numbered from 1.
+func TestHubRuns(t *testing.T) {
+	h := NewHub(HubOptions{Backlog: 4})
+	ev := func(epoch, seq uint64) *gatewayv0.ActivityEvent {
+		e := textEvent(seq)
+		e.Epoch = epoch
+		return e
+	}
+	for _, e := range []*gatewayv0.ActivityEvent{ev(1, 1), ev(1, 2), ev(2, 1), ev(2, 2)} {
+		h.Publish(e)
+	}
+	drain := func(s *Subscription) (got []string) {
+		for {
+			select {
+			case m := <-s.C():
+				if sk := m.GetSkipped(); sk != nil {
+					got = append(got, fmt.Sprintf("skipped %d", sk.GetCount()))
+				} else {
+					got = append(got, fmt.Sprintf("%d.%d", m.GetEvent().GetEpoch(), m.GetEvent().GetSeq()))
+				}
+			default:
+				s.Close()
+				return got
+			}
+		}
+	}
+	all, _ := h.Subscribe(0)
+	if got := fmt.Sprint(drain(all)); got != "[1.1 1.2 2.1 2.2]" {
+		t.Errorf("everything: %s", got)
+	}
+	after, _ := h.Subscribe(1)
+	if got := fmt.Sprint(drain(after)); got != "[2.2]" {
+		t.Errorf("after 1 of the latest run: %s", got)
+	}
+	// The ring keeps 4: the first run's start is gone, and counted.
+	h.Publish(ev(2, 3))
+	late, _ := h.Subscribe(0)
+	if got := fmt.Sprint(drain(late)); got != "[skipped 1 1.2 2.1 2.2 2.3]" {
+		t.Errorf("late: %s", got)
+	}
+}
+
+// A box's attach port: only viewers with the token get in, only for the
+// box's session, and their commands are remote ones.
+func TestPort(t *testing.T) {
+	if _, err := ListenPort("0.0.0.0:0", false); err == nil || !strings.Contains(err.Error(), "loopback") {
+		t.Errorf("a non-loopback address: %v", err)
+	}
+	lis, err := ListenPort("127.0.0.1:0", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hub := NewHub(HubOptions{})
+	box := &fakeBox{}
+	srv := StartPort(lis, NewServer("s1", hub, box, []string{CommandSteer}, nil).Remote(), "sesame")
+	t.Cleanup(srv.Stop)
+	addr := lis.Addr().String()
+	dial := func(o RemoteOptions) attachv0.AttachClient {
+		c, closeClient, err := DialRemote(addr, o)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = closeClient() })
+		return c
+	}
+	ctx := t.Context()
+	for _, token := range []string{"", "wrong"} {
+		c := dial(RemoteOptions{Token: token})
+		if _, err := c.Info(ctx, &attachv0.InfoRequest{}); status.Code(err) != codes.Unauthenticated {
+			t.Errorf("token %q: info %v", token, err)
+		}
+		stream, err := c.Watch(ctx, &attachv0.WatchRequest{})
+		if err == nil {
+			_, err = stream.Recv()
+		}
+		if status.Code(err) != codes.Unauthenticated {
+			t.Errorf("token %q: watch %v", token, err)
+		}
+	}
+	if _, err := dial(RemoteOptions{Token: "sesame", Session: "other"}).Info(ctx, &attachv0.InfoRequest{}); status.Code(err) != codes.NotFound {
+		t.Errorf("another session: %v", err)
+	}
+	c := dial(RemoteOptions{Token: "sesame", Session: "s1"})
+	if list, err := c.Sessions(ctx, &attachv0.SessionsRequest{}); err != nil || len(list.GetSessions()) != 1 || list.GetSessions()[0].GetSessionId() != "s1" {
+		t.Errorf("sessions %v, %v", list, err)
+	}
+	if _, err := c.Command(ctx, &attachv0.CommandRequest{Action: &attachv0.CommandRequest_Steer{Steer: &gatewayv0.Steer{Note: "hi"}}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.Command(ctx, &attachv0.CommandRequest{Action: &attachv0.CommandRequest_Stop{Stop: &gatewayv0.Stop{}}}); status.Code(err) != codes.PermissionDenied || !strings.Contains(err.Error(), "remote viewer") {
+		t.Errorf("stop: %v", err)
+	}
+	box.mu.Lock()
+	defer box.mu.Unlock()
+	if len(box.commands) != 1 || box.commands[0].GetOrigin() != gatewayv0.Origin_ORIGIN_REMOTE || box.commands[0].GetActor() != "remote viewer" {
+		t.Errorf("commands %v", box.commands)
 	}
 }

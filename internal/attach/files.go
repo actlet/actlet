@@ -27,7 +27,10 @@ var readableDirs = []string{"inputs", "workspace", "output"}
 func (s *Server) ServeFiles(dir string) { s.dir = dir }
 
 // ReadFile implements the ReadFile call.
-func (s *Server) ReadFile(_ context.Context, req *attachv0.ReadFileRequest) (*attachv0.ReadFileResponse, error) {
+func (s *Server) ReadFile(ctx context.Context, req *attachv0.ReadFileRequest) (*attachv0.ReadFileResponse, error) {
+	if err := s.checkSession(ctx); err != nil {
+		return nil, err
+	}
 	if s.dir == "" {
 		return nil, status.Error(codes.Unimplemented, "this box serves no files")
 	}

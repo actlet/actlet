@@ -3,6 +3,7 @@ package attach
 import (
 	"context"
 	"crypto/rand"
+	"crypto/subtle"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -17,8 +18,10 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
+	"github.com/actlet/actlet/internal/gwclient"
 	attachv0 "github.com/actlet/actlet/proto/actlet/attach/v0"
 	gatewayv0 "github.com/actlet/actlet/proto/actlet/gateway/v0"
 )
@@ -57,36 +60,84 @@ type Box interface {
 	Apply(ctx context.Context, cmd *gatewayv0.Command) (*gatewayv0.CommandAck, error)
 }
 
+// SessionHeader is the request metadata that names the session a call is
+// about, for an orchestrator serving many.
+const SessionHeader = "actlet-session"
+
+// RequestedSession returns the session a call names in its metadata, or
+// "".
+func RequestedSession(ctx context.Context) string {
+	if md, ok := metadata.FromIncomingContext(ctx); ok {
+		if v := md.Get(SessionHeader); len(v) > 0 {
+			return v[0]
+		}
+	}
+	return ""
+}
+
 // Server serves the attach protocol.
 type Server struct {
 	attachv0.UnimplementedAttachServer
-	hub      *Hub
-	box      Box
-	commands []string
-	log      *slog.Logger
-	dir      string // the session folder, for ReadFile
+	hub       *Hub
+	box       Box
+	commands  []string
+	log       *slog.Logger
+	dir       string // the session folder, for ReadFile
+	sessionID string
+	origin    gatewayv0.Origin
 }
 
-// NewServer returns a server for the hub and box, allowing the commands.
-func NewServer(hub *Hub, box Box, commands []string, log *slog.Logger) *Server {
+// NewServer returns a server for the box's session, its hub and box,
+// allowing the commands. Commands are recorded with origin local.
+func NewServer(sessionID string, hub *Hub, box Box, commands []string, log *slog.Logger) *Server {
 	if log == nil {
 		log = slog.Default()
 	}
-	return &Server{hub: hub, box: box, commands: commands, log: log}
+	return &Server{hub: hub, box: box, commands: commands, log: log, sessionID: sessionID, origin: gatewayv0.Origin_ORIGIN_LOCAL}
+}
+
+// Remote returns a server like s for viewers elsewhere: their commands
+// are recorded with origin remote.
+func (s *Server) Remote() *Server {
+	r := *s
+	r.origin = gatewayv0.Origin_ORIGIN_REMOTE
+	return &r
 }
 
 // Register adds the service to a gRPC server.
 func (s *Server) Register(r grpc.ServiceRegistrar) { attachv0.RegisterAttachServer(r, s) }
 
+// checkSession refuses a call about another session.
+func (s *Server) checkSession(ctx context.Context) error {
+	if id := RequestedSession(ctx); id != "" && id != s.sessionID {
+		return status.Errorf(codes.NotFound, "this box runs session %s, not %s", s.sessionID, id)
+	}
+	return nil
+}
+
 // Info implements the Info call.
-func (s *Server) Info(context.Context, *attachv0.InfoRequest) (*attachv0.InfoResponse, error) {
+func (s *Server) Info(ctx context.Context, _ *attachv0.InfoRequest) (*attachv0.InfoResponse, error) {
+	if err := s.checkSession(ctx); err != nil {
+		return nil, err
+	}
 	resp := s.box.Info()
 	resp.Commands = s.commands
 	return resp, nil
 }
 
+// Sessions implements the Sessions call: the box's own session.
+func (s *Server) Sessions(context.Context, *attachv0.SessionsRequest) (*attachv0.SessionsResponse, error) {
+	info := s.box.Info()
+	return &attachv0.SessionsResponse{Sessions: []*attachv0.SessionSummary{{
+		SessionId: s.sessionID, WorkerId: info.GetWorkerId(), Epoch: info.GetEpoch(), State: info.GetState(), Connected: true,
+	}}}, nil
+}
+
 // Watch implements the Watch call.
 func (s *Server) Watch(req *attachv0.WatchRequest, stream attachv0.Attach_WatchServer) error {
+	if err := s.checkSession(stream.Context()); err != nil {
+		return err
+	}
 	sub, err := s.hub.Subscribe(req.GetAfterSeq())
 	if err != nil {
 		return status.Error(codes.ResourceExhausted, err.Error())
@@ -109,16 +160,44 @@ func (s *Server) Watch(req *attachv0.WatchRequest, stream attachv0.Attach_WatchS
 
 // Command implements the Command call.
 func (s *Server) Command(ctx context.Context, req *attachv0.CommandRequest) (*gatewayv0.CommandAck, error) {
-	cmd := &gatewayv0.Command{Id: "local-" + newID(), Origin: gatewayv0.Origin_ORIGIN_LOCAL, Actor: req.GetActor()}
+	if err := s.checkSession(ctx); err != nil {
+		return nil, err
+	}
+	who := "local"
+	if s.origin == gatewayv0.Origin_ORIGIN_REMOTE {
+		who = "remote"
+	}
+	cmd, what, err := ViewerCommand(req, s.origin, who+" viewer")
+	if err != nil {
+		return nil, err
+	}
+	cmd.Id = who + "-" + newID()
+	if !slices.Contains(s.commands, what) {
+		return nil, status.Errorf(codes.PermissionDenied, "the profile doesn't let a %s viewer %s the session", who, what)
+	}
+	s.log.Info("attach: viewer command", "command", what, "origin", who, "actor", cmd.Actor)
+	ack, err := s.box.Apply(ctx, cmd)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "%v", err)
+	}
+	return ack, nil
+}
+
+// ViewerCommand turns a viewer's request into a command with the origin,
+// naming the actor def when the viewer gives no name, and says which
+// command it is: CommandSteer, CommandPause or CommandStop. The command
+// has no ID yet.
+func ViewerCommand(req *attachv0.CommandRequest, origin gatewayv0.Origin, def string) (*gatewayv0.Command, string, error) {
+	cmd := &gatewayv0.Command{Origin: origin, Actor: req.GetActor()}
 	if cmd.Actor == "" {
-		cmd.Actor = "local viewer"
+		cmd.Actor = def
 	}
 	var what string
 	switch a := req.GetAction().(type) {
 	case *attachv0.CommandRequest_Steer:
 		what = CommandSteer
 		if strings.TrimSpace(a.Steer.GetNote()) == "" {
-			return nil, status.Error(codes.InvalidArgument, "the note is empty")
+			return nil, "", status.Error(codes.InvalidArgument, "the note is empty")
 		}
 		cmd.Action = &gatewayv0.Command_Steer{Steer: a.Steer}
 	case *attachv0.CommandRequest_Pause:
@@ -128,17 +207,9 @@ func (s *Server) Command(ctx context.Context, req *attachv0.CommandRequest) (*ga
 		what = CommandStop
 		cmd.Action = &gatewayv0.Command_Stop{Stop: a.Stop}
 	default:
-		return nil, status.Error(codes.InvalidArgument, "no command")
+		return nil, "", status.Error(codes.InvalidArgument, "no command")
 	}
-	if !slices.Contains(s.commands, what) {
-		return nil, status.Errorf(codes.PermissionDenied, "the profile doesn't let a local viewer %s the session", what)
-	}
-	s.log.Info("attach: local command", "command", what, "actor", cmd.Actor)
-	ack, err := s.box.Apply(ctx, cmd)
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "%v", err)
-	}
-	return ack, nil
+	return cmd, what, nil
 }
 
 func newID() string {
@@ -232,21 +303,21 @@ func Endpoint(stateDir string) (string, error) {
 	return strings.TrimSpace(string(data)), nil
 }
 
-// Serve serves the attach protocol on the listener until Stop.
+// Serve serves the attach protocol on a listener until Stop.
 type Serve struct {
-	gs  *grpc.Server
-	lis *Listener
+	gs    *grpc.Server
+	close func() error
 }
 
-// Start serves srv on lis.
+// Start serves srv on the session folder's socket.
 func Start(lis *Listener, srv *Server) *Serve {
 	gs := grpc.NewServer()
 	srv.Register(gs)
 	go func() { _ = gs.Serve(lis) }()
-	return &Serve{gs: gs, lis: lis}
+	return &Serve{gs: gs, close: lis.Close}
 }
 
-// Stop ends the viewers' calls and closes the socket.
+// Stop ends the viewers' calls and closes the listener.
 func (s *Serve) Stop() {
 	done := make(chan struct{})
 	go func() {
@@ -258,7 +329,87 @@ func (s *Serve) Stop() {
 	case <-time.After(2 * time.Second):
 		s.gs.Stop()
 	}
-	_ = s.lis.Close()
+	_ = s.close()
+}
+
+// ListenPort opens a box's attach port on addr, host:port. It must be a
+// loopback address, reached for example through `kubectl port-forward`,
+// unless allowRemote.
+func ListenPort(addr string, allowRemote bool) (net.Listener, error) {
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		return nil, fmt.Errorf("attach port: %w", err)
+	}
+	if !allowRemote && !loopback(host) {
+		return nil, fmt.Errorf("attach port: %s isn't a loopback address; allow other addresses explicitly", addr)
+	}
+	lis, err := net.Listen("tcp", addr)
+	if err != nil {
+		return nil, fmt.Errorf("attach port: %w", err)
+	}
+	return lis, nil
+}
+
+// loopback reports whether host is a loopback name or address.
+func loopback(host string) bool {
+	if host == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
+}
+
+// StartPort serves srv on a box's attach port to viewers that send the
+// token.
+func StartPort(lis net.Listener, srv *Server, token string) *Serve {
+	auth := Auth(func(_ context.Context, got string) error {
+		if subtle.ConstantTimeCompare([]byte(got), []byte(token)) != 1 {
+			return errors.New("invalid token")
+		}
+		return nil
+	})
+	gs := grpc.NewServer(grpc.ChainUnaryInterceptor(auth.Unary), grpc.ChainStreamInterceptor(auth.Stream))
+	srv.Register(gs)
+	go func() { _ = gs.Serve(lis) }()
+	return &Serve{gs: gs, close: func() error { return nil }} // the server closes lis
+}
+
+// Auth checks a call's bearer token; its interceptors refuse calls it
+// fails.
+type Auth func(ctx context.Context, token string) error
+
+func (a Auth) check(ctx context.Context) error {
+	if err := a(ctx, BearerToken(ctx)); err != nil {
+		return status.Errorf(codes.Unauthenticated, "authentication failed: %v", err)
+	}
+	return nil
+}
+
+// Unary checks unary calls.
+func (a Auth) Unary(ctx context.Context, req any, _ *grpc.UnaryServerInfo, next grpc.UnaryHandler) (any, error) {
+	if err := a.check(ctx); err != nil {
+		return nil, err
+	}
+	return next(ctx, req)
+}
+
+// Stream checks streaming calls.
+func (a Auth) Stream(srv any, ss grpc.ServerStream, _ *grpc.StreamServerInfo, next grpc.StreamHandler) error {
+	if err := a.check(ss.Context()); err != nil {
+		return err
+	}
+	return next(srv, ss)
+}
+
+// BearerToken returns the bearer token a call sends, or "".
+func BearerToken(ctx context.Context) string {
+	if md, ok := metadata.FromIncomingContext(ctx); ok {
+		if v := md.Get("authorization"); len(v) > 0 {
+			token, _ := strings.CutPrefix(v[0], "Bearer ")
+			return token
+		}
+	}
+	return ""
 }
 
 // Dial connects to the box whose state directory is stateDir.
@@ -273,6 +424,45 @@ func Dial(stateDir string) (attachv0.AttachClient, func() error, error) {
 			return d.DialContext(ctx, "unix", path)
 		}),
 		grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		return nil, nil, err
+	}
+	return attachv0.NewAttachClient(cc), cc.Close, nil
+}
+
+// RemoteOptions configure a connection to an orchestrator's attach
+// service or a box's attach port.
+type RemoteOptions struct {
+	// Token is sent as a bearer token with every call.
+	Token string
+	// TLS enables TLS; CAFile optionally names a PEM file of CA
+	// certificates to trust instead of the system's.
+	TLS    bool
+	CAFile string
+	// Session names the session every call is about, for an orchestrator.
+	Session string
+}
+
+// DialRemote connects to an attach service at addr, host:port.
+func DialRemote(addr string, o RemoteOptions) (attachv0.AttachClient, func() error, error) {
+	creds, err := gwclient.Credentials(o.TLS, o.CAFile)
+	if err != nil {
+		return nil, nil, err
+	}
+	opts := []grpc.DialOption{grpc.WithTransportCredentials(creds)}
+	if o.Token != "" {
+		opts = append(opts, grpc.WithPerRPCCredentials(gwclient.Bearer(o.Token, o.TLS)))
+	}
+	if o.Session != "" {
+		opts = append(opts,
+			grpc.WithChainUnaryInterceptor(func(ctx context.Context, method string, req, reply any, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
+				return invoker(metadata.AppendToOutgoingContext(ctx, SessionHeader, o.Session), method, req, reply, cc, opts...)
+			}),
+			grpc.WithChainStreamInterceptor(func(ctx context.Context, desc *grpc.StreamDesc, cc *grpc.ClientConn, method string, streamer grpc.Streamer, opts ...grpc.CallOption) (grpc.ClientStream, error) {
+				return streamer(metadata.AppendToOutgoingContext(ctx, SessionHeader, o.Session), desc, cc, method, opts...)
+			}))
+	}
+	cc, err := grpc.NewClient(addr, opts...)
 	if err != nil {
 		return nil, nil, err
 	}

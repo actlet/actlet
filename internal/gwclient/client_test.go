@@ -3,9 +3,12 @@ package gwclient
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net"
+	"slices"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -489,5 +492,82 @@ func TestActivityReconnectsWhenGatewayEndsStream(t *testing.T) {
 	}
 	if !src.Done() || streams.Load() != 4 {
 		t.Fatalf("done %v after %d streams, want everything delivered on the fourth", src.Done(), streams.Load())
+	}
+}
+
+// fileHandler serves files slowly, until released.
+type fileHandler struct {
+	*handler
+	release chan struct{}
+}
+
+func (h fileHandler) ReadFile(req *gatewayv0.FileRequest) *gatewayv0.FileResponse {
+	<-h.release
+	return &gatewayv0.FileResponse{Path: "workspace/" + req.GetPath(), Content: []byte("hi"), Size: 2}
+}
+
+// File reads are answered on the control stream, a few at a time, and
+// never hold commands up; a handler that serves no files refuses them.
+func TestControlFileReads(t *testing.T) {
+	for _, serves := range []bool{true, false} {
+		h := newHandler()
+		release := make(chan struct{})
+		var ctl ControlHandler = h
+		if serves {
+			ctl = fileHandler{h, release}
+		}
+		answers := make(chan *gatewayv0.FileResponse, 16)
+		c := serve(t, &fakeGateway{control: func(s gatewayv0.Gateway_ControlServer) error {
+			if _, err := s.Recv(); err != nil {
+				return err
+			}
+			for i := range MaxFileReads + 2 {
+				if err := s.Send(&gatewayv0.ControlDown{Msg: &gatewayv0.ControlDown_ReadFile{ReadFile: &gatewayv0.FileRequest{Id: fmt.Sprint(i), Path: "a.txt"}}}); err != nil {
+					return err
+				}
+			}
+			if err := s.Send(command("c1")); err != nil {
+				return err
+			}
+			for {
+				msg, err := s.Recv()
+				if err != nil {
+					return nil
+				}
+				if f := msg.GetFile(); f != nil {
+					answers <- f
+				}
+				if msg.GetAck() != nil {
+					close(release) // the command got through while reads were waiting
+				}
+			}
+		}}, Config{Heartbeat: 20 * time.Millisecond})
+		go func() { _ = c.RunControl(ctxT(t, 5*time.Second), ctl, nil) }()
+
+		var got []string
+		for range MaxFileReads + 2 {
+			select {
+			case f := <-answers:
+				got = append(got, fmt.Sprintf("%s:%d:%s", f.GetId(), f.GetErrorCode(), f.GetContent()))
+			case <-time.After(5 * time.Second):
+				t.Fatalf("serves %v: answers %v", serves, got)
+			}
+		}
+		h.finish(gatewayv0.SessionState_SESSION_STATE_COMPLETED)
+		slices.Sort(got)
+		var refused, served int
+		for _, g := range got {
+			switch {
+			case strings.HasSuffix(g, fmt.Sprintf(":%d:", codes.ResourceExhausted)):
+				refused++
+			case strings.HasSuffix(g, fmt.Sprintf(":%d:", codes.Unimplemented)):
+				refused++
+			case strings.HasSuffix(g, ":0:hi"):
+				served++
+			}
+		}
+		if serves && (served != MaxFileReads || refused != 2) || !serves && refused != MaxFileReads+2 {
+			t.Errorf("serves %v: answers %v", serves, got)
+		}
 	}
 }

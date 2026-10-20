@@ -70,7 +70,11 @@ func runRun(args []string, stdout, stderr io.Writer, signals <-chan os.Signal) i
 		logFormat = fs.String("log-format", envDefault("ACTLET_LOG_FORMAT", "text"), "log format: text or json [ACTLET_LOG_FORMAT]")
 		withTUI   = fs.Bool("tui", false, "show the session in a terminal viewer while it runs; logs go to .actlet/run.log")
 		noAttach  = fs.Bool("no-attach", envDefault("ACTLET_NO_ATTACH", "") == "true", "don't let local viewers attach [ACTLET_NO_ATTACH=true]")
-		manifest  = fs.String("tools-manifest", envDefault("ACTLET_TOOLS_MANIFEST", "/etc/actlet/tools.md"),
+		attachOn  = fs.String("attach-listen", envDefault("ACTLET_ATTACH_LISTEN", ""),
+			"open an attach port for remote viewers on this loopback address, host:port; they must send ACTLET_ATTACH_TOKEN (default: off) [ACTLET_ATTACH_LISTEN]")
+		attachAny = fs.Bool("attach-allow-remote", envDefault("ACTLET_ATTACH_ALLOW_REMOTE", "") == "true",
+			"let the attach port listen on an address other than loopback [ACTLET_ATTACH_ALLOW_REMOTE=true]")
+		manifest = fs.String("tools-manifest", envDefault("ACTLET_TOOLS_MANIFEST", "/etc/actlet/tools.md"),
 			"file describing what is installed, for the agent's prompt; ignored if missing [ACTLET_TOOLS_MANIFEST]")
 	)
 	durationFlag := func(name, env string, def time.Duration, usage string) *time.Duration {
@@ -117,6 +121,11 @@ func runRun(args []string, stdout, stderr io.Writer, signals <-chan os.Signal) i
 		fmt.Fprintln(stderr, "actlet run: a gateway address is required: -gateway or ACTLET_GATEWAY")
 		return session.ExitUsage
 	}
+	attachToken := os.Getenv("ACTLET_ATTACH_TOKEN")
+	if *attachOn != "" && attachToken == "" {
+		fmt.Fprintln(stderr, "actlet run: -attach-listen needs a token in ACTLET_ATTACH_TOKEN")
+		return session.ExitUsage
+	}
 	logOut := stderr
 	if *withTUI {
 		if *noAttach {
@@ -161,7 +170,13 @@ func runRun(args []string, stdout, stderr io.Writer, signals <-chan os.Signal) i
 		FlushTimeout:       *flushTimeout,
 		ToolsManifest:      *manifest,
 		NoAttach:           *noAttach,
+		AttachListen:       *attachOn,
+		AttachToken:        attachToken,
+		AttachAllowRemote:  *attachAny,
 		Logger:             log,
+	}
+	if *attachOn != "" && *attachAny {
+		log.Warn("the attach port may listen beyond loopback: anyone who can reach it and has the token can watch the session", "addr", *attachOn)
 	}
 	// With -tui, the viewer attaches to this run's own socket, like any
 	// other. Quitting it detaches and the run carries on; when the run

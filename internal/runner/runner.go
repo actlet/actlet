@@ -9,11 +9,13 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"os"
 	"slices"
 	"sync"
 	"time"
 
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/durationpb"
 
 	"github.com/actlet/actlet/internal/activity"
@@ -24,6 +26,7 @@ import (
 	"github.com/actlet/actlet/internal/session/sessionpb"
 	"github.com/actlet/actlet/internal/sessionfs"
 	"github.com/actlet/actlet/internal/tools"
+	attachv0 "github.com/actlet/actlet/proto/actlet/attach/v0"
 	gatewayv0 "github.com/actlet/actlet/proto/actlet/gateway/v0"
 )
 
@@ -63,12 +66,18 @@ type Config struct {
 	// Attached is called once the attach socket is listening, with its
 	// path, such as to attach the TUI to it.
 	Attached func(socket string)
+	// AttachListen, if set, opens the box's attach port on this address,
+	// host:port, for remote viewers that send AttachToken. It must be a
+	// loopback address unless AttachAllowRemote.
+	AttachListen      string
+	AttachToken       string
+	AttachAllowRemote bool
 
 	Logger *slog.Logger
 }
 
 // Capabilities are the features this worker announces when registering.
-var Capabilities = []string{"control.pause", "control.stop", "control.steer", "activity.v0", "task.demo", "task.agent", "inference.v0", "tools.local"}
+var Capabilities = []string{"control.pause", "control.stop", "control.steer", "activity.v0", "task.demo", "task.agent", "inference.v0", "tools.local", "attach.files"}
 
 // Run runs the session and returns the process exit code. Each value
 // received on signals asks the session to pause, as an OS termination
@@ -154,6 +163,16 @@ func Run(ctx context.Context, cfg Config, signals <-chan os.Signal) int {
 		return fail("agent settings", "err", err)
 	}
 
+	// The attach port opens before the session starts, so a port that
+	// can't be opened fails the run cleanly.
+	var portLis net.Listener
+	if cfg.AttachListen != "" {
+		if portLis, err = attach.ListenPort(cfg.AttachListen, cfg.AttachAllowRemote); err != nil {
+			return fail("attach port", "err", err)
+		}
+		defer func() { _ = portLis.Close() }()
+	}
+
 	hub := attach.NewHub(attach.HubOptions{})
 	defer hub.Close()
 	pub := activity.New(activity.Options{
@@ -185,19 +204,19 @@ func Run(ctx context.Context, cfg Config, signals <-chan os.Signal) int {
 		return fail("starting the session", "err", err)
 	}
 
-	// Local viewers attach over a socket in the session folder.
+	// Local viewers attach over a socket in the session folder, and remote
+	// ones, if the deployment opens it, to the attach port. Closing the
+	// hub ends the viewers' feeds after the last events, so the servers
+	// stop gracefully.
+	as := attach.NewServer(sessionID, hub, &box{sess: sess, sessionID: sessionID, epoch: epoch, cfg: cfg, folder: folder, client: client, started: time.Now()}, commands, log)
+	as.ServeFiles(folder.Dir)
 	if !cfg.NoAttach && !resp.GetProfile().GetLocalAttach().GetDisabled() {
-		box := &box{sess: sess, sessionID: sessionID, epoch: epoch, cfg: cfg, folder: folder, client: client, started: time.Now()}
 		lis, err := attach.Listen(folder.State())
 		if err != nil {
 			log.Warn("local attach unavailable", "err", err)
 		} else {
-			as := attach.NewServer(hub, box, commands, log)
-			as.ServeFiles(folder.Dir)
 			srv := attach.Start(lis, as)
 			defer func() {
-				// Closing the hub ends the viewers' feeds after the last
-				// events, so the server stops gracefully.
 				hub.Close()
 				srv.Stop()
 			}()
@@ -206,6 +225,14 @@ func Run(ctx context.Context, cfg Config, signals <-chan os.Signal) int {
 			}
 		}
 	}
+	if portLis != nil {
+		srv := attach.StartPort(portLis, as.Remote(), cfg.AttachToken)
+		defer func() {
+			hub.Close()
+			srv.Stop()
+		}()
+		log.Info("attach port listening", "addr", portLis.Addr().String())
+	}
 
 	netCtx, cancelNet := context.WithCancel(context.Background())
 	defer cancelNet()
@@ -213,7 +240,7 @@ func Run(ctx context.Context, cfg Config, signals <-chan os.Signal) int {
 	controlDone := make(chan struct{})
 	go func() {
 		defer close(controlDone)
-		_ = client.RunControl(netCtx, controlHandler{sess, epoch}, reregister)
+		_ = client.RunControl(netCtx, controlHandler{sess, epoch, folder.Dir}, reregister)
 	}()
 	for _, src := range append(backlogs, pub) {
 		wg.Go(func() { _ = client.RunActivity(netCtx, sessionID, src, reregister) })
@@ -354,6 +381,7 @@ func effectiveConfig(cfg Config, p *gatewayv0.Profile) *sessionpb.Config {
 type controlHandler struct {
 	s     *session.Session
 	epoch uint64
+	dir   string // the session folder
 }
 
 func (h controlHandler) Hello() *gatewayv0.ControlHello {
@@ -367,6 +395,18 @@ func (h controlHandler) Apply(ctx context.Context, cmd *gatewayv0.Command) (*gat
 func (h controlHandler) State() gatewayv0.SessionState { return h.s.State() }
 
 func (h controlHandler) Done() <-chan struct{} { return h.s.Done() }
+
+// ReadFile serves a file to a viewer attached through the orchestrator,
+// by the rules of local attach.
+func (h controlHandler) ReadFile(req *gatewayv0.FileRequest) *gatewayv0.FileResponse {
+	resp, err := attach.ReadFile(h.dir, &attachv0.ReadFileRequest{Path: req.GetPath()})
+	if err != nil {
+		st := status.Convert(err)
+		return &gatewayv0.FileResponse{ErrorCode: int32(st.Code()), Error: st.Message()}
+	}
+	return &gatewayv0.FileResponse{Path: resp.GetPath(), Content: resp.GetContent(), Size: resp.GetSize(),
+		Truncated: resp.GetTruncated(), Binary: resp.GetBinary()}
+}
 
 // agentSettings configures agent tasks from the profile and the image.
 func agentSettings(cfg Config, p *gatewayv0.Profile, effective *sessionpb.Config) (agent.Settings, error) {

@@ -118,21 +118,9 @@ func New(cfg Config) (*Client, error) {
 	if cfg.Addr == "" {
 		return nil, errors.New("gateway address is required")
 	}
-	creds := insecure.NewCredentials()
-	if cfg.TLS {
-		tc := &tls.Config{MinVersion: tls.VersionTLS12}
-		if cfg.CAFile != "" {
-			pem, err := os.ReadFile(cfg.CAFile)
-			if err != nil {
-				return nil, fmt.Errorf("gateway CA file: %w", err)
-			}
-			pool := x509.NewCertPool()
-			if !pool.AppendCertsFromPEM(pem) {
-				return nil, fmt.Errorf("gateway CA file %s holds no certificates", cfg.CAFile)
-			}
-			tc.RootCAs = pool
-		}
-		creds = credentials.NewTLS(tc)
+	creds, err := Credentials(cfg.TLS, cfg.CAFile)
+	if err != nil {
+		return nil, err
 	}
 	opts := []grpc.DialOption{
 		grpc.WithTransportCredentials(creds),
@@ -163,8 +151,35 @@ func New(cfg Config) (*Client, error) {
 // Close closes the connection.
 func (c *Client) Close() error { return c.cc.Close() }
 
-// bearer sends the token with every call. Plaintext is allowed for
-// development gateways.
+// Credentials returns the transport credentials for a connection: TLS,
+// trusting the CA certificates in the PEM file caFile if it is given, or
+// else plaintext.
+func Credentials(useTLS bool, caFile string) (credentials.TransportCredentials, error) {
+	if !useTLS {
+		return insecure.NewCredentials(), nil
+	}
+	tc := &tls.Config{MinVersion: tls.VersionTLS12}
+	if caFile != "" {
+		pem, err := os.ReadFile(caFile)
+		if err != nil {
+			return nil, fmt.Errorf("CA file: %w", err)
+		}
+		pool := x509.NewCertPool()
+		if !pool.AppendCertsFromPEM(pem) {
+			return nil, fmt.Errorf("CA file %s holds no certificates", caFile)
+		}
+		tc.RootCAs = pool
+	}
+	return credentials.NewTLS(tc), nil
+}
+
+// Bearer returns per-call credentials that send the token with every
+// call. Plaintext is allowed unless requireTLS, for development gateways.
+func Bearer(token string, requireTLS bool) credentials.PerRPCCredentials {
+	return bearer{token: token, tls: requireTLS}
+}
+
+// bearer sends the token with every call.
 type bearer struct {
 	token string
 	tls   bool
@@ -252,6 +267,18 @@ type ControlHandler interface {
 	Done() <-chan struct{}
 }
 
+// A FileServer is a ControlHandler that serves the session's files to
+// viewers attached through the orchestrator.
+type FileServer interface {
+	// ReadFile reads a file the gateway asks for. It must be safe to call
+	// concurrently.
+	ReadFile(req *gatewayv0.FileRequest) *gatewayv0.FileResponse
+}
+
+// MaxFileReads bounds the file reads served at once; the gateway's
+// further requests are refused until one finishes.
+const MaxFileReads = 4
+
 // Reregister registers the session again, when the gateway doesn't know it,
 // for example after a gateway restart.
 type Reregister func(ctx context.Context) error
@@ -308,10 +335,12 @@ func (c *Client) controlOnce(ctx context.Context, h ControlHandler) (established
 	}
 
 	// Commands are received and applied on their own goroutine; this one
-	// sends heartbeats and the final status.
+	// sends heartbeats and the final status. File reads run on goroutines
+	// of their own, a few at a time, so they never hold commands up.
 	recvErr := make(chan error, 1)
 	var gotAny bool
 	var gotMu sync.Mutex
+	reads := make(chan struct{}, MaxFileReads)
 	go func() {
 		for {
 			msg, err := stream.Recv()
@@ -322,6 +351,10 @@ func (c *Client) controlOnce(ctx context.Context, h ControlHandler) (established
 			gotMu.Lock()
 			gotAny = true
 			gotMu.Unlock()
+			if req := msg.GetReadFile(); req != nil {
+				c.serveFile(h, req, reads, send)
+				continue
+			}
 			cmd := msg.GetCommand()
 			if cmd == nil {
 				continue // a heartbeat
@@ -377,6 +410,32 @@ func (c *Client) controlOnce(ctx context.Context, h ControlHandler) (established
 			return established, nil
 		}
 	}
+}
+
+// serveFile answers a file request, or refuses it when the handler serves
+// no files or too many reads are running.
+func (c *Client) serveFile(h ControlHandler, req *gatewayv0.FileRequest, reads chan struct{}, send func(*gatewayv0.ControlUp) error) {
+	reply := func(resp *gatewayv0.FileResponse) {
+		resp.Id = req.GetId()
+		if err := send(&gatewayv0.ControlUp{Msg: &gatewayv0.ControlUp_File{File: resp}}); err != nil {
+			c.log.Debug("control: answering a file request", "err", err)
+		}
+	}
+	fs, ok := h.(FileServer)
+	if !ok {
+		reply(&gatewayv0.FileResponse{ErrorCode: int32(codes.Unimplemented), Error: "this worker serves no files"})
+		return
+	}
+	select {
+	case reads <- struct{}{}:
+	default:
+		reply(&gatewayv0.FileResponse{ErrorCode: int32(codes.ResourceExhausted), Error: "too many file reads at once"})
+		return
+	}
+	go func() {
+		defer func() { <-reads }()
+		reply(fs.ReadFile(req))
+	}()
 }
 
 // ActivitySource is one epoch's activity, as kept by an activity.Publisher.

@@ -170,27 +170,45 @@ func (e ErrTooManyViewers) Error() string {
 // after afterSeq (a skipped marker first if events are missing), then
 // carries new events. Backlog and live events neither overlap nor leave
 // a hole.
+//
+// A hub may hold several runs' events, numbered from 1 in each run, as an
+// orchestrator's does: afterSeq 0 asks for all of them, and any other
+// value for the latest run's events after it.
 func (h *Hub) Subscribe(afterSeq uint64) (*Subscription, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if len(h.clients) >= h.opts.MaxClients {
 		return nil, ErrTooManyViewers{h.opts.MaxClients}
 	}
+	var latest uint64
+	if n := len(h.ring); n > 0 {
+		latest = h.ring[n-1].GetEpoch()
+	}
+	wanted := func(ev *gatewayv0.ActivityEvent) bool {
+		return afterSeq == 0 || ev.GetEpoch() == latest && ev.GetSeq() > afterSeq
+	}
 	var backlog []*gatewayv0.ActivityEvent
 	for _, ev := range h.pinned {
-		if ev.GetSeq() > afterSeq {
+		if wanted(ev) {
 			backlog = append(backlog, ev)
 		}
 	}
 	for _, ev := range h.ring {
-		if ev.GetSeq() > afterSeq {
+		if wanted(ev) {
 			backlog = append(backlog, ev)
 		}
 	}
-	// Events between afterSeq and the backlog the hub no longer holds.
+	// Events between afterSeq and the backlog, or within it, that the hub
+	// no longer holds.
 	var missing uint64
-	next := afterSeq + 1
-	for _, ev := range backlog {
+	var epoch, next uint64
+	for i, ev := range backlog {
+		if i == 0 || ev.GetEpoch() != epoch {
+			epoch, next = ev.GetEpoch(), 1
+			if afterSeq > 0 {
+				next = afterSeq + 1
+			}
+		}
 		if ev.GetSeq() > next {
 			missing += ev.GetSeq() - next
 		}
