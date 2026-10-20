@@ -44,6 +44,7 @@ make setup   # download modules, install development tools
 make build   # build bin/actlet, bin/actlet-cli and bin/actlet-devgw
 make test    # run the tests with the race detector, and a short fuzz run
 make test-docker  # recovery across container replacement (needs Docker)
+make test-k8s     # the gateway path through Kubernetes, in a throwaway kind cluster
 make check   # gofmt, go vet, golangci-lint, go.mod tidiness
 make bench   # run the benchmarks
 make help    # list every target
@@ -56,6 +57,8 @@ make dist         # cross-build actlet, actlet-cli and actlet-devgw for all six 
 make image        # build the actlet:dev container image (distroless, non-root)
 make image-devgw  # build the actlet-devgw:dev development gateway image
 ```
+
+For Kubernetes, see [running on Kubernetes](docs/kubernetes.md): what was tested and the recommended settings.
 
 The image runs as an unprivileged user with its working directory at `/var/lib/actlet`. To keep sessions across container replacement, mount a volume there. The container's own filesystem only survives a restart of the same container.
 
