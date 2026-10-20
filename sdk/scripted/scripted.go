@@ -326,10 +326,40 @@ func (m *Model) price(usage *gatewayv0.Usage, cost *float64) {
 
 // Serve answers a call with the script's turn for it.
 func (m *Model) Serve(ctx context.Context, call *sdk.InferenceCall) error {
-	req := call.Request
-	if req.GetPurpose() == "llm" {
+	if call.Request.GetPurpose() == "llm" {
 		return m.serveLLM(call)
 	}
+	a, err := m.Answer(ctx, call.Request)
+	if err != nil {
+		return err
+	}
+	for _, w := range strings.SplitAfter(a.Text, " ") {
+		if w == "" {
+			continue
+		}
+		if err := call.Text(w); err != nil {
+			return err
+		}
+	}
+	for _, c := range a.ToolCalls {
+		if err := call.ToolCall(c.GetId(), c.GetName(), c.GetInput()); err != nil {
+			return err
+		}
+	}
+	return call.Done(a.Done)
+}
+
+// Answer is a whole answer of the model.
+type Answer struct {
+	Text      string
+	ToolCalls []*gatewayv0.ToolCall
+	Done      *gatewayv0.InferenceDone
+}
+
+// Answer returns the script's turn for a call, as a whole, such as for a
+// mock provider to send in its own format. A call with no continuation
+// isn't checked for one, as when a provider stands between.
+func (m *Model) Answer(ctx context.Context, req *gatewayv0.InferenceRequest) (*Answer, error) {
 	n := 0
 	for _, msg := range req.GetMessages() {
 		if msg.GetRole() == gatewayv0.Role_ROLE_ASSISTANT {
@@ -360,14 +390,14 @@ func (m *Model) Serve(ctx context.Context, call *sdk.InferenceCall) error {
 		return status.Errorf(codes.FailedPrecondition, "scripted model, %s, turn %d: %s", name, n+1, fmt.Sprintf(format, args...))
 	}
 	if n >= len(turns) {
-		return mismatch("the script has only %d turns", len(turns))
+		return nil, mismatch("the script has only %d turns", len(turns))
 	}
 	turn := turns[n]
-	if n > 0 && !bytes.Equal(req.GetContinuation(), continuation(n)) {
-		return mismatch("continuation %q, want %q", req.GetContinuation(), continuation(n))
+	if n > 0 && req.GetContinuation() != nil && !bytes.Equal(req.GetContinuation(), continuation(n)) {
+		return nil, mismatch("continuation %q, want %q", req.GetContinuation(), continuation(n))
 	}
 	if err := checkResults(turn.Expect, req.GetMessages()); err != nil {
-		return mismatch("%v", err)
+		return nil, mismatch("%v", err)
 	}
 	for _, want := range turn.ExpectOnce {
 		n := 0
@@ -377,25 +407,18 @@ func (m *Model) Serve(ctx context.Context, call *sdk.InferenceCall) error {
 			}
 		}
 		if n != 1 {
-			return mismatch("%q appears %d times in the conversation, the script expects once", want, n)
+			return nil, mismatch("%q appears %d times in the conversation, the script expects once", want, n)
 		}
 	}
 	if d := time.Duration(turn.Delay); d > 0 {
 		select {
 		case <-time.After(d):
 		case <-ctx.Done():
-			return ctx.Err()
+			return nil, ctx.Err()
 		}
 	}
 
-	for _, w := range strings.SplitAfter(turn.Text, " ") {
-		if w == "" {
-			continue
-		}
-		if err := call.Text(w); err != nil {
-			return err
-		}
-	}
+	a := &Answer{Text: turn.Text}
 	for i, c := range turn.ToolCalls {
 		input := "{}"
 		if c.Input != nil {
@@ -403,13 +426,11 @@ func (m *Model) Serve(ctx context.Context, call *sdk.InferenceCall) error {
 			enc := json.NewEncoder(&buf)
 			enc.SetEscapeHTML(false)
 			if err := enc.Encode(c.Input); err != nil {
-				return status.Errorf(codes.Internal, "scripted model: %v", err)
+				return nil, status.Errorf(codes.Internal, "scripted model: %v", err)
 			}
 			input = strings.TrimSuffix(buf.String(), "\n")
 		}
-		if err := call.ToolCall(fmt.Sprintf("call_%d_%d", n+1, i+1), c.Name, input); err != nil {
-			return err
-		}
+		a.ToolCalls = append(a.ToolCalls, &gatewayv0.ToolCall{Id: fmt.Sprintf("call_%d_%d", n+1, i+1), Name: c.Name, Input: input})
 	}
 	stop := gatewayv0.StopReason_STOP_REASON_END_TURN
 	if len(turn.ToolCalls) > 0 {
@@ -426,11 +447,8 @@ func (m *Model) Serve(ctx context.Context, call *sdk.InferenceCall) error {
 		usage.InputTokens, usage.OutputTokens = turn.Usage.Input, turn.Usage.Output
 	}
 	m.price(usage, turn.Cost)
-	return call.Done(&gatewayv0.InferenceDone{
-		StopReason:   stop,
-		Usage:        usage,
-		Continuation: continuation(n + 1),
-	})
+	a.Done = &gatewayv0.InferenceDone{StopReason: stop, Usage: usage, Continuation: continuation(n + 1)}
+	return a, nil
 }
 
 // checkResults checks the tool results in the last message against the
