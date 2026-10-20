@@ -14,9 +14,9 @@ import (
 // process dies, and a second open of the same file, even in this process,
 // can't take it.
 //
-// Any failure other than "already locked" (for example ENOLCK or ENOTSUP on
-// a filesystem without lock support) is returned as an error: the writer
-// fails closed rather than run unprotected.
+// It returns an error wrapping ErrLocked if another writer holds the lock,
+// and one wrapping errLockUnavailable if the filesystem can't lock at all
+// (for example ENOLCK or ENOTSUP on some network filesystems).
 func lockFile(f *os.File) error {
 	for {
 		err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
@@ -28,7 +28,7 @@ func lockFile(f *os.File) error {
 		case errors.Is(err, syscall.EWOULDBLOCK):
 			return fmt.Errorf("%w: %s", ErrLocked, f.Name())
 		default:
-			return fmt.Errorf("journal: lock %s: %w", f.Name(), err)
+			return fmt.Errorf("%w: flock: %w", errLockUnavailable, err)
 		}
 	}
 }

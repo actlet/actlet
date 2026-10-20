@@ -57,6 +57,7 @@ check: ## Check formatting, vet, lint and go.mod tidiness
 	@unformatted="$$(gofmt -l .)"; \
 		if [ -n "$$unformatted" ]; then echo "gofmt needed for:"; echo "$$unformatted"; exit 1; fi
 	go vet ./...
+	GOOS=windows go vet ./...  # keep the code portable to platforms without flock
 	$(GOLANGCI_LINT) run
 	go mod tidy -diff
 

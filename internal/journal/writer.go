@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sync"
@@ -48,9 +49,14 @@ type Options struct {
 	Batch BatchPolicy
 	// Limits bound records and batches. Zero means DefaultLimits.
 	Limits Limits
+	// Logger receives warnings, such as running without the exclusive
+	// lock. Nil means slog.Default().
+	Logger *slog.Logger
 
 	// wrap substitutes the file, for fault injection in tests.
 	wrap func(file) file
+	// lock substitutes lockFile, for tests.
+	lock func(*os.File) error
 	// noSync skips syncing, for building large test fixtures quickly.
 	noSync bool
 }
@@ -67,6 +73,12 @@ func (o Options) withDefaults() (Options, error) {
 	}
 	if err := o.Limits.validate(); err != nil {
 		return o, err
+	}
+	if o.Logger == nil {
+		o.Logger = slog.Default()
+	}
+	if o.lock == nil {
+		o.lock = lockFile
 	}
 	if o.Codec != CodecNone && o.Codec != CodecZstd {
 		return o, fmt.Errorf("%w: codec %v", ErrUnsupported, o.Codec)
@@ -99,8 +111,9 @@ type Stats struct {
 }
 
 // Writer appends records to a journal. It holds an exclusive lock on the
-// file for its lifetime. Append is safe for concurrent use; a single
-// goroutine owns the file and writes batches in order.
+// file for its lifetime where the platform and filesystem support locking.
+// Append is safe for concurrent use; a single goroutine owns the file and
+// writes batches in order.
 //
 // After any write or sync failure the writer stops: every later Append fails
 // with ErrWriterFailed, and the journal must be reopened, which recovers the
@@ -111,6 +124,7 @@ type Writer struct {
 	opts     Options
 	header   Header
 	recovery ScanResult
+	locked   bool
 	codecs   *codecs
 	codec    codec
 
@@ -159,7 +173,8 @@ func Create(path string, opts Options) (w *Writer, err error) {
 		return nil, fmt.Errorf("journal: create: %w", err)
 	}
 	f := opts.wrapFile(osf)
-	if err := lockFile(osf); err != nil {
+	locked, err := opts.takeLock(osf, path)
+	if err != nil {
 		// Someone else opened and locked the new file already: leave it.
 		_ = f.Close()
 		return nil, err
@@ -188,7 +203,7 @@ func Create(path string, opts Options) (w *Writer, err error) {
 		}
 	}
 	res := ScanResult{Header: h, ValidEnd: int64(len(hb)), Size: int64(len(hb))}
-	return newWriter(f, h, res, opts)
+	return newWriter(f, h, res, locked, opts)
 }
 
 // Open opens an existing journal for appending. It takes the lock, then
@@ -210,7 +225,8 @@ func Open(path string, opts Options) (w *Writer, err error) {
 			_ = f.Close()
 		}
 	}()
-	if err := lockFile(osf); err != nil {
+	locked, err := opts.takeLock(osf, path)
+	if err != nil {
 		return nil, err
 	}
 	st, err := osf.Stat()
@@ -235,10 +251,27 @@ func Open(path string, opts Options) (w *Writer, err error) {
 			}
 		}
 	}
-	return newWriter(f, res.Header, res, opts)
+	return newWriter(f, res.Header, res, locked, opts)
 }
 
-func newWriter(f file, h Header, res ScanResult, opts Options) (*Writer, error) {
+// takeLock takes the exclusive lock on the journal. It returns false, after
+// logging a warning, if the platform or filesystem can't lock; it fails only
+// if another writer holds the lock.
+func (o Options) takeLock(f *os.File, path string) (bool, error) {
+	err := o.lock(f)
+	switch {
+	case err == nil:
+		return true, nil
+	case errors.Is(err, errLockUnavailable):
+		o.Logger.Warn("journal: can't take the exclusive lock; continuing without it, so a second writer won't be detected",
+			"path", path, "err", err)
+		return false, nil
+	default:
+		return false, err
+	}
+}
+
+func newWriter(f file, h Header, res ScanResult, locked bool, opts Options) (*Writer, error) {
 	cs, err := newCodecs(opts.Limits)
 	if err != nil {
 		return nil, err
@@ -249,6 +282,7 @@ func newWriter(f file, h Header, res ScanResult, opts Options) (*Writer, error) 
 		opts:     opts,
 		header:   h,
 		recovery: res,
+		locked:   locked,
 		codecs:   cs,
 		codec:    c,
 		reqs:     make(chan *appendReq, opts.Batch.MaxRecords),
@@ -270,6 +304,10 @@ func (o Options) wrapFile(f *os.File) file {
 
 // Header returns the journal header.
 func (w *Writer) Header() Header { return w.header }
+
+// Locked reports whether the writer holds the exclusive lock. It doesn't
+// when the platform or filesystem can't lock; a warning is logged then.
+func (w *Writer) Locked() bool { return w.locked }
 
 // Recovery returns what Open found when it scanned the journal, before any
 // torn tail was truncated.
@@ -526,16 +564,4 @@ func orShortWrite(err error) error {
 		return io.ErrShortWrite
 	}
 	return err
-}
-
-func syncDir(dir string) error {
-	d, err := os.Open(dir)
-	if err != nil {
-		return err
-	}
-	serr := d.Sync()
-	if cerr := d.Close(); serr == nil {
-		serr = cerr
-	}
-	return serr
 }

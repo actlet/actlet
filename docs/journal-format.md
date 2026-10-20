@@ -161,20 +161,18 @@ Lengths are checked before anything is allocated or read. The Zstandard decoder 
 
 ## Exclusive writer lock
 
-The writer takes `flock(LOCK_EX | LOCK_NB)` on the journal file and holds it until `Close`.
-
-What this guarantees:
+The journal must have exactly one writer. Where it can, the writer takes `flock(LOCK_EX | LOCK_NB)` on the journal file and holds it until `Close`.
 
 - A second writer, in another process or in the same process through a second `Open`, is refused with `ErrLocked`. Each open of the file has its own lock.
 - The lock is released automatically when the process exits or is killed. There are no stale lock files to clean up.
 - The file descriptor is close-on-exec, so child processes don't inherit the lock.
-- If the filesystem doesn't support `flock` and returns an error other than "already locked", `Open` and `Create` fail. They don't continue unprotected.
+- Where the platform or filesystem can't lock (no `flock`, as on Windows, or a filesystem that returns `ENOTSUP` or `ENOLCK`), the writer **logs a warning and continues without the lock**. `Writer.Locked()` reports whether the lock is held. Running only one writer per session folder is then up to whoever deploys Actlet.
 
-What it doesn't guarantee:
+What the lock doesn't guarantee:
 
 - **It is advisory.** Code that writes to the file without going through this package isn't stopped.
-- **Network and shared filesystems.** On Linux NFS, `flock` is emulated with NFS byte-range locks. Those depend on the lock service and on leases, and a lease that lapses during a network partition can let a second client take the lock while the first still believes it holds it. SMB/CIFS and FUSE filesystems vary, and some accept the lock without enforcing it. macOS NFS mounts may reject `flock` entirely, and the writer then fails closed. **Keep journals on a local filesystem:** a node-local disk, or a block volume mounted by one node (for example a Kubernetes `ReadWriteOncePod` volume).
-- **Other machines.** A lock can't stop a writer on another node that mounts the same block device. Single-attachment volumes, or an orchestrator-side lease, have to prevent that.
+- **Shared and network filesystems can defeat it.** On Linux NFS, `flock` is emulated with NFS byte-range locks. Those depend on the lock service and on leases, and a lease that lapses during a network partition can let a second client take the lock while the first still believes it holds it. SMB/CIFS and FUSE filesystems vary, and some accept the lock without enforcing it.
+- **It can't see other machines.** A writer on another node that mounts the same block device isn't stopped by a lock this node holds.
 
 ## What the journal does not protect against
 

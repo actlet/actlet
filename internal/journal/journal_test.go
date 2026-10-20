@@ -5,8 +5,12 @@ import (
 	"context"
 	"crypto/rand"
 	"errors"
+	"fmt"
+	"log/slog"
 	"os"
+	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -258,5 +262,43 @@ func TestOptionsValidation(t *testing.T) {
 		if _, err := Create(tempJournal(t), o); err == nil {
 			t.Errorf("case %d: Create succeeded with invalid options", i)
 		}
+	}
+}
+
+func TestLockUnavailableWarnsAndContinues(t *testing.T) {
+	var logs bytes.Buffer
+	opts := testOptions()
+	opts.Logger = slog.New(slog.NewTextHandler(&logs, nil))
+	opts.lock = func(*os.File) error {
+		return fmt.Errorf("%w: flock: %w", errLockUnavailable, syscall.ENOTSUP)
+	}
+
+	path := tempJournal(t)
+	w := mustCreate(t, path, opts)
+	if w.Locked() {
+		t.Error("Locked() = true without a lock")
+	}
+	appendN(t, w, 2)
+	mustClose(t, w)
+	w = mustOpen(t, path, opts)
+	appendN(t, w, 1)
+	mustClose(t, w)
+	checkRecords(t, readAll(t, path), 3)
+
+	if got := strings.Count(logs.String(), "level=WARN"); got != 2 {
+		t.Errorf("logged %d warnings, want one per open:\n%s", got, logs.String())
+	}
+	if !strings.Contains(logs.String(), "continuing without it") {
+		t.Errorf("warning doesn't say the writer continues:\n%s", logs.String())
+	}
+}
+
+func TestLockHeldByAnotherWriterIsRefused(t *testing.T) {
+	path := tempJournal(t)
+	mustClose(t, mustCreate(t, path, testOptions()))
+	opts := testOptions()
+	opts.lock = func(f *os.File) error { return fmt.Errorf("%w: %s", ErrLocked, f.Name()) }
+	if _, err := Open(path, opts); !errors.Is(err, ErrLocked) {
+		t.Fatalf("Open: err = %v, want ErrLocked", err)
 	}
 }

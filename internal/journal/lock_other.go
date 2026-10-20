@@ -8,8 +8,8 @@ import (
 	"runtime"
 )
 
-// lockFile fails on platforms without flock(2) support: the writer refuses
-// to run without exclusive ownership.
-func lockFile(f *os.File) error {
-	return fmt.Errorf("%w: exclusive file locking on %s", ErrUnsupported, runtime.GOOS)
+// lockFile can't lock on platforms without flock(2). The writer warns and
+// runs without an exclusive lock.
+func lockFile(*os.File) error {
+	return fmt.Errorf("%w: no file locking on %s", errLockUnavailable, runtime.GOOS)
 }

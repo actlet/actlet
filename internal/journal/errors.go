@@ -36,6 +36,10 @@ var (
 
 	// ErrClosed reports use of a closed writer.
 	ErrClosed = errors.New("journal: writer closed")
+
+	// errLockUnavailable reports that the platform or filesystem can't lock
+	// the journal. The writer warns and continues without the lock.
+	errLockUnavailable = errors.New("file locking unavailable")
 )
 
 // FormatError describes a problem at a specific offset in a journal file.

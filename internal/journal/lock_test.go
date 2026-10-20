@@ -10,6 +10,9 @@ import (
 func TestSecondWriterRefused(t *testing.T) {
 	path := tempJournal(t)
 	w := mustCreate(t, path, testOptions())
+	if !w.Locked() {
+		t.Fatal("Locked() = false on a local filesystem")
+	}
 	appendN(t, w, 1)
 
 	// A second open in the same process gets its own open file
