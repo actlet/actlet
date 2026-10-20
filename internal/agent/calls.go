@@ -227,6 +227,9 @@ func (w *worker) runTool(call *gatewayv0.ToolCall, prev *agentpb.ToolIntent) err
 		CallId: call.GetId(), Tool: call.GetName(), IsError: res.IsError, OutcomeUnknown: res.Unknown,
 		Output: cut(res.Output, maxEventIO), Took: durationpb.New(time.Since(start)),
 	}}})
+	if b.env.Budget != nil {
+		b.env.Budget.ToolDone()
+	}
 	return nil
 }
 

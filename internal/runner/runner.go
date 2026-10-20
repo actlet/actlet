@@ -375,6 +375,8 @@ func effectiveConfig(cfg Config, p *gatewayv0.Profile) *sessionpb.Config {
 		StopGrace:            durationpb.New(grace),
 		DefaultPauseMode:     mode,
 		SignalDeadline:       durationpb.New(cfg.SignalDeadline),
+		Budgets:              p.GetBudgets(),
+		LocalCommands:        attach.AllowedCommands(p.GetLocalAttach()),
 	}
 }
 

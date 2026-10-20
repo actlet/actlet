@@ -605,6 +605,9 @@ func (m *Model) renderStatus(w int) string {
 		parts = append(parts, styleMuted.Render(fmt.Sprintf("%.2f %s", s.Usage.Cost, s.Usage.Currency)))
 	}
 	parts = append(parts, styleMuted.Render(m.elapsed()), styleMuted.Render(m.connLabel()))
+	if alarm := m.budgetAlarm(); alarm != "" {
+		parts = append(parts, styleErr.Render(alarm))
+	}
 	left := " " + strings.Join(parts, sep)
 	if m.notice != "" {
 		left += sep + styleWarn.Render(m.notice)
@@ -733,11 +736,11 @@ func (m *Model) sessionLines(w int) []string {
 		add(fmt.Sprintf("  %-10s %-8s %6d %8s %8s %9s", wk.ID, orNA(wk.Model), wk.Turns, ctx, tokens(wk.Usage.Input+wk.Usage.Output), c))
 	}
 
-	head("Budgets " + styleMuted.Render("(not enforced yet)"))
-	if s.Info == nil || len(s.Info.Budgets) == 0 {
-		add("  n/a")
+	head("Budgets")
+	if bs := m.budgets(); len(bs) == 0 {
+		add("  none")
 	} else {
-		for _, b := range s.Info.Budgets {
+		for _, b := range bs {
 			add("  " + m.budgetLine(b))
 		}
 	}
@@ -748,55 +751,97 @@ func (m *Model) sessionLines(w int) []string {
 			add(styleFaint.Render(fmt.Sprintf("  … %d earlier", s.FeedbackDropped)))
 		}
 		for _, f := range s.Feedback {
-			add(fmt.Sprintf("  %s %-10s %s", f.Time.Local().Format("15:04:05"), f.Kind, f.Message))
+			add(fmt.Sprintf("  %s %-10s %s", f.Time.UTC().Format("15:04:05"), f.Kind, f.Message))
 		}
 	}
 	return out
 }
 
-func (m *Model) budgetLine(b *gatewayv0.Budget) string {
-	kind := strings.ToLower(strings.TrimPrefix(b.GetKind().String(), "BUDGET_KIND_"))
-	limit := fmt.Sprintf("%g", b.GetLimit())
-	if b.GetCurrency() != "" {
-		limit += " " + view.Sanitize(b.GetCurrency())
+// budgets are the session's budgets: as the latest budget status reported
+// them, or else as the run started with them, with no usage known.
+func (m *Model) budgets() []view.BudgetState {
+	if len(m.sess.Budgets) > 0 {
+		return m.sess.Budgets
+	}
+	var out []view.BudgetState
+	if info := m.sess.Info; info != nil {
+		for _, b := range info.Budgets {
+			out = append(out, view.BudgetState{Kind: b.GetKind(), Limit: b.GetLimit(), Used: -1, Currency: view.Sanitize(b.GetCurrency())})
+		}
+	}
+	return out
+}
+
+func (m *Model) budgetLine(b view.BudgetState) string {
+	kind := view.BudgetName(b.Kind)
+	limit := fmt.Sprintf("%g", b.Limit)
+	if b.Currency != "" {
+		limit += " " + b.Currency
 	}
 	used, ok := m.budgetUsed(b)
 	usedText := "n/a"
 	if ok {
 		var amount string
-		switch b.GetKind() {
+		switch b.Kind {
 		case gatewayv0.BudgetKind_BUDGET_KIND_TOKENS:
-			amount, limit = tokens(uint64(used)), tokens(uint64(b.GetLimit()))
+			amount, limit = tokens(uint64(used)), tokens(uint64(b.Limit))
 		case gatewayv0.BudgetKind_BUDGET_KIND_TIME:
 			amount = (time.Duration(used) * time.Second).String()
-			limit = (time.Duration(b.GetLimit()) * time.Second).String()
+			limit = (time.Duration(b.Limit) * time.Second).String()
+		case gatewayv0.BudgetKind_BUDGET_KIND_DISK:
+			amount, limit = sizeOf(int64(used)), sizeOf(int64(b.Limit))
 		default:
 			amount = fmt.Sprintf("%.2f", used)
 		}
-		usedText = fmt.Sprintf("%s (%.0f%%)", amount, used*100/b.GetLimit())
+		usedText = fmt.Sprintf("%s (%.0f%%)", amount, used*100/b.Limit)
 	}
-	return fmt.Sprintf("%-6s limit %-10s used %s", kind, limit, usedText)
+	line := fmt.Sprintf("%-6s limit %-10s used %s", kind, limit, usedText)
+	switch b.State {
+	case "alerted":
+		line += "  " + styleWarn.Render("past the alert")
+	case "exhausted":
+		line += "  " + styleErr.Render("used up")
+	case "waiting":
+		line += "  " + styleErr.Render("used up; work waits")
+	}
+	return line
 }
 
-// budgetUsed is what the session has used of a budget, as far as the
-// viewer can tell: cost reported with model calls, tokens, and time.
-func (m *Model) budgetUsed(b *gatewayv0.Budget) (float64, bool) {
+// budgetUsed is what the session has used of a budget: the latest figure
+// the viewer has, from the model calls or the budget status.
+func (m *Model) budgetUsed(b view.BudgetState) (float64, bool) {
 	s := m.sess
-	switch b.GetKind() {
+	used, ok := b.Used, b.Used >= 0
+	switch b.Kind {
 	case gatewayv0.BudgetKind_BUDGET_KIND_MONEY:
-		if s.Usage.Cost > 0 && s.Usage.Currency == b.GetCurrency() {
+		if s.Usage.Cost > 0 && s.Usage.Currency == b.Currency && s.Usage.Cost > used {
 			return s.Usage.Cost, true
 		}
 	case gatewayv0.BudgetKind_BUDGET_KIND_TOKENS:
-		if n := s.Usage.Input + s.Usage.Output; n > 0 {
-			return float64(n), true
+		if n := float64(s.Usage.Input + s.Usage.Output); n > 0 && !ok {
+			return n, true
 		}
 	case gatewayv0.BudgetKind_BUDGET_KIND_TIME:
-		if d, ok := m.elapsedTime(); ok {
-			return d.Seconds(), true
+		if !ok {
+			if d, ok := m.elapsedTime(); ok {
+				return d.Seconds(), true
+			}
 		}
 	}
-	return 0, false
+	return used, ok
+}
+
+// budgetAlarm says which budget is used up, for the status line.
+func (m *Model) budgetAlarm() string {
+	for _, b := range m.sess.Budgets {
+		switch b.State {
+		case "exhausted":
+			return view.BudgetName(b.Kind) + " budget used up"
+		case "waiting":
+			return "waiting for the " + view.BudgetName(b.Kind) + " budget"
+		}
+	}
+	return ""
 }
 
 // taskLines draw the Task tab: the task and the worker tree.
@@ -861,11 +906,12 @@ func (m *Model) profileLines(w int) []string {
 	} else {
 		add("  none listed; the agent asks for the \"main\" alias")
 	}
-	out = append(out, "", styleBold.Render("Budgets")+styleMuted.Render(" (not enforced yet)"))
-	if len(info.Budgets) == 0 {
-		add("  n/a")
+	out = append(out, "", styleBold.Render("Budgets"))
+	bs := m.budgets()
+	if len(bs) == 0 {
+		add("  none")
 	}
-	for _, b := range info.Budgets {
+	for _, b := range bs {
 		add("  " + m.budgetLine(b))
 	}
 	out = append(out, "", styleBold.Render("Local viewers may"))

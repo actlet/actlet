@@ -13,6 +13,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -176,4 +177,26 @@ func WriteFileAtomic(path string, data []byte, perm os.FileMode) error {
 		return err
 	}
 	return syncDir(filepath.Dir(path))
+}
+
+// DirSize adds up the sizes of the files under dir, looking at most at
+// 100000 of them.
+func DirSize(dir string) int64 {
+	var total int64
+	n := 0
+	_ = filepath.WalkDir(dir, func(_ string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		if n++; n > 100000 {
+			return filepath.SkipAll
+		}
+		if d.Type().IsRegular() {
+			if fi, err := d.Info(); err == nil {
+				total += fi.Size()
+			}
+		}
+		return nil
+	})
+	return total
 }

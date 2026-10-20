@@ -29,4 +29,4 @@ Installed (tools manifest)
                                                                                                     
 ────────────────────────────────────────────────────────────────────────────────────────────────────
  a recording · space play/pause · ←/→ seek · +/- speed                                              
- ⠋ running · large · ctx 6% · 0.08 EUR · 12s · replay at the end 1x 100%                     ? keys 
+ ⠋ running · large · ctx 6% · 0.08 EUR · 15s · replay at the end 1x 100%                     ? keys 

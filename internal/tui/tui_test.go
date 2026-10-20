@@ -95,6 +95,19 @@ func run() []*gatewayv0.ActivityEvent {
 	add("root", func(ev *gatewayv0.ActivityEvent) {
 		ev.Body = &gatewayv0.ActivityEvent_ToolStarted{ToolStarted: &gatewayv0.ToolStarted{CallId: "c2", Tool: "shell", Input: `{"command":"sleep 5"}`}}
 	})
+	pct := uint32(60)
+	add("root", func(ev *gatewayv0.ActivityEvent) {
+		ev.Body = &gatewayv0.ActivityEvent_Progress{Progress: &gatewayv0.Progress{Message: "adding up the totals", Percent: &pct}}
+	})
+	add("root", func(ev *gatewayv0.ActivityEvent) {
+		ev.Body = &gatewayv0.ActivityEvent_Feedback{Feedback: &gatewayv0.Feedback{Kind: "problem", Message: "the input has no header row"}}
+	})
+	add("", func(ev *gatewayv0.ActivityEvent) {
+		ev.Body = &gatewayv0.ActivityEvent_BudgetStatus{BudgetStatus: &gatewayv0.BudgetStatus{Reason: "alert", Budgets: []*gatewayv0.BudgetUsage{
+			{Kind: gatewayv0.BudgetKind_BUDGET_KIND_MONEY, Limit: 5, Used: 0.082, Currency: "EUR", State: "ok"},
+			{Kind: gatewayv0.BudgetKind_BUDGET_KIND_DISK, Limit: 1 << 20, Used: 900 << 10, State: "alerted"},
+		}}}
+	})
 	return out
 }
 

@@ -22,6 +22,7 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 
 	"github.com/actlet/actlet/internal/agent"
+	"github.com/actlet/actlet/internal/budget"
 	"github.com/actlet/actlet/internal/journal"
 	"github.com/actlet/actlet/internal/session/sessionpb"
 	"github.com/actlet/actlet/internal/sessionfs"
@@ -30,10 +31,12 @@ import (
 
 // Journal record kinds.
 const (
-	kindStarted = "session.started"
-	kindCommand = "command"
-	kindStep    = "task.step"
-	kindEnded   = "session.ended"
+	kindStarted  = "session.started"
+	kindCommand  = "command"
+	kindStep     = "task.step"
+	kindEnded    = "session.ended"
+	kindBudget   = "budget"
+	kindRevision = "config.revision"
 )
 
 // Exit codes of a run, so the orchestrator knows why the process ended.
@@ -96,8 +99,15 @@ type Recovered struct {
 	Config *sessionpb.Config
 	// Agent are the agent's records from its latest checkpoint on.
 	Agent []journal.Record
-	// Steers are the accepted steer notes, in the order they arrived.
+	// Steers are the accepted steer notes and the budget notices, in the
+	// order they arrived.
 	Steers []agent.Steer
+	// Budget is what earlier runs recorded about the budgets.
+	Budget budget.Restored
+
+	// The current run's first and latest record times, for its active
+	// time.
+	runStart, runLast time.Time
 }
 
 func steerOf(c *sessionpb.Command) agent.Steer {
@@ -153,6 +163,7 @@ func Recover(f sessionfs.Folder) (*Recovered, error) {
 	for {
 		b, err := r.Next()
 		if errors.Is(err, io.EOF) || errors.Is(err, journal.ErrTornTail) {
+			rec.endRun()
 			return rec, nil // opening the journal for writing truncates a torn tail
 		}
 		if err != nil {
@@ -166,7 +177,22 @@ func Recover(f sessionfs.Folder) (*Recovered, error) {
 	}
 }
 
+// endRun adds a run's active time: from its start to its last record.
+func (r *Recovered) endRun() {
+	if !r.runStart.IsZero() && r.runLast.After(r.runStart) {
+		r.Budget.ActiveTime += r.runLast.Sub(r.runStart)
+	}
+	r.runStart, r.runLast = time.Time{}, time.Time{}
+}
+
 func (r *Recovered) apply(jr journal.Record) error {
+	if jr.Kind == kindStarted {
+		r.endRun()
+		r.runStart = jr.Time
+	}
+	if jr.Time.After(r.runLast) {
+		r.runLast = jr.Time
+	}
 	if agent.IsRecord(jr.Kind) {
 		if jr.Kind == agent.KindCheckpoint {
 			r.Agent = r.Agent[:0]
@@ -205,8 +231,44 @@ func (r *Recovered) apply(jr journal.Record) error {
 			return err
 		}
 		r.Ended = &m
+	case kindBudget:
+		var m sessionpb.BudgetEvent
+		if err := proto.Unmarshal(jr.Data, &m); err != nil {
+			return err
+		}
+		switch m.GetEvent() {
+		case "alert":
+			if r.Budget.Alerted == nil {
+				r.Budget.Alerted = map[budget.Kind]float64{}
+			}
+			r.Budget.Alerted[m.GetKind()] = m.GetLimit()
+			r.Steers = append(r.Steers, agent.Steer{CommandID: budget.NoticeID(&m), Note: budget.Notice(&m, currencyOf(r.Config, m.GetKind())), System: true})
+		case "reset":
+			if r.Budget.Offsets == nil {
+				r.Budget.Offsets = map[budget.Kind]float64{}
+			}
+			r.Budget.Offsets[m.GetKind()] = m.GetOffset()
+			delete(r.Budget.Alerted, m.GetKind())
+		}
+	case kindRevision:
+		var m sessionpb.ConfigRevision
+		if err := proto.Unmarshal(jr.Data, &m); err != nil {
+			return err
+		}
+		r.Config = m.GetConfig()
 	}
 	return nil
+}
+
+// currencyOf returns the currency of the configuration's budget of a
+// kind.
+func currencyOf(c *sessionpb.Config, k budget.Kind) string {
+	for _, b := range c.GetBudgets() {
+		if b.GetKind() == k {
+			return b.GetCurrency()
+		}
+	}
+	return ""
 }
 
 // Params configure a run.
@@ -240,7 +302,11 @@ type Session struct {
 
 	cmdMu    sync.Mutex // serialises commands
 	commands map[string]*sessionpb.Command
-	steers   []agent.Steer // accepted steer notes, in order
+	steers   []agent.Steer     // accepted steer notes and budget notices, in order
+	config   *sessionpb.Config // the effective configuration, after updates
+
+	budget       *budget.Tracker
+	stopTracking context.CancelFunc
 
 	mu         sync.Mutex
 	state      gatewayv0.SessionState
@@ -289,6 +355,7 @@ func Start(p Params) (*Session, error) {
 		log:      p.Logger,
 		j:        j,
 		commands: map[string]*sessionpb.Command{},
+		config:   p.Config,
 		state:    gatewayv0.SessionState_SESSION_STATE_RUNNING,
 		done:     make(chan struct{}),
 		stopping: make(chan struct{}),
@@ -324,9 +391,47 @@ func Start(p Params) (*Session, error) {
 	}
 	s.emitState(gatewayv0.SessionState_SESSION_STATE_UNSPECIFIED, gatewayv0.SessionState_SESSION_STATE_RUNNING, "started")
 
+	s.startBudgets()
 	go s.run(nextStep)
 	return s, nil
 }
+
+// startBudgets starts tracking the budgets, as earlier runs left them.
+func (s *Session) startBudgets() {
+	var restored budget.Restored
+	if s.p.Recovered != nil {
+		restored = s.p.Recovered.Budget
+	}
+	s.budget = budget.New(s.p.Config.GetBudgets(), restored, budget.Hooks{
+		Record: func(ev *sessionpb.BudgetEvent) error { return s.record(context.Background(), kindBudget, ev) },
+		Emit: func(st *gatewayv0.BudgetStatus) {
+			s.p.Emit(&gatewayv0.ActivityEvent{Body: &gatewayv0.ActivityEvent_BudgetStatus{BudgetStatus: st}})
+		},
+		Notify: func(id, text string) {
+			s.cmdMu.Lock()
+			s.steers = append(s.steers, agent.Steer{CommandID: id, Note: text, System: true})
+			s.cmdMu.Unlock()
+		},
+		Stop: func(reason string) {
+			s.emitText("%s: stopping the session", reason)
+			s.requestStop(s.p.Config.GetStopGrace().AsDuration(), false, reason)
+		},
+		Pause: func(reason string) {
+			s.emitText("%s", reason)
+			mode, _ := PauseModeFromName(s.p.Config.GetDefaultPauseMode())
+			s.requestPause(mode, reason)
+		},
+		Idle:   func(reason string) { s.emitText("%s", reason) },
+		Disk:   func() int64 { return sessionfs.DirSize(s.p.Folder.Dir) },
+		Logger: s.log,
+	})
+	ctx, cancel := context.WithCancel(context.Background())
+	s.stopTracking = cancel
+	go s.budget.Run(ctx)
+}
+
+// Budget returns the session's budget tracker.
+func (s *Session) Budget() *budget.Tracker { return s.budget }
 
 // ID returns the session ID.
 func (s *Session) ID() string { return s.p.SessionID }
@@ -614,6 +719,7 @@ func (s *Session) wantsStop() bool {
 
 func (s *Session) run(nextStep uint64) {
 	o := s.work(nextStep)
+	s.stopTracking()
 	s.mu.Lock()
 	for _, t := range s.timers {
 		t.Stop()
@@ -676,7 +782,7 @@ func (s *Session) runAgent() Outcome {
 	done, err := agent.Run(agent.Env{
 		Settings: s.p.Agent, Folder: s.p.Folder, Task: s.p.Task, SessionID: s.p.SessionID, Epoch: s.p.Epoch,
 		Records: records, Record: s.record, Emit: s.p.Emit, Infer: s.p.Infer,
-		Soft: s.soft, Hard: s.hard, Stopping: s.stopping, Steers: s.steerNotes, Logger: s.log,
+		Soft: s.soft, Hard: s.hard, Stopping: s.stopping, Steers: s.steerNotes, Budget: s.budget, Logger: s.log,
 	})
 	switch {
 	case err != nil:

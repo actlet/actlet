@@ -105,12 +105,27 @@ type Settings struct {
 // InferFunc makes a model call through the gateway.
 type InferFunc func(ctx context.Context, req *gatewayv0.InferenceRequest) (*gwclient.Inference, error)
 
-// Steer is an operator's steer note.
+// Steer is an operator's steer note, or a notice from Actlet itself,
+// such as about a budget.
 type Steer struct {
 	CommandID string
 	Note      string
 	// From names who sent it.
 	From string
+	// System marks a notice from Actlet.
+	System bool
+}
+
+// Budget is the session's budgets, as the agent sees them.
+type Budget interface {
+	// Spent sets what the model and bridged tool calls have used in all.
+	Spent(tokens uint64, cost float64, currency string)
+	// ToolDone notes that a tool ran and may have used disk space.
+	ToolDone()
+	// Wait returns when budget-consuming work may start, or ctx's error.
+	Wait(ctx context.Context) error
+	// Summary describes the budgets and their usage.
+	Summary() string
 }
 
 // Env is what a run of the agent works with.
@@ -134,9 +149,12 @@ type Env struct {
 	// Stopping is closed when new work must not start: a pause or stop
 	// was requested.
 	Stopping <-chan struct{}
-	// Steers returns the operator's accepted steer notes so far, in the
-	// order they arrived. Nil means none.
+	// Steers returns the operator's accepted steer notes and Actlet's
+	// notices so far, in the order they arrived. Nil means none.
 	Steers func() []Steer
+	// Budget, if set, is told what the agent uses, and holds model calls
+	// back while a budget is used up.
+	Budget Budget
 	Logger *slog.Logger
 }
 
@@ -233,6 +251,7 @@ func Run(env Env) (done bool, err error) {
 	} else if err := b.start(); err != nil {
 		return false, err
 	}
+	b.spent()
 
 	// Continue every unfinished worker; parents wait for their subagents.
 	b.mu.Lock()
@@ -354,8 +373,64 @@ func (b *box) stopping() bool {
 // stops, since the journal no longer matches the work.
 func (b *box) commit(m proto.Message) error {
 	b.mu.Lock()
-	defer b.mu.Unlock()
-	return b.commitLocked(m)
+	err := b.commitLocked(m)
+	b.mu.Unlock()
+	if err == nil {
+		switch m := m.(type) {
+		case *agentpb.InferenceOutcome:
+			b.spent()
+		case *agentpb.ToolOutcome:
+			if m.GetUsage() != nil {
+				b.spent()
+			}
+		}
+	}
+	return err
+}
+
+// spent tells the budget what the workers have used in all.
+func (b *box) spent() {
+	if b.env.Budget == nil {
+		return
+	}
+	b.mu.Lock()
+	var tokens uint64
+	var cost float64
+	currency := ""
+	for _, w := range b.st.workers {
+		u := w.GetUsage()
+		tokens += u.GetInputTokens() + u.GetOutputTokens()
+		if u.GetCost() > 0 && (currency == "" || currency == u.GetCurrency()) {
+			cost += u.GetCost()
+			currency = u.GetCurrency()
+		}
+	}
+	b.mu.Unlock()
+	b.env.Budget.Spent(tokens, cost, currency)
+}
+
+// waitBudget returns when budget-consuming work may start: at once,
+// unless a budget is used up and the session idles until it is raised.
+// It returns errStopped if the box stops meanwhile.
+func (b *box) waitBudget() error {
+	if b.env.Budget == nil {
+		return nil
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() {
+		select {
+		case <-b.env.Stopping:
+		case <-b.stopAll:
+		case <-b.env.Hard.Done():
+		case <-ctx.Done():
+		}
+		cancel()
+	}()
+	if b.env.Budget.Wait(ctx) != nil {
+		return errStopped
+	}
+	return nil
 }
 
 func (b *box) commitLocked(m proto.Message) error {
@@ -593,10 +668,17 @@ func (w *worker) deliverSteers() error {
 			from = "the operator"
 		}
 		text := fmt.Sprintf("[Operator note from %s, sent while you worked; take it into account] %s", from, s.Note)
+		if s.System {
+			text = "[Notice from Actlet] " + s.Note
+		}
 		if err := b.commit(&agentpb.SteerDelivered{WorkerId: w.id, CommandId: s.CommandID, Text: text}); err != nil {
 			return err
 		}
-		b.text(w.id, "the agent got the note from %s", from)
+		if s.System {
+			b.text(w.id, "the agent got a notice: %s", s.Note)
+		} else {
+			b.text(w.id, "the agent got the note from %s", from)
+		}
 	}
 	return nil
 }
@@ -618,10 +700,13 @@ func (w *worker) inference() error {
 	if crashHit("inference.intent", w.id) {
 		return errStopped
 	}
+	if err := b.waitBudget(); err != nil {
+		return err
+	}
 	req := &gatewayv0.InferenceRequest{
 		SessionId: b.env.SessionID, Epoch: b.env.Epoch, IntentId: in.GetIntentId(), Model: st.GetModel(),
 		System: st.GetSystem(), Messages: slices.Clone(st.GetMessages()), Tools: b.specs(st.GetDepth()),
-		Continuation: st.GetContinuation(), MaxOutputTokens: b.def.MaxOutputTokens,
+		Continuation: st.GetContinuation(), MaxOutputTokens: b.def.MaxOutputTokens, Purpose: "agent", Worker: w.id,
 	}
 	ans, err := b.env.Infer(b.env.Soft, req)
 	if err != nil {

@@ -53,6 +53,9 @@ type Session struct {
 	// Feedback is what the agent sent, oldest first.
 	Feedback        []Feedback
 	FeedbackDropped int
+	// Budgets are the budgets as the latest budget status reported them;
+	// nil before one.
+	Budgets []BudgetState
 	// Items is the session's own timeline: its start and state changes,
 	// commands, operator notes and messages.
 	Items   []*Item
@@ -98,6 +101,15 @@ type Progress struct {
 	// Percent is how far along it is, or -1 when it didn't say.
 	Percent int
 	Time    time.Time
+}
+
+// BudgetState is a budget as a budget status reported it.
+type BudgetState struct {
+	Kind        gatewayv0.BudgetKind
+	Limit, Used float64
+	Currency    string
+	// State is "ok", "alerted", "exhausted" or "waiting".
+	State string
 }
 
 // Feedback is feedback the agent sent.
@@ -502,6 +514,12 @@ func (s *Session) Apply(ev *gatewayv0.ActivityEvent) {
 			p.Percent = int(min(b.Progress.GetPercent(), 100))
 		}
 		s.Progress = p
+	case *gatewayv0.ActivityEvent_BudgetStatus:
+		s.Budgets = nil
+		for _, u := range b.BudgetStatus.GetBudgets() {
+			s.Budgets = append(s.Budgets, BudgetState{Kind: u.GetKind(), Limit: u.GetLimit(), Used: u.GetUsed(),
+				Currency: Sanitize(u.GetCurrency()), State: Sanitize(u.GetState())})
+		}
 	case *gatewayv0.ActivityEvent_Feedback:
 		s.Feedback = append(s.Feedback, Feedback{Worker: Sanitize(ev.GetWorker()), Kind: Sanitize(b.Feedback.GetKind()),
 			Message: Sanitize(b.Feedback.GetMessage()), Time: at})
@@ -711,6 +729,11 @@ func (s *Session) ContextWindow(model string) uint64 {
 	return 0
 }
 
+// BudgetName is a budget kind in lower case, such as "money".
+func BudgetName(k gatewayv0.BudgetKind) string {
+	return strings.ToLower(strings.TrimPrefix(k.String(), "BUDGET_KIND_"))
+}
+
 // StateName is a session state in lower case, such as "running".
 func StateName(s gatewayv0.SessionState) string {
 	if s == gatewayv0.SessionState_SESSION_STATE_UNSPECIFIED {
@@ -781,6 +804,12 @@ func Describe(ev *gatewayv0.ActivityEvent) string {
 		return "progress: " + firstLine(b.Progress.GetMessage())
 	case *gatewayv0.ActivityEvent_Feedback:
 		return fmt.Sprintf("feedback (%s): %s", b.Feedback.GetKind(), firstLine(b.Feedback.GetMessage()))
+	case *gatewayv0.ActivityEvent_BudgetStatus:
+		var parts []string
+		for _, u := range b.BudgetStatus.GetBudgets() {
+			parts = append(parts, fmt.Sprintf("%s %g/%g %s", BudgetName(u.GetKind()), u.GetUsed(), u.GetLimit(), u.GetState()))
+		}
+		return fmt.Sprintf("budget_status (%s): %s", b.BudgetStatus.GetReason(), strings.Join(parts, ", "))
 	}
 	return "an event this viewer doesn't know"
 }

@@ -4,9 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"io/fs"
 	"log/slog"
-	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
@@ -91,8 +89,8 @@ func (b *box) Info() *attachv0.InfoResponse {
 		SessionId: b.sessionID, Epoch: b.epoch, WorkerId: b.cfg.WorkerID, ActletVersion: b.cfg.Version, State: b.sess.State(),
 		Stats: &attachv0.Stats{
 			Started:          timestamppb.New(b.started),
-			FolderBytes:      dirSize(b.folder.Dir),
-			OutputBytes:      dirSize(b.folder.Output()),
+			FolderBytes:      sessionfs.DirSize(b.folder.Dir),
+			OutputBytes:      sessionfs.DirSize(b.folder.Output()),
 			MemoryBytes:      mem.Sys,
 			Cpu:              durationpb.New(cpuTime()),
 			Gateway:          b.client.Addr(),
@@ -103,26 +101,4 @@ func (b *box) Info() *attachv0.InfoResponse {
 
 func (b *box) Apply(ctx context.Context, cmd *gatewayv0.Command) (*gatewayv0.CommandAck, error) {
 	return b.sess.Apply(ctx, cmd)
-}
-
-// dirSize adds up the sizes of the files under dir, looking at most at
-// 100000 of them.
-func dirSize(dir string) int64 {
-	var total int64
-	n := 0
-	_ = filepath.WalkDir(dir, func(_ string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return nil
-		}
-		if n++; n > 100000 {
-			return filepath.SkipAll
-		}
-		if d.Type().IsRegular() {
-			if fi, err := d.Info(); err == nil {
-				total += fi.Size()
-			}
-		}
-		return nil
-	})
-	return total
 }

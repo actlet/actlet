@@ -19,10 +19,11 @@ import (
 const (
 	ProgressTool = "report_progress"
 	FeedbackTool = "send_feedback"
+	BudgetTool   = "budget_status"
 )
 
 // StandardTools are the names of the standard tools.
-var StandardTools = []string{ProgressTool, FeedbackTool}
+var StandardTools = []string{ProgressTool, FeedbackTool, BudgetTool}
 
 // IsStandard reports whether a tool is one of the standard tools.
 func IsStandard(name string) bool { return slices.Contains(StandardTools, name) }
@@ -67,6 +68,8 @@ func (b *box) standardTools() map[string]*standardTool {
 			t = progressTool()
 		case FeedbackTool:
 			t = feedbackTool()
+		case BudgetTool:
+			t = budgetTool()
 		}
 		if t != nil {
 			out[g.Name] = t
@@ -157,6 +160,27 @@ func feedbackTool() *standardTool {
 				Kind: in.Kind, Message: msg,
 			}}})
 			return standardResult{Result: tools.Result{Output: "Feedback sent."}}
+		},
+	}
+}
+
+func budgetTool() *standardTool {
+	return &standardTool{
+		spec: &gatewayv0.ToolSpec{
+			Name:        BudgetTool,
+			Description: "See how much of the session's budgets (time, money, tokens, disk space) is used, to plan your work within them.",
+			InputSchema: `{"type":"object","properties":{},"additionalProperties":false}`,
+		},
+		policy: "retry",
+		run: func(w *worker, _ string, input json.RawMessage) standardResult {
+			var in struct{}
+			if err := decodeStrict(input, &in); err != nil {
+				return refused("invalid input: %v", err)
+			}
+			if w.b.env.Budget == nil {
+				return standardResult{Result: tools.Result{Output: "This session has no budgets."}}
+			}
+			return standardResult{Result: tools.Result{Output: w.b.env.Budget.Summary()}}
 		},
 	}
 }

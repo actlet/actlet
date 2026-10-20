@@ -1,9 +1,12 @@
 package agent
 
 import (
+	"context"
 	"fmt"
 	"slices"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/actlet/actlet/internal/tools"
 	gatewayv0 "github.com/actlet/actlet/proto/actlet/gateway/v0"
@@ -85,5 +88,70 @@ func TestEventToolRecovery(t *testing.T) {
 	}
 	if o := s.outcomes(); len(o) != 1 || o[0].GetContent() != "Progress reported." {
 		t.Errorf("outcomes %v", o)
+	}
+}
+
+// fakeBudget holds model calls back until released, and records what
+// the agent reports.
+type fakeBudget struct {
+	mu      sync.Mutex
+	release chan struct{}
+	waits   int
+	tokens  uint64
+	cost    float64
+	tools   int
+}
+
+func (f *fakeBudget) Spent(tokens uint64, cost float64, currency string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.tokens, f.cost = tokens, cost
+}
+
+func (f *fakeBudget) ToolDone() {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.tools++
+}
+
+func (f *fakeBudget) Wait(ctx context.Context) error {
+	f.mu.Lock()
+	f.waits++
+	f.mu.Unlock()
+	select {
+	case <-f.release:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func (f *fakeBudget) Summary() string { return "money: 1.00 EUR of 2.00 EUR used (50%), ok" }
+
+// Model calls wait for the budget; the agent reports what it used, and
+// the budget_status tool describes the budgets.
+func TestAgentBudget(t *testing.T) {
+	s := newSandbox(t,
+		turn{calls: [][2]string{{BudgetTool, `{}`}, {"write_file", `{"path":"a.txt","content":"a"}`}}},
+		turn{check: expect("1.00 EUR of 2.00 EUR", "created"), text: "done"},
+	)
+	s.settings.Standard = []tools.Grant{{Name: BudgetTool}}
+	fb := &fakeBudget{release: make(chan struct{})}
+	s.budget = fb
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		s.mustFinish()
+	}()
+	time.Sleep(200 * time.Millisecond)
+	if n := len(s.model.callsOf("root")); n != 0 {
+		t.Fatalf("%d model calls before the budget allowed them", n)
+	}
+	close(fb.release)
+	<-done
+	fb.mu.Lock()
+	defer fb.mu.Unlock()
+	if fb.waits != 2 || fb.tokens != 24 || fb.tools != 1 {
+		t.Errorf("waits %d, tokens %d, tool calls %d", fb.waits, fb.tokens, fb.tools)
 	}
 }

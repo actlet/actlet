@@ -12,9 +12,9 @@
 1.11   root     tool_finished spawn_subagent s1 error=false unknown=false: Wrote report.md.         
 1.12   root     model_turn 2 (large): Now the totals. → shell                                       
 1.13   root     tool_started shell c2: {"command":"sleep 5"}                                        
-                                                                                                    
-                                                                                                    
-                                                                                                    
+1.14   root     progress 60%: adding up the totals                                                  
+1.15   root     feedback (problem): the input has no header row                                     
+1.16   session  budget_status (alert): money 0.082/5 ok, disk 921600/1.048576e+06 alerted           
                                                                                                     
                                                                                                     
                                                                                                     

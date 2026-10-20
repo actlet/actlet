@@ -10,12 +10,12 @@ Models
   roles: main → large, subagent → fast                                                              
   selectable: fast                                                                                  
                                                                                                     
-Budgets (not enforced yet)                                                                          
+Budgets                                                                                             
   money  limit 5 EUR      used 0.08 (2%)                                                            
+  disk   limit 1.0 MiB    used 900.0 KiB (88%)  past the alert                                      
                                                                                                     
 Local viewers may                                                                                   
   steer                                                                                             
-                                                                                                    
                                                                                                     
                                                                                                     
                                                                                                     

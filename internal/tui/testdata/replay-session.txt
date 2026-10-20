@@ -1,11 +1,11 @@
  actlet  sum                                            Chat  Session  Task  Profile  Tools  Events 
-Session                                                                                             
   id           sess-1234abcd                                                                        
   state        running: started                                                                     
   run          1                                                                                    
-  elapsed      12s                                                                                  
+  elapsed      15s                                                                                  
   viewing      recording run.actrec                                                                 
-  events       13                                                                                   
+  events       16                                                                                   
+  progress     60% · adding up the totals                                                           
                                                                                                     
 Box                                                                                                 
   folder       n/a                                                                                  
@@ -21,12 +21,12 @@ Usage
   root       large         2       6%      26k    0.0820                                            
   root.1     fast          2        0        0       n/a                                            
                                                                                                     
-Budgets (not enforced yet)                                                                          
+Budgets                                                                                             
   money  limit 5 EUR      used 0.08 (2%)                                                            
+  disk   limit 1.0 MiB    used 900.0 KiB (88%)  past the alert                                      
                                                                                                     
-                                                                                                    
-                                                                                                    
-                                                                                                    
+Feedback                                                                                            
+  22:13:35 problem    the input has no header row                                                   
 ────────────────────────────────────────────────────────────────────────────────────────────────────
  a recording · space play/pause · ←/→ seek · +/- speed                                              
- ⠋ running · large · ctx 6% · 0.08 EUR · 12s · replay at the end 1x 100%                     ? keys 
+ ⠋ running · large · ctx 6% · 0.08 EUR · 15s · replay at the end 1x 100%                     ? keys 

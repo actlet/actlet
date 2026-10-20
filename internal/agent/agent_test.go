@@ -159,6 +159,7 @@ type sandbox struct {
 	crashAt                 string
 	crashBefore, crashAfter func(kind string, m proto.Message) bool
 	settings                Settings
+	budget                  Budget
 }
 
 func newSandbox(t *testing.T, turns ...turn) *sandbox {
@@ -236,7 +237,7 @@ func (s *sandbox) run(soft, hard context.Context, stopping <-chan struct{}) (don
 			s.events = append(s.events, ev)
 			s.mu.Unlock()
 		},
-		Infer: s.model.infer, Soft: soft, Hard: hard, Stopping: stopping,
+		Infer: s.model.infer, Soft: soft, Hard: hard, Stopping: stopping, Budget: s.budget,
 		Steers: func() []Steer {
 			s.mu.Lock()
 			defer s.mu.Unlock()

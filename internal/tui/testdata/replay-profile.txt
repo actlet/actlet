@@ -10,8 +10,9 @@ Models
   roles: main → large, subagent → fast                                                              
   selectable: fast                                                                                  
                                                                                                     
-Budgets (not enforced yet)                                                                          
+Budgets                                                                                             
   money  limit 5 EUR      used 0.08 (2%)                                                            
+  disk   limit 1.0 MiB    used 900.0 KiB (88%)  past the alert                                      
                                                                                                     
 Local viewers may                                                                                   
   steer                                                                                             
@@ -26,7 +27,6 @@ Local viewers may
                                                                                                     
                                                                                                     
                                                                                                     
-                                                                                                    
 ────────────────────────────────────────────────────────────────────────────────────────────────────
  a recording · space play/pause · ←/→ seek · +/- speed                                              
- ⠋ running · large · ctx 6% · 0.08 EUR · 12s · replay at the end 1x 100%                     ? keys 
+ ⠋ running · large · ctx 6% · 0.08 EUR · 15s · replay at the end 1x 100%                     ? keys 
