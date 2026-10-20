@@ -16,20 +16,25 @@
 //	      - name: python
 //	        input: {code: "print(1 + 2)"}
 //	    delay: 1s                # answer after a pause
+//	    expect_once: [metric]    # texts the conversation has exactly once
 //	  - text: The sum is 3.     # no tool calls: the task ends
+//	subagents:                   # scripts for subagents, by their subtask
+//	  - match: count the words   # a phrase in the subtask
+//	    turns:
+//	      - text: 42 words.
 //
 // The turn played is chosen by the number of model answers already in the
-// conversation, so a repeated call gets the same turn. A call that doesn't
-// match the script (its tool results, or the continuation of the previous
-// turn) fails with codes.FailedPrecondition, which ends the worker's
-// session with the reason.
+// conversation, so a repeated call gets the same turn. A conversation
+// whose first message contains a subagent script's phrase plays that
+// script instead. A call that doesn't match the script (its tool results,
+// or the continuation of the previous turn) fails with
+// codes.FailedPrecondition, which ends the worker's task with the reason.
 package scripted
 
 import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"strconv"
@@ -47,6 +52,13 @@ import (
 
 // Script is the turns the model plays.
 type Script struct {
+	Turns     []Turn      `json:"turns"`
+	Subagents []Subscript `json:"subagents,omitempty"`
+}
+
+// Subscript is the script of the subagents whose subtask contains Match.
+type Subscript struct {
+	Match string `json:"match"`
 	Turns []Turn `json:"turns"`
 }
 
@@ -54,6 +66,9 @@ type Script struct {
 type Turn struct {
 	// Expect checks the tool results the turn receives, in order.
 	Expect []Expect `json:"expect,omitempty"`
+	// ExpectOnce are texts that must each appear exactly once in the
+	// conversation's text, such as an operator's note.
+	ExpectOnce []string `json:"expect_once,omitempty"`
 	// Text is the model's text.
 	Text string `json:"text,omitempty"`
 	// ToolCalls are the tools the model calls. A turn without any ends the
@@ -83,6 +98,8 @@ type Call struct {
 	Intent string
 	Turn   int
 	Time   time.Time
+	// Script is the subagent script's phrase, or "" for the main script.
+	Script string
 }
 
 // Model plays a script. Use Serve as sdk.Options.OnInference.
@@ -105,14 +122,28 @@ func Parse(data []byte) (*Model, error) {
 	if err := dec.Decode(&s); err != nil {
 		return nil, fmt.Errorf("script: %w", err)
 	}
-	if len(s.Turns) == 0 {
-		return nil, errors.New("script: no turns")
-	}
-	for i, t := range s.Turns {
-		for j, c := range t.ToolCalls {
-			if c.Name == "" {
-				return nil, fmt.Errorf("script: turn %d, tool call %d: no name", i+1, j+1)
+	check := func(name string, turns []Turn) error {
+		if len(turns) == 0 {
+			return fmt.Errorf("script: %s: no turns", name)
+		}
+		for i, t := range turns {
+			for j, c := range t.ToolCalls {
+				if c.Name == "" {
+					return fmt.Errorf("script: %s, turn %d, tool call %d: no name", name, i+1, j+1)
+				}
 			}
+		}
+		return nil
+	}
+	if err := check("main", s.Turns); err != nil {
+		return nil, err
+	}
+	for i, sub := range s.Subagents {
+		if sub.Match == "" {
+			return nil, fmt.Errorf("script: subagent script %d: no match", i+1)
+		}
+		if err := check(fmt.Sprintf("subagent %q", sub.Match), sub.Turns); err != nil {
+			return nil, err
 		}
 	}
 	return &Model{script: s}, nil
@@ -145,21 +176,49 @@ func (m *Model) Serve(ctx context.Context, call *sdk.InferenceCall) error {
 			n++
 		}
 	}
+	turns, script := m.script.Turns, ""
+	if msgs := req.GetMessages(); len(msgs) > 0 {
+		var first strings.Builder
+		for _, p := range msgs[0].GetParts() {
+			first.WriteString(p.GetText())
+		}
+		for _, sub := range m.script.Subagents {
+			if strings.Contains(first.String(), sub.Match) {
+				turns, script = sub.Turns, sub.Match
+				break
+			}
+		}
+	}
 	m.mu.Lock()
-	m.calls = append(m.calls, Call{Intent: req.GetIntentId(), Turn: n + 1, Time: time.Now()})
+	m.calls = append(m.calls, Call{Intent: req.GetIntentId(), Turn: n + 1, Time: time.Now(), Script: script})
 	m.mu.Unlock()
+	name := "main script"
+	if script != "" {
+		name = fmt.Sprintf("subagent script %q", script)
+	}
 	mismatch := func(format string, args ...any) error {
-		return status.Errorf(codes.FailedPrecondition, "scripted model, turn %d: %s", n+1, fmt.Sprintf(format, args...))
+		return status.Errorf(codes.FailedPrecondition, "scripted model, %s, turn %d: %s", name, n+1, fmt.Sprintf(format, args...))
 	}
-	if n >= len(m.script.Turns) {
-		return mismatch("the script has only %d turns", len(m.script.Turns))
+	if n >= len(turns) {
+		return mismatch("the script has only %d turns", len(turns))
 	}
-	turn := m.script.Turns[n]
+	turn := turns[n]
 	if n > 0 && !bytes.Equal(req.GetContinuation(), continuation(n)) {
 		return mismatch("continuation %q, want %q", req.GetContinuation(), continuation(n))
 	}
 	if err := checkResults(turn.Expect, req.GetMessages()); err != nil {
 		return mismatch("%v", err)
+	}
+	for _, want := range turn.ExpectOnce {
+		n := 0
+		for _, msg := range req.GetMessages() {
+			for _, p := range msg.GetParts() {
+				n += strings.Count(p.GetText(), want)
+			}
+		}
+		if n != 1 {
+			return mismatch("%q appears %d times in the conversation, the script expects once", want, n)
+		}
 	}
 	if d := time.Duration(turn.Delay); d > 0 {
 		select {

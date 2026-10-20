@@ -121,12 +121,60 @@ func TestScriptedModel(t *testing.T) {
 	}
 }
 
+func TestSubagentScripts(t *testing.T) {
+	m, err := Parse([]byte(`
+turns:
+  - text: main
+subagents:
+  - match: count words
+    turns:
+      - text: sub
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, id := gateway(t, m)
+	for _, tt := range []struct{ first, want, script string }{
+		{"# Task\n\nbig task", "main", ""},
+		{"# Subtask from root\n\nplease count words in a.txt", "sub", "count words"},
+	} {
+		msg := &gatewayv0.Message{Role: gatewayv0.Role_ROLE_USER, Parts: []*gatewayv0.Part{{Part: &gatewayv0.Part_Text{Text: tt.first}}}}
+		text, _, _, err := answer(t, c, &gatewayv0.InferenceRequest{SessionId: id, Epoch: 1, IntentId: tt.first, Messages: []*gatewayv0.Message{msg}})
+		if err != nil || text != tt.want {
+			t.Errorf("%q: %q, %v", tt.first, text, err)
+		}
+	}
+	if calls := m.Calls(); len(calls) != 2 || calls[0].Script != "" || calls[1].Script != "count words" {
+		t.Errorf("calls %+v", calls)
+	}
+}
+
+func TestExpectOnce(t *testing.T) {
+	m, err := Parse([]byte("turns:\n  - expect_once: [metric]\n    text: ok\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, id := gateway(t, m)
+	for _, tt := range []struct {
+		text string
+		ok   bool
+	}{{"use metric units", true}, {"nothing", false}, {"metric, metric", false}} {
+		msg := &gatewayv0.Message{Role: gatewayv0.Role_ROLE_USER, Parts: []*gatewayv0.Part{{Part: &gatewayv0.Part_Text{Text: tt.text}}}}
+		_, _, _, err := answer(t, c, &gatewayv0.InferenceRequest{SessionId: id, Epoch: 1, IntentId: tt.text, Messages: []*gatewayv0.Message{msg}})
+		if (err == nil) != tt.ok {
+			t.Errorf("%q: %v", tt.text, err)
+		}
+	}
+}
+
 func TestParseErrors(t *testing.T) {
 	for _, s := range []string{
 		"turns: []",
 		"turns:\n  - text: hi\n    colour: red",
 		"turns:\n  - tool_calls:\n      - input: {}",
 		"turns:\n  - delay: soon",
+		"turns:\n  - text: a\nsubagents:\n  - turns:\n      - text: b",
+		"turns:\n  - text: a\nsubagents:\n  - match: x\n    turns: []",
 	} {
 		if _, err := Parse([]byte(s)); err == nil {
 			t.Errorf("accepted %q", s)
