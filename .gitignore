@@ -8,9 +8,11 @@
 coverage.*
 *.coverprofile
 
-# Local session journals and activity recordings
+# Local session journals and activity recordings, except the fixtures
 *.actlet
 *.actrec
+!/test/compat/*/*.actlet
+!/test/compat/*/*.actrec
 
 # Editors and OS
 .idea/

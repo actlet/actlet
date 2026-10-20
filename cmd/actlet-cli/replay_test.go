@@ -274,3 +274,23 @@ func TestReplayView(t *testing.T) {
 		t.Errorf("a bad line: exit %d: %s", code, stderr.String())
 	}
 }
+
+// replay view --json stays stable: on the compatibility fixtures, from
+// the recording and from its export, it writes the view they were
+// written with.
+func TestReplayViewCompat(t *testing.T) {
+	dir := filepath.Join("..", "..", "test", "compat", "v0")
+	want, err := os.ReadFile(filepath.Join(dir, "view.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range []string{"recording.actrec", "events.jsonl"} {
+		var stdout, stderr bytes.Buffer
+		if code := run([]string{"replay", "view", "--json", filepath.Join(dir, f)}, &stdout, &stderr); code != 0 {
+			t.Fatalf("%s: exit %d: %s", f, code, stderr.String())
+		}
+		if !bytes.Equal(stdout.Bytes(), want) {
+			t.Errorf("%s: the view differs from view.json", f)
+		}
+	}
+}
