@@ -162,7 +162,7 @@ func isDisplayOnly(ev *Event) bool {
 func (p *Publisher) dropLocked(ev *Event) {
 	if p.gap == nil {
 		p.gap = &gatewayv0.Gap{First: ev.Time}
-		p.log.Warn("activity: buffers full, dropping display-only events", "epoch", p.opts.Epoch)
+		p.log.Warn("activity: no room for events, dropping them until there is", "epoch", p.opts.Epoch)
 	}
 	p.gap.Dropped++
 	p.gap.Last = ev.Time

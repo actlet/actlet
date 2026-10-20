@@ -124,7 +124,7 @@ The worker keeps at most a window of unacknowledged events in flight (1024). If 
 
 Emitting activity never waits for the network or the disk. Events wait in a bounded in-memory queue (`-activity-queue`). When that is full, they spill to `.actlet/activity-<epoch>.actrec` in the session folder, and are read back from there once the gateway is reachable again. The spill file is deleted when everything in it has been acknowledged.
 
-The spill file is capped (`-activity-spill-max`). Beyond the cap, display-only events, such as text output, are dropped. A **gap** event then reports how many were dropped and over what time span. State changes, commands and gap events keep a small reserve beyond the cap. Execution-critical state never depends on activity: it lives in the journal.
+The spill file is capped (`-activity-spill-max`). Beyond the cap, display-only events, such as text output, are dropped. A **gap** event then reports how many were dropped and over what time span. State changes, commands and gap events keep a small reserve beyond the cap. If the disk is full, or the spill file can't be written for another reason, events of any kind that find no room in memory are dropped, and a gap reports them once the gateway has caught up; emitting never fails, and the session carries on. Execution-critical state never depends on activity: it lives in the journal.
 
 When a run ends, the worker waits briefly (`-flush-timeout`) for outstanding events to be acknowledged, and writes the rest to the spill file. The next run sends them as a **backlog** for the earlier epoch, alongside its own events.
 

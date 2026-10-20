@@ -111,6 +111,8 @@ Any failed or short write, or failed sync, **stops the writer**. The failing `Ap
 
 A failed sync is never retried. On Linux, after `fsync` reports an error the kernel may already have marked the unwritten pages clean or dropped them. A second `fsync` can then "succeed" without the data ever reaching disk.
 
+In `actlet run`, a session journal that stops this way, for a full disk (`ENOSPC`) or a failing disk (`EIO`), ends the run: the session reports `failed` with the journal's error as the reason, never `completed`, and `actlet run` exits 1. Nothing written after the failure is claimed. Once the disk is fine again, the next run on the folder recovers from the journal and carries on.
+
 ### Unacknowledged records may survive
 
 A batch can be fully written but not acknowledged: the process dies between the write and the end of the sync, or the sync fails after the data reached the disk anyway. Such a batch is complete and valid, so recovery keeps it. **Reopening can therefore show records that no caller ever saw acknowledged.** Higher layers must treat records after the last acknowledged sequence number as uncertain, for example by using stable IDs and reconciling them, and must never assume they don't exist.
@@ -145,6 +147,8 @@ The committed prefix is everything before the first problem. Batches over the li
 The trade-off: if the final batch *was* acknowledged and the storage later damages it, it is dropped rather than refused. As with unacknowledged records that survive, higher layers must reconcile everything near the end of the journal rather than assume it.
 
 The file header is written and synced before `Create` returns, so a journal with a damaged or missing header is reported as corrupt, never as torn.
+
+`actlet run` refuses a session journal that is corrupt before its end: it exits 1 without registering, saying that the journal is damaged before its end, at which offset, and to look with `actlet-cli journal inspect`, which shows the same offset.
 
 Readers don't take the lock. `actlet-cli journal inspect` can look at a journal while it's being written, and it then usually sees a clean end, possibly a torn tail.
 

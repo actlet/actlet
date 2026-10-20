@@ -7,9 +7,12 @@ import (
 	"log/slog"
 	"os"
 	"strings"
+	"sync/atomic"
+	"syscall"
 	"testing"
 	"time"
 
+	"github.com/actlet/actlet/internal/journal"
 	gatewayv0 "github.com/actlet/actlet/proto/actlet/gateway/v0"
 )
 
@@ -255,5 +258,53 @@ func TestEmitDoesNotBlock(t *testing.T) {
 	}
 	if d := time.Since(start); d > 5*time.Second {
 		t.Fatalf("20000 emits with nobody reading took %v", d)
+	}
+}
+
+// The spill file's disk fills up: Emit still doesn't wait or fail, the
+// events that found no room are reported by a gap, and once the sender
+// catches up, activity flows again.
+func TestSpillDiskFull(t *testing.T) {
+	var writes atomic.Int32
+	journal.SetFaultForTest(func(path, op string) error {
+		if strings.HasSuffix(path, ".actrec") && op == "write" && writes.Add(1) > 3 {
+			return syscall.ENOSPC
+		}
+		return nil
+	})
+	t.Cleanup(func() { journal.SetFaultForTest(nil) })
+	p := newTest(t, 2, 1<<20)
+	const n = 40
+	for i := range n {
+		if i%10 == 9 {
+			p.Emit(state(gatewayv0.SessionState_SESSION_STATE_RUNNING))
+		} else {
+			p.Emit(text(fmt.Sprint(i)))
+		}
+	}
+	// Read and acknowledge everything, as a sender does, until the gap
+	// comes.
+	var stored, dropped int
+	var last uint64
+	for dropped == 0 {
+		evs := next(t, p, last, 1000)
+		checkContiguous(t, evs, last+1)
+		for _, ev := range evs {
+			if g := ev.GetGap(); g != nil {
+				dropped += int(g.GetDropped())
+			} else {
+				stored++
+			}
+		}
+		last = evs[len(evs)-1].Seq
+		p.Ack(last)
+	}
+	if stored+dropped != n {
+		t.Fatalf("stored %d and dropped %d of %d events", stored, dropped, n)
+	}
+	p.Emit(state(gatewayv0.SessionState_SESSION_STATE_COMPLETED))
+	evs := next(t, p, last, 10)
+	if len(evs) != 1 || evs[0].GetState().GetTo() != gatewayv0.SessionState_SESSION_STATE_COMPLETED {
+		t.Fatalf("after the disk filled up: %v", evs)
 	}
 }

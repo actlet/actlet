@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -181,7 +182,7 @@ func Create(path string, opts Options) (w *Writer, err error) {
 	if err != nil {
 		return nil, fmt.Errorf("journal: create: %w", err)
 	}
-	f := opts.wrapFile(osf)
+	f := opts.wrapFile(osf, path)
 	locked, err := opts.takeLock(osf, path)
 	if err != nil {
 		// Someone else opened and locked the new file already: leave it.
@@ -232,7 +233,7 @@ func Open(path string, opts Options) (w *Writer, err error) {
 	if err != nil {
 		return nil, fmt.Errorf("journal: open: %w", err)
 	}
-	f := opts.wrapFile(osf)
+	f := opts.wrapFile(osf, path)
 	defer func() {
 		if err != nil {
 			_ = f.Close()
@@ -310,11 +311,55 @@ func newWriter(f file, h Header, res ScanResult, locked bool, opts Options) (*Wr
 	return w, nil
 }
 
-func (o Options) wrapFile(f *os.File) file {
-	if o.wrap != nil {
-		return o.wrap(f)
+func (o Options) wrapFile(f *os.File, path string) file {
+	var out file = f
+	if fault := testFault.Load(); fault != nil {
+		out = &faultFile{file: f, path: path, fault: *fault}
 	}
-	return f
+	if o.wrap != nil {
+		return o.wrap(out)
+	}
+	return out
+}
+
+// FaultFunc decides whether an operation on a journal file fails: op is
+// "write" or "sync", and an error it returns is what the operation
+// returns, without doing it.
+type FaultFunc func(path, op string) error
+
+var testFault atomic.Pointer[FaultFunc]
+
+// SetFaultForTest makes the writes and syncs of journals created or
+// opened afterwards, in this process, go through fault; nil turns it off.
+// It is for tests only: it reaches journals that the code under test
+// opens itself, as in a whole run.
+func SetFaultForTest(fault FaultFunc) {
+	if fault == nil {
+		testFault.Store(nil)
+		return
+	}
+	testFault.Store(&fault)
+}
+
+// faultFile fails operations that its FaultFunc says fail.
+type faultFile struct {
+	file
+	path  string
+	fault FaultFunc
+}
+
+func (f *faultFile) WriteAt(p []byte, off int64) (int, error) {
+	if err := f.fault(f.path, "write"); err != nil {
+		return 0, err
+	}
+	return f.file.WriteAt(p, off)
+}
+
+func (f *faultFile) Sync() error {
+	if err := f.fault(f.path, "sync"); err != nil {
+		return err
+	}
+	return f.file.Sync()
 }
 
 // Header returns the journal header.

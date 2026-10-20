@@ -145,13 +145,19 @@ func (g *agentGateway) start() {
 // crash point.
 func (g *agentGateway) worker(dir, crashAt string) *exec.Cmd {
 	g.t.Helper()
+	cmd := g.command(dir, crashAt)
+	if err := cmd.Start(); err != nil {
+		g.t.Fatal(err)
+	}
+	return cmd
+}
+
+// command is the worker's command, not started.
+func (g *agentGateway) command(dir, crashAt string) *exec.Cmd {
 	cmd := exec.Command(os.Args[0], "-test.run=^TestRunHelper$")
 	cmd.Env = append(os.Environ(), runHelperEnv+"=1", crashpointEnv+"="+crashAt,
 		"ACTLET_SESSION="+dir, "ACTLET_GATEWAY="+g.addr, "ACTLET_TOKEN=tok", "ACTLET_TOOLS_MANIFEST=", "ACTLET_SKILLS="+g.skillsDir)
 	cmd.Stdout, cmd.Stderr = os.Stderr, os.Stderr
-	if err := cmd.Start(); err != nil {
-		g.t.Fatal(err)
-	}
 	return cmd
 }
 

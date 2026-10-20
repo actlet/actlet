@@ -42,6 +42,9 @@ func TestRunHelper(t *testing.T) {
 	if p := os.Getenv(crashpointEnv); p != "" {
 		crashpoint.Set(p)
 	}
+	if f := os.Getenv(journalFaultEnv); f != "" {
+		setJournalFault(f)
+	}
 	code := run([]string{"run", "-log-level", "warn"}, os.Stdout, os.Stderr)
 	if f := os.Getenv(tuiReportEnv); f != "" {
 		_ = os.WriteFile(f, []byte(strconv.Itoa(tui.Programs())), 0o600)

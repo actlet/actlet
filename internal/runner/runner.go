@@ -23,6 +23,7 @@ import (
 	"github.com/actlet/actlet/internal/agent"
 	"github.com/actlet/actlet/internal/attach"
 	"github.com/actlet/actlet/internal/gwclient"
+	"github.com/actlet/actlet/internal/journal"
 	"github.com/actlet/actlet/internal/session"
 	"github.com/actlet/actlet/internal/session/sessionpb"
 	"github.com/actlet/actlet/internal/sessionfs"
@@ -104,6 +105,12 @@ func Run(ctx context.Context, cfg Config, signals <-chan os.Signal) int {
 		return fail("session folder", "err", err)
 	}
 	recovered, err := session.Recover(folder)
+	if errors.Is(err, journal.ErrCorrupt) {
+		// Damage before the end isn't a crash's torn write: what follows
+		// it can't be trusted, so the session isn't recovered from it.
+		return fail("the session journal is damaged before its end, so the session can't be recovered from it; "+
+			"actlet-cli journal inspect "+folder.Journal()+" shows where", "err", err)
+	}
 	if err != nil {
 		return fail("reading the session journal", "err", err)
 	}
