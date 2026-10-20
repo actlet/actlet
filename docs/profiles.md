@@ -14,8 +14,10 @@ required_features:              # the worker must advertise all of these
   - control.pause
   - control.stop
 limits:
-  max_workers: 2                # 0 or missing: the deployment's ceiling
-  max_tool_concurrency: 4
+  max_workers: 2                # workers running at once; 0 or missing: the deployment's ceiling
+  max_tool_concurrency: 4       # tool calls of one turn running at once
+  max_subagent_depth: 2         # how deep subagents nest; 0 or missing: 2
+  max_subagents: 8              # subagents a session creates; 0 or missing: 8
 default_pause_mode: interrupt   # drain (default) or interrupt: pausing on SIGTERM
 stop_grace: 45s                 # grace period of a stop that gives none
 
@@ -39,6 +41,7 @@ models:
     main: large
     subagent: fast
     llm: fast
+  selectable: [fast]            # aliases the agent may choose itself, such as for a subagent
 tools:                          # the local tools to offer; omit for all of them
   - name: shell
     settings:
@@ -87,7 +90,7 @@ wire, err := p.Proto() // validates, then converts for RegisterResponse.Profile
 
 ## Models
 
-Workers never see provider names, endpoints or credentials. They see only the aliases the orchestrator defines, and which alias each role (`main`, `subagent`, `llm`) uses. The orchestrator resolves an alias when the worker asks for a model. The agent uses the `main` role's alias, or `main` when the profile has no models.
+Workers never see provider names, endpoints or credentials. They see only the aliases the orchestrator defines, and which alias each role (`main`, `subagent`, `llm`) uses. The orchestrator resolves an alias when the worker asks for a model. The agent uses the `main` role's alias, or `main` when the profile has no models. Subagents use the `subagent` role's alias, or the agent's; the agent may pick one of `selectable` for a subagent instead. `selectable` must name defined aliases.
 
 ## The agent
 

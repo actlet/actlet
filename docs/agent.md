@@ -1,6 +1,6 @@
 # The agent
 
-A task of kind `agent` runs Actlet's agent loop: the worker builds a prompt, calls the model through the gateway, runs the tools the model asks for, and repeats until the model ends the task. Actlet holds no provider SDKs or credentials; every model call goes through the gateway's [`Infer` call](gateway-protocol.md#inference).
+A task of kind `agent` runs Actlet's agent loop: the worker builds a prompt, calls the model through the gateway, runs the tools the model asks for, and repeats until the model ends the task. The agent can hand subtasks to **subagents** that work in parallel. Actlet holds no provider SDKs or credentials; every model call goes through the gateway's [`Infer` call](gateway-protocol.md#inference).
 
 ## The task
 
@@ -52,15 +52,42 @@ The model is the alias the profile assigns to the `main` role (`models.roles.mai
 
 A profile's `tools` list restricts the tools to those named, with settings: `shell` takes `shell`, `timeout`, `max_timeout` and `output_cap`, and `python` takes `interpreter`. Without a list, all tools are offered.
 
+### Calls in parallel
+
+When the model calls several tools in one answer, they run together, up to the profile's `limits.max_tool_concurrency` at once. Calls that would change the same files wait for each other:
+
+- `write_file` and `edit_file` write their file;
+- `shell` and `python` may write anything, unless the call lists what it writes in `writes` (for example `"writes": ["build/"]`, or `[]` for a command that only reads);
+- the read and search tools write nothing and never wait.
+
+Two calls conflict when one writes a path the other writes, or a directory containing it, or when either may write anything. A call waits only for earlier calls it conflicts with, so conflicting calls run in the order the model made them. Subagents share the workspace and the same locks, so the rule holds across them too. Results go back to the model in the order of the calls, whichever finished first.
+
+## Subagents
+
+`spawn_subagent` starts a subagent on a subtask and waits for its final answer, which becomes the call's result. Several calls in one answer run their subagents in parallel.
+
+- A subagent has its own conversation: Actlet's base prompt with a note that it is a subagent, the profile's layers, and the subtask as its first message. It has the same tools, and shares the workspace.
+- Its model is the profile's `subagent` role alias (or the agent's own), or one the call picks from the profile's `models.selectable`.
+- A parent's task isn't done until all its subagents have finished and delivered their results: the call blocks until then, so there are no orphans, and `actlet run` exits 0 only when the whole tree has finished.
+- Limits, from the profile: `limits.max_subagent_depth` (how deep subagents may nest, default 2), `limits.max_subagents` (how many a session creates, default 8) and `limits.max_workers` (how many workers run at once, the agent included). A spawn beyond a limit fails with an error saying which, so the model can do the work itself. A worker waiting for its subagents gives up its place while it waits, and waiting workers start in order.
+- The call's `budget_share` is recorded; budgets aren't enforced yet.
+- Workers are named after their parent: `root` is the agent, `root.1` its first subagent, `root.1.2` that one's second. Every activity event and journal record names its worker, and `subagent_spawned` and `subagent_finished` events mark a subagent's start and end.
+- A subagent that fails, for example by using up its turns, returns the failure as the call's error result; the parent carries on. A panic ends only its own worker.
+
 ## Durability and recovery
 
-Every model call and every tool call is written to the session journal as an **intent** before it starts and an **outcome** when it ends. The conversation is **checkpointed** at model-turn boundaries: every turn, or every `checkpoint_every_turns` from the profile, and when the session pauses. A run recovers from the latest checkpoint and replays the records after it:
+Every model call and every tool call is written to the session journal as an **intent** before it starts and an **outcome** when it ends. Each record is written and applied to the workers' state as one step, so a **checkpoint** holds the state of every worker, calls in flight included. Checkpoints are written at model-turn boundaries: after every turn, or every `checkpoint_every_turns` turns from the profile, and when the session pauses. A run restores every worker from the latest checkpoint, replays the records after it, and continues each worker:
 
 - **A model call without an outcome** is made again, from the same conversation and with the same intent ID, which the gateway uses as an idempotency key. A call is never continued mid-answer.
 - **A tool call without an outcome** follows its tool's policy:
   - *run again*: read-only tools repeat the call;
   - *reconcile*: writes and edits record the file's hash before and after in the intent. If the file now has the new content, the call is done; if it still has the old content, it runs again; if it has anything else, the outcome is unknown;
   - *never*: a shell command or Python script may have done anything. It isn't run again, and the model gets `outcome_unknown` as the call's result, so that it checks before repeating it.
+- **A subagent's result reaches its parent exactly once.** Spawning is journaled (it is also the call's intent), then the subagent's final answer, then the parent's tool outcome. A run that finds a spawn without an outcome waits for that subagent rather than starting another, and one that finds the answer journaled delivers it.
+
+### Without the gateway
+
+Local work doesn't need the gateway. If it goes away, running tools finish and their outcomes are journaled, activity piles up in memory and the spill file, and the next model call waits, retrying, until the gateway is back. The session then carries on from where it was.
 
 ## Pausing and stopping
 
@@ -70,7 +97,9 @@ Every model call and every tool call is written to the session journal as an **i
 
 The next run carries on from where the session paused: remaining tool calls run, then the next model call.
 
-Steer notes are recorded and published, but not shown to the model yet.
+## Steer notes
+
+An operator's `steer` note reaches the agent (the root worker) at its next turn boundary: it is added to the message before the next model call as `[Operator note from <who>, sent while you worked; take it into account] <note>`. Each note is journaled when it joins the conversation, so it is given exactly once, also across crashes and pauses; a note sent just before a pause reaches the agent when the session resumes. Subagents don't get notes; the agent can pass them on.
 
 ## Trying it
 
@@ -84,4 +113,4 @@ ACTLET_GATEWAY=127.0.0.1:7400 ACTLET_TOKEN=dev bin/actlet run -session ./agent-s
 cat agent-session/output/report.md
 ```
 
-The gateway prints each model turn, tool call and diff. Each scripted turn can check the tool results it receives (`expect`), and wait before answering (`delay`) to try pausing or crashing during a model call.
+The gateway prints each model turn, tool call and diff, with the worker it is from. Each scripted turn can check the tool results it receives (`expect`) and texts the conversation must hold exactly once (`expect_once`), and wait before answering (`delay`) to try pausing or crashing during a model call. A script's `subagents` give subagents their own turns, chosen by a phrase in their subtask.

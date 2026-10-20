@@ -103,7 +103,9 @@ The folder's `.actlet/status` file holds the same state as text, for tools that 
 
 Activity events are numbered per epoch: sequence numbers start at 1 in every run and have no gaps. An event's ID is `<epoch>.<seq>`, unique within the session. Because each run is a new epoch, a restarted worker never reuses an ID the gateway has already seen.
 
-Event kinds in v0: session started, state change, command received, steer note, text output, and gap. Events are small: activity describes what happened, and larger content belongs in the session folder.
+Event kinds in v0: session started, state change, command received, steer note, text output and gap; and for agent tasks, model turn, tool started and finished, file change (with a diff), and subagent started and finished. Events are small: activity describes what happened, and larger content belongs in the session folder.
+
+An agent's events name the worker they are about in `worker`: `root` for the session's agent, `root.1` for its first subagent, and so on (see [the agent](agent.md#subagents)). Events about the session itself have none.
 
 ### Publishing and acknowledgement
 
