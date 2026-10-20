@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"path"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -771,6 +772,16 @@ func commandName(c *gatewayv0.Command) string {
 		return "stop"
 	case *gatewayv0.Command_Steer:
 		return "note"
+	case *gatewayv0.Command_ProfileUpdate:
+		parts := slices.Clone(a.ProfileUpdate.GetFields())
+		if resets := a.ProfileUpdate.GetResetBudgets(); len(resets) > 0 {
+			var kinds []string
+			for _, k := range resets {
+				kinds = append(kinds, BudgetName(k))
+			}
+			parts = append(parts, "reset "+strings.Join(kinds, ", "))
+		}
+		return "profile update (" + strings.Join(parts, "; ") + ")"
 	}
 	return "command"
 }

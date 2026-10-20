@@ -44,6 +44,8 @@ func (e *events) add(worker string, body any) {
 		ev.Body = &gatewayv0.ActivityEvent_SubagentFinished{SubagentFinished: b}
 	case *gatewayv0.SteerNote:
 		ev.Body = &gatewayv0.ActivityEvent_Steer{Steer: b}
+	case *gatewayv0.CommandReceived:
+		ev.Body = &gatewayv0.ActivityEvent_Command{Command: b}
 	case *gatewayv0.Gap:
 		ev.Body = &gatewayv0.ActivityEvent_Gap{Gap: b}
 	case *gatewayv0.Progress:
@@ -331,5 +333,30 @@ func TestProgressAndFeedback(t *testing.T) {
 	}
 	if got := Describe(e.out[0]); got != "progress 40%: reading" {
 		t.Errorf("describe %q", got)
+	}
+}
+
+// A profile update is named by what it changes, in the timeline and the
+// log.
+func TestProfileUpdateCommand(t *testing.T) {
+	for _, tc := range []struct {
+		u    *gatewayv0.ProfileUpdate
+		want string
+	}{
+		{&gatewayv0.ProfileUpdate{Fields: []string{"budgets"}}, "profile update (budgets)"},
+		{&gatewayv0.ProfileUpdate{Fields: []string{"budgets"}, ResetBudgets: []gatewayv0.BudgetKind{gatewayv0.BudgetKind_BUDGET_KIND_MONEY}}, "profile update (budgets; reset money)"},
+		{&gatewayv0.ProfileUpdate{Fields: []string{"limits.max_workers", "local_attach"}, ResetBudgets: []gatewayv0.BudgetKind{
+			gatewayv0.BudgetKind_BUDGET_KIND_MONEY, gatewayv0.BudgetKind_BUDGET_KIND_TOKENS}}, "profile update (limits.max_workers; local_attach; reset money, tokens)"},
+	} {
+		var e events
+		cmd := &gatewayv0.Command{Id: "c1", Origin: gatewayv0.Origin_ORIGIN_ORCHESTRATOR, Action: &gatewayv0.Command_ProfileUpdate{ProfileUpdate: tc.u}}
+		e.add("", &gatewayv0.CommandReceived{Command: cmd, Result: gatewayv0.CommandResult_COMMAND_RESULT_ACCEPTED})
+		s := fold(e.out)
+		if got := s.Items[0].Text; got != tc.want+" from the orchestrator accepted" {
+			t.Errorf("timeline %q", got)
+		}
+		if got := s.Log[0].Text; got != "command c1: "+tc.want+" accepted" {
+			t.Errorf("log %q", got)
+		}
 	}
 }
