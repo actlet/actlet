@@ -33,6 +33,7 @@ type Session struct {
 	version      string
 	capabilities []string
 	localAttach  *gatewayv0.LocalAttach
+	lineage      *gatewayv0.Lineage
 	epoch        uint64
 	state        gatewayv0.SessionState
 	stateTime    time.Time
@@ -84,6 +85,14 @@ func (s *Session) WorkerID() string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.workerID
+}
+
+// Lineage says which session's checkpoint this session was forked from,
+// as its worker said when it registered, or nil.
+func (s *Session) Lineage() *gatewayv0.Lineage {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.lineage
 }
 
 // Epoch returns the epoch the worker last registered or connected with.
@@ -267,6 +276,9 @@ func (s *Session) registered(req *gatewayv0.RegisterRequest, profile *gatewayv0.
 	s.capabilities = req.GetCapabilities()
 	s.localAttach = profile.GetLocalAttach()
 	s.epoch = req.GetEpoch()
+	if req.GetLineage() != nil {
+		s.lineage = req.GetLineage()
+	}
 }
 
 // MaxFileReads bounds a session's file reads waiting for its worker; more

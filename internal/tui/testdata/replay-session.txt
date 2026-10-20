@@ -1,7 +1,7 @@
  actlet  sum                                            Chat  Session  Task  Profile  Tools  Events 
-  id           sess-1234abcd                                                                        
   state        running: started                                                                     
   run          1                                                                                    
+  forked from  parent-7 at checkpoint 42 (turn 2)                                                   
   elapsed      15s                                                                                  
   viewing      recording run.actrec                                                                 
   events       16                                                                                   

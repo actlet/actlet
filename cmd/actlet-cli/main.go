@@ -20,6 +20,7 @@ Usage:
 
 Commands:
   attach     Watch and steer a running session, through the orchestrator or directly
+  fork       Start a new session from a checkpoint of another
   journal    Inspect and export session journals (.actlet)
   replay     Inspect, export and play activity recordings (.actrec)
   version    Print version information
@@ -42,6 +43,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 	switch cmd {
 	case "attach":
 		return runAttach(rest, stdout, stderr)
+	case "fork":
+		return runFork(rest, stdout, stderr)
 	case "journal":
 		return runJournal(rest, stdout, stderr)
 	case "replay":

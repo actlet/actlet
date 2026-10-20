@@ -265,6 +265,16 @@ type Info struct {
 	Version       string
 	LocalCommands []string
 	Skills        []*gatewayv0.SkillInfo
+	// Lineage is set for a session forked from another's checkpoint.
+	Lineage *gatewayv0.Lineage
+}
+
+// GetLineage returns the lineage, or nil when there is no information.
+func (i *Info) GetLineage() *gatewayv0.Lineage {
+	if i == nil {
+		return nil
+	}
+	return i.Lineage
 }
 
 // Usage counts tokens, and what they cost when the gateway says.
@@ -585,7 +595,7 @@ func (s *Session) Apply(ev *gatewayv0.ActivityEvent) {
 			TaskID: Sanitize(i.GetTaskId()), TaskKind: Sanitize(i.GetTaskKind()), Task: Sanitize(i.GetTask()),
 			Config: Sanitize(i.GetConfig()), Budgets: i.GetBudgets(), Models: i.GetModels(), Tools: i.GetTools(),
 			Grants: i.GetGrants(), Manifest: Sanitize(i.GetToolsManifest()), WorkerID: Sanitize(i.GetWorkerId()),
-			Version: Sanitize(i.GetActletVersion()), Skills: i.GetSkills(),
+			Version: Sanitize(i.GetActletVersion()), Skills: i.GetSkills(), Lineage: i.GetLineage(),
 		}
 		for _, c := range i.GetLocalCommands() {
 			info.LocalCommands = append(info.LocalCommands, Sanitize(c))

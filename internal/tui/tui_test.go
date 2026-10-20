@@ -57,6 +57,7 @@ func run() []*gatewayv0.ActivityEvent {
 			ToolsManifest: "jq and ripgrep are installed.",
 			Skills: []*gatewayv0.SkillInfo{{Name: "csv-report", Description: "Write reports from CSV files. Use it for any CSV.",
 				Source: "profile", Files: []string{"scripts/report.sh", "reference.md"}}},
+			Lineage: &gatewayv0.Lineage{ParentSessionId: "parent-7", CheckpointSeq: 42, Turn: 2},
 		}}
 	})
 	add("", func(ev *gatewayv0.ActivityEvent) {

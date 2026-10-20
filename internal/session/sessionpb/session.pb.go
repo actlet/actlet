@@ -566,6 +566,53 @@ func (x *BudgetEvent) GetOffset() float64 {
 	return 0
 }
 
+// Fork is the first record of a session forked from another session's
+// checkpoint (kind "session.fork"). The checkpoint, copied from the
+// parent's journal, follows it.
+type Fork struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Lineage       *v0.Lineage            `protobuf:"bytes,1,opt,name=lineage,proto3" json:"lineage,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Fork) Reset() {
+	*x = Fork{}
+	mi := &file_internal_session_sessionpb_session_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Fork) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Fork) ProtoMessage() {}
+
+func (x *Fork) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_session_sessionpb_session_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Fork.ProtoReflect.Descriptor instead.
+func (*Fork) Descriptor() ([]byte, []int) {
+	return file_internal_session_sessionpb_session_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *Fork) GetLineage() *v0.Lineage {
+	if x != nil {
+		return x.Lineage
+	}
+	return nil
+}
+
 // StepDone records a completed step of the task (kind "task.step").
 type StepDone struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -576,7 +623,7 @@ type StepDone struct {
 
 func (x *StepDone) Reset() {
 	*x = StepDone{}
-	mi := &file_internal_session_sessionpb_session_proto_msgTypes[5]
+	mi := &file_internal_session_sessionpb_session_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -588,7 +635,7 @@ func (x *StepDone) String() string {
 func (*StepDone) ProtoMessage() {}
 
 func (x *StepDone) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_session_sessionpb_session_proto_msgTypes[5]
+	mi := &file_internal_session_sessionpb_session_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -601,7 +648,7 @@ func (x *StepDone) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StepDone.ProtoReflect.Descriptor instead.
 func (*StepDone) Descriptor() ([]byte, []int) {
-	return file_internal_session_sessionpb_session_proto_rawDescGZIP(), []int{5}
+	return file_internal_session_sessionpb_session_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *StepDone) GetStep() uint64 {
@@ -623,7 +670,7 @@ type Ended struct {
 
 func (x *Ended) Reset() {
 	*x = Ended{}
-	mi := &file_internal_session_sessionpb_session_proto_msgTypes[6]
+	mi := &file_internal_session_sessionpb_session_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -635,7 +682,7 @@ func (x *Ended) String() string {
 func (*Ended) ProtoMessage() {}
 
 func (x *Ended) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_session_sessionpb_session_proto_msgTypes[6]
+	mi := &file_internal_session_sessionpb_session_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -648,7 +695,7 @@ func (x *Ended) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Ended.ProtoReflect.Descriptor instead.
 func (*Ended) Descriptor() ([]byte, []int) {
-	return file_internal_session_sessionpb_session_proto_rawDescGZIP(), []int{6}
+	return file_internal_session_sessionpb_session_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *Ended) GetState() string {
@@ -726,7 +773,9 @@ const file_internal_session_sessionpb_session_proto_rawDesc = "" +
 	"\x04used\x18\x03 \x01(\x01R\x04used\x12\x14\n" +
 	"\x05limit\x18\x04 \x01(\x01R\x05limit\x12\x16\n" +
 	"\x06action\x18\x05 \x01(\tR\x06action\x12\x16\n" +
-	"\x06offset\x18\x06 \x01(\x01R\x06offset\"\x1e\n" +
+	"\x06offset\x18\x06 \x01(\x01R\x06offset\"<\n" +
+	"\x04Fork\x124\n" +
+	"\alineage\x18\x01 \x01(\v2\x1a.actlet.gateway.v0.LineageR\alineage\"\x1e\n" +
 	"\bStepDone\x12\x12\n" +
 	"\x04step\x18\x01 \x01(\x04R\x04step\"5\n" +
 	"\x05Ended\x12\x14\n" +
@@ -745,34 +794,37 @@ func file_internal_session_sessionpb_session_proto_rawDescGZIP() []byte {
 	return file_internal_session_sessionpb_session_proto_rawDescData
 }
 
-var file_internal_session_sessionpb_session_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
+var file_internal_session_sessionpb_session_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
 var file_internal_session_sessionpb_session_proto_goTypes = []any{
 	(*Started)(nil),             // 0: actlet.session.v0.Started
 	(*Config)(nil),              // 1: actlet.session.v0.Config
 	(*Command)(nil),             // 2: actlet.session.v0.Command
 	(*ConfigRevision)(nil),      // 3: actlet.session.v0.ConfigRevision
 	(*BudgetEvent)(nil),         // 4: actlet.session.v0.BudgetEvent
-	(*StepDone)(nil),            // 5: actlet.session.v0.StepDone
-	(*Ended)(nil),               // 6: actlet.session.v0.Ended
-	(*durationpb.Duration)(nil), // 7: google.protobuf.Duration
-	(*v0.Budget)(nil),           // 8: actlet.gateway.v0.Budget
-	(*v0.CompactionPolicy)(nil), // 9: actlet.gateway.v0.CompactionPolicy
-	(v0.BudgetKind)(0),          // 10: actlet.gateway.v0.BudgetKind
+	(*Fork)(nil),                // 5: actlet.session.v0.Fork
+	(*StepDone)(nil),            // 6: actlet.session.v0.StepDone
+	(*Ended)(nil),               // 7: actlet.session.v0.Ended
+	(*durationpb.Duration)(nil), // 8: google.protobuf.Duration
+	(*v0.Budget)(nil),           // 9: actlet.gateway.v0.Budget
+	(*v0.CompactionPolicy)(nil), // 10: actlet.gateway.v0.CompactionPolicy
+	(v0.BudgetKind)(0),          // 11: actlet.gateway.v0.BudgetKind
+	(*v0.Lineage)(nil),          // 12: actlet.gateway.v0.Lineage
 }
 var file_internal_session_sessionpb_session_proto_depIdxs = []int32{
 	1,  // 0: actlet.session.v0.Started.config:type_name -> actlet.session.v0.Config
-	7,  // 1: actlet.session.v0.Config.stop_grace:type_name -> google.protobuf.Duration
-	7,  // 2: actlet.session.v0.Config.signal_deadline:type_name -> google.protobuf.Duration
-	8,  // 3: actlet.session.v0.Config.budgets:type_name -> actlet.gateway.v0.Budget
-	9,  // 4: actlet.session.v0.Config.compaction:type_name -> actlet.gateway.v0.CompactionPolicy
-	7,  // 5: actlet.session.v0.Command.stop_grace:type_name -> google.protobuf.Duration
+	8,  // 1: actlet.session.v0.Config.stop_grace:type_name -> google.protobuf.Duration
+	8,  // 2: actlet.session.v0.Config.signal_deadline:type_name -> google.protobuf.Duration
+	9,  // 3: actlet.session.v0.Config.budgets:type_name -> actlet.gateway.v0.Budget
+	10, // 4: actlet.session.v0.Config.compaction:type_name -> actlet.gateway.v0.CompactionPolicy
+	8,  // 5: actlet.session.v0.Command.stop_grace:type_name -> google.protobuf.Duration
 	1,  // 6: actlet.session.v0.ConfigRevision.config:type_name -> actlet.session.v0.Config
-	10, // 7: actlet.session.v0.BudgetEvent.kind:type_name -> actlet.gateway.v0.BudgetKind
-	8,  // [8:8] is the sub-list for method output_type
-	8,  // [8:8] is the sub-list for method input_type
-	8,  // [8:8] is the sub-list for extension type_name
-	8,  // [8:8] is the sub-list for extension extendee
-	0,  // [0:8] is the sub-list for field type_name
+	11, // 7: actlet.session.v0.BudgetEvent.kind:type_name -> actlet.gateway.v0.BudgetKind
+	12, // 8: actlet.session.v0.Fork.lineage:type_name -> actlet.gateway.v0.Lineage
+	9,  // [9:9] is the sub-list for method output_type
+	9,  // [9:9] is the sub-list for method input_type
+	9,  // [9:9] is the sub-list for extension type_name
+	9,  // [9:9] is the sub-list for extension extendee
+	0,  // [0:9] is the sub-list for field type_name
 }
 
 func init() { file_internal_session_sessionpb_session_proto_init() }
@@ -786,7 +838,7 @@ func file_internal_session_sessionpb_session_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_internal_session_sessionpb_session_proto_rawDesc), len(file_internal_session_sessionpb_session_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   7,
+			NumMessages:   8,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

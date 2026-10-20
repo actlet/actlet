@@ -119,3 +119,40 @@ func (p *parts) unpack(head *agentpb.PackedCheckpoint) (*agentpb.Checkpoint, err
 	*p = parts{}
 	return cp, nil
 }
+
+// ReadCheckpoint decodes a checkpoint record and, for a packed one, the
+// parts that came before it.
+func ReadCheckpoint(partRecords []journal.Record, cp journal.Record) (*agentpb.Checkpoint, error) {
+	m, err := decode(cp)
+	if err != nil {
+		return nil, err
+	}
+	c, ok := m.(*agentpb.Checkpoint)
+	if !ok {
+		return nil, fmt.Errorf("journal record %d is a %s, not a checkpoint", cp.Seq, cp.Kind)
+	}
+	if c.GetPacked() == nil {
+		return c, nil
+	}
+	var ps parts
+	for _, r := range partRecords {
+		m, err := decode(r)
+		if err != nil {
+			return nil, err
+		}
+		if p, ok := m.(*agentpb.CheckpointPart); ok {
+			ps.add(p)
+		}
+	}
+	return ps.unpack(c.GetPacked())
+}
+
+// RootTurn returns the model turns of a checkpoint's root worker.
+func RootTurn(cp *agentpb.Checkpoint) uint64 {
+	for _, w := range cp.GetWorkers() {
+		if w.GetWorkerId() == RootWorker {
+			return w.GetTurn()
+		}
+	}
+	return 0
+}

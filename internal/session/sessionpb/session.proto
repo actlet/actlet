@@ -98,6 +98,13 @@ message BudgetEvent {
   double offset = 6;
 }
 
+// Fork is the first record of a session forked from another session's
+// checkpoint (kind "session.fork"). The checkpoint, copied from the
+// parent's journal, follows it.
+message Fork {
+  actlet.gateway.v0.Lineage lineage = 1;
+}
+
 // StepDone records a completed step of the task (kind "task.step").
 message StepDone {
   uint64 step = 1;

@@ -105,6 +105,9 @@ type Recovered struct {
 	Steers []agent.Steer
 	// Budget is what earlier runs recorded about the budgets.
 	Budget budget.Restored
+	// Lineage is set when the session was forked from another session's
+	// checkpoint.
+	Lineage *gatewayv0.Lineage
 
 	// The current run's first and latest record times, for its active
 	// time.
@@ -257,6 +260,12 @@ func (r *Recovered) apply(jr journal.Record) error {
 			r.Budget.Offsets[m.GetKind()] = m.GetOffset()
 			delete(r.Budget.Alerted, m.GetKind())
 		}
+	case kindFork:
+		var m sessionpb.Fork
+		if err := proto.Unmarshal(jr.Data, &m); err != nil {
+			return err
+		}
+		r.Lineage = m.GetLineage()
 	case kindRevision:
 		var m sessionpb.ConfigRevision
 		if err := proto.Unmarshal(jr.Data, &m); err != nil {

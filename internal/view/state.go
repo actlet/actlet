@@ -57,6 +57,7 @@ type InfoState struct {
 	Version       string            `json:"version"`
 	LocalCommands []string          `json:"local_commands"`
 	Skills        []json.RawMessage `json:"skills"`
+	Lineage       json.RawMessage   `json:"lineage"`
 }
 
 // UsageState is tokens and cost.
@@ -252,7 +253,7 @@ func (s *Session) ViewState() *State {
 		is := &InfoState{TaskID: i.TaskID, TaskKind: i.TaskKind, Task: i.Task, Config: i.Config, Manifest: i.Manifest,
 			WorkerID: i.WorkerID, Version: i.Version, LocalCommands: i.LocalCommands,
 			Budgets: []json.RawMessage{}, Models: json.RawMessage("null"), Tools: []json.RawMessage{}, Grants: []json.RawMessage{},
-			Skills: []json.RawMessage{}}
+			Skills: []json.RawMessage{}, Lineage: json.RawMessage("null")}
 		if is.LocalCommands == nil {
 			is.LocalCommands = []string{}
 		}
@@ -270,6 +271,9 @@ func (s *Session) ViewState() *State {
 		}
 		for _, sk := range i.Skills {
 			is.Skills = append(is.Skills, protoJSON(sk))
+		}
+		if i.Lineage != nil {
+			is.Lineage = protoJSON(i.Lineage)
 		}
 		st.Info = is
 	}

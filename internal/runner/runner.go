@@ -151,10 +151,14 @@ func Run(ctx context.Context, cfg Config, signals <-chan os.Signal) int {
 		case <-regCtx.Done():
 		}
 	}()
+	var lineage *gatewayv0.Lineage
+	if recovered != nil {
+		lineage = recovered.Lineage
+	}
 	registerReq := func() *gatewayv0.RegisterRequest {
 		return &gatewayv0.RegisterRequest{
 			WorkerId: cfg.WorkerID, SessionId: sessionID, Epoch: epoch,
-			Capabilities: Capabilities, ActletVersion: cfg.Version,
+			Capabilities: Capabilities, ActletVersion: cfg.Version, Lineage: lineage,
 		}
 	}
 	resp, err := client.Register(regCtx, registerReq())
@@ -222,6 +226,7 @@ func Run(ctx context.Context, cfg Config, signals <-chan os.Signal) int {
 	}
 	commands := attach.AllowedCommands(resp.GetProfile().GetLocalAttach())
 	info := sessionInfo(cfg, folder, task, resp.GetProfile(), effective, agentSettings, commands, log)
+	info.Lineage = lineage
 	// Viewers' permissions follow profile updates. Updates arrive on the
 	// control stream, which starts after the attach server exists.
 	var as *attach.Server

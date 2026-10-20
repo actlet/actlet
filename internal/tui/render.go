@@ -676,6 +676,9 @@ func (m *Model) sessionLines(w int) []string {
 		run += ", resumed"
 	}
 	kv("run", run)
+	if l := s.Info.GetLineage(); l != nil {
+		kv("forked from", fmt.Sprintf("%s at checkpoint %d (turn %d)", view.Sanitize(l.GetParentSessionId()), l.GetCheckpointSeq(), l.GetTurn()))
+	}
 	kv("elapsed", m.elapsed())
 	conn := m.conn.Kind
 	if m.conn.Target != "" {

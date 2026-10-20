@@ -24,10 +24,14 @@ func TestViewState(t *testing.T) {
 
 	evs := subagentRun()
 	evs[1].GetSessionInfo().Skills = []*gatewayv0.SkillInfo{{Name: "csv", Description: "CSV.", Source: "image", Files: []string{"a.sh"}}}
+	evs[1].GetSessionInfo().Lineage = &gatewayv0.Lineage{ParentSessionId: "p1", CheckpointSeq: 40, Turn: 2}
 	var e events
 	e.seq = uint64(len(evs))
 	e.add("root", &gatewayv0.ToolFinished{CallId: "z", Tool: "shell", OutcomeUnknown: true, IsError: true})
 	st := fold(append(evs, e.out...)).ViewState()
+	if string(st.Info.Lineage) != `{"parent_session_id":"p1","checkpoint_seq":"40","turn":"2"}` {
+		t.Errorf("lineage %s", st.Info.Lineage)
+	}
 	if string(st.Info.Skills[0]) != `{"name":"csv","description":"CSV.","source":"image","files":["a.sh"]}` {
 		t.Errorf("skills %s", st.Info.Skills)
 	}

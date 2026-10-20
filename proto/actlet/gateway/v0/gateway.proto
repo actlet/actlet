@@ -62,6 +62,20 @@ message RegisterRequest {
   repeated string capabilities = 5;
   // Version of the Actlet binary, for diagnostics.
   string actlet_version = 6;
+  // Set when the session was forked from another session's checkpoint.
+  Lineage lineage = 7;
+}
+
+// Lineage says where a forked session comes from: another session's
+// checkpoint, whose state the fork started with. The fork has its own
+// session ID; the parent is left as it was.
+message Lineage {
+  string parent_session_id = 1;
+  // The journal sequence number of the parent's checkpoint record.
+  uint64 checkpoint_seq = 2;
+  // The parent's agent's model turns at the checkpoint.
+  uint64 turn = 3;
+  google.protobuf.Timestamp forked_at = 4;
 }
 
 message RegisterResponse {
@@ -521,6 +535,8 @@ message SessionInfo {
   repeated string local_commands = 12;
   // The skills the agent may load.
   repeated SkillInfo skills = 13;
+  // Set when the session was forked from another session's checkpoint.
+  Lineage lineage = 14;
 }
 
 // SkillInfo describes a skill for viewers.
