@@ -125,7 +125,7 @@ func corpusRecords(n int) ([]corpusRecord, int) {
 func benchAppend(b *testing.B, batchSize int, sync_ bool) {
 	recs, avg := corpusRecords(4096)
 	opts := DefaultOptions("bench")
-	opts.noSync = !sync_
+	opts.NoSync = !sync_
 	opts.Batch = BatchPolicy{MaxRecords: batchSize}
 	if batchSize > 1 {
 		// Long enough that each batch fills up with one record from every
@@ -202,7 +202,7 @@ func BenchmarkRecover(b *testing.B) {
 	recs, _ := corpusRecords(records)
 	path := tempJournal(b)
 	opts := DefaultOptions("bench")
-	opts.noSync = true
+	opts.NoSync = true
 	opts.Batch = BatchPolicy{MaxRecords: 64, MaxDelay: time.Second}
 	w := mustCreate(b, path, opts)
 	var wg sync.WaitGroup

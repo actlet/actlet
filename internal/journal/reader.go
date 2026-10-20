@@ -87,6 +87,20 @@ func (r *Reader) Offset() int64 { return r.off }
 // NextSeq returns the sequence number the next record is expected to have.
 func (r *Reader) NextSeq() uint64 { return r.nextSeq }
 
+// Grow tells the reader that the file is now size bytes long, to follow a
+// journal that is still being written. If the reader had stopped at the end
+// of the file or at an incomplete final batch, Next tries again from there.
+// Other errors stay sticky.
+func (r *Reader) Grow(size int64) {
+	if size <= r.size {
+		return
+	}
+	r.size = size
+	if errors.Is(r.err, io.EOF) || errors.Is(r.err, ErrTornTail) {
+		r.err = nil
+	}
+}
+
 // Close releases the reader's decoders. It doesn't close the underlying
 // io.ReaderAt.
 func (r *Reader) Close() { r.codecs.close() }

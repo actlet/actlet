@@ -18,7 +18,8 @@ func tempJournal(t testing.TB) string {
 // testOptions returns fast options for tests that don't exercise syncing.
 func testOptions() Options {
 	o := DefaultOptions("test-session")
-	o.noSync = true
+	o.NoSync = true
+	o.noCloseSync = true
 	return o
 }
 

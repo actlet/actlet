@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"io"
 	"os"
 	"strings"
 	"testing"
@@ -306,5 +307,46 @@ func TestOpenDoesNotDecodePayloads(t *testing.T) {
 	mustClose(t, w)
 	if _, err := scanBytes(data, ReaderOptions{}); !errors.Is(err, ErrCorrupt) {
 		t.Fatalf("decoding scan: err = %v, want ErrCorrupt", err)
+	}
+}
+
+func TestReaderFollowsGrowingFile(t *testing.T) {
+	path := tempJournal(t)
+	w := mustCreate(t, path, testOptions())
+	defer mustClose(t, w)
+	appendN(t, w, 2)
+
+	f, _ := openRead(t, path)
+	size := func() int64 {
+		st, err := f.Stat()
+		if err != nil {
+			t.Fatal(err)
+		}
+		return st.Size()
+	}
+	r, err := NewReader(f, size(), ReaderOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+	readUntilEnd := func() (n int) {
+		for {
+			b, err := r.Next()
+			if errors.Is(err, io.EOF) {
+				return n
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			n += int(b.Count)
+		}
+	}
+	if n := readUntilEnd(); n != 2 {
+		t.Fatalf("read %d records, want 2", n)
+	}
+	appendN(t, w, 3)
+	r.Grow(size())
+	if n := readUntilEnd(); n != 3 {
+		t.Fatalf("read %d new records after Grow, want 3", n)
 	}
 }

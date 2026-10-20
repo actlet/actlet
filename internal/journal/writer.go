@@ -52,13 +52,19 @@ type Options struct {
 	// Logger receives warnings, such as running without the exclusive
 	// lock. Nil means slog.Default().
 	Logger *slog.Logger
+	// NoSync skips syncing batches and the new file on Create, and syncs
+	// once on Close instead. Appends are then acknowledged before they are
+	// durable: use it only for data whose loss in a crash is acceptable,
+	// such as display-only activity.
+	NoSync bool
 
 	// wrap substitutes the file, for fault injection in tests.
 	wrap func(file) file
 	// lock substitutes lockFile, for tests.
 	lock func(*os.File) error
-	// noSync skips syncing, for building large test fixtures quickly.
-	noSync bool
+	// noCloseSync also skips the sync on Close with NoSync, for tests that
+	// build many journals.
+	noCloseSync bool
 }
 
 // DefaultOptions returns options with zstd compression and default batching
@@ -192,7 +198,7 @@ func Create(path string, opts Options) (w *Writer, err error) {
 	if n, err := f.WriteAt(hb, 0); err != nil || n != len(hb) {
 		return nil, fmt.Errorf("journal: write header: %w", orShortWrite(err))
 	}
-	if !opts.noSync {
+	if !opts.NoSync {
 		if err := f.Sync(); err != nil {
 			return nil, fmt.Errorf("journal: sync header: %w", err)
 		}
@@ -251,7 +257,7 @@ func Open(path string, opts Options) (w *Writer, err error) {
 		if err := f.Truncate(res.ValidEnd); err != nil {
 			return nil, fmt.Errorf("journal: truncate torn tail: %w", err)
 		}
-		if !opts.noSync {
+		if !opts.NoSync {
 			if err := f.Sync(); err != nil {
 				return nil, fmt.Errorf("journal: sync after truncate: %w", err)
 			}
@@ -399,6 +405,11 @@ func (w *Writer) Close() error {
 
 	<-w.done
 	w.codecs.close()
+	if w.opts.NoSync && !w.opts.noCloseSync && w.Err() == nil {
+		if err := w.f.Sync(); err != nil {
+			_ = w.fail(fmt.Errorf("sync on close: %w", err))
+		}
+	}
 	cerr := w.f.Close()
 	if err := w.Err(); err != nil {
 		return err
@@ -530,7 +541,7 @@ func (w *Writer) commit(batch []*appendReq) {
 		return
 	}
 	var syncTime time.Duration
-	if !w.opts.noSync {
+	if !w.opts.NoSync {
 		start := time.Now()
 		if err := w.f.Sync(); err != nil {
 			reply(w.fail(fmt.Errorf("sync batch at offset %d: %w", w.off, err)))

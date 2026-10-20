@@ -302,3 +302,16 @@ func TestLockHeldByAnotherWriterIsRefused(t *testing.T) {
 		t.Fatalf("Open: err = %v, want ErrLocked", err)
 	}
 }
+
+func TestNoSyncSkipsBatchSyncs(t *testing.T) {
+	path := tempJournal(t)
+	opts := DefaultOptions("nosync")
+	opts.NoSync = true
+	w := mustCreate(t, path, opts)
+	appendN(t, w, 3)
+	if s := w.Stats(); s.Batches != 3 || s.SyncTime != 0 {
+		t.Errorf("Stats = %+v, want 3 unsynced batches", s)
+	}
+	mustClose(t, w) // syncs once
+	checkRecords(t, readAll(t, path), 3)
+}
