@@ -101,6 +101,9 @@ Records that arrive while a batch is being synced wait and go into the next batc
 
 - **Linux:** `fsync(2)`. On local filesystems such as ext4 and xfs this flushes the file's data and metadata and asks the device to flush its write cache.
 - **macOS:** Go's `File.Sync` issues `fcntl(F_FULLFSYNC)`, which also drains the drive's cache. Plain `fsync(2)` on macOS doesn't guarantee that data reaches stable storage across a power loss. `F_FULLFSYNC` does, but it costs several milliseconds per call.
+- **Windows:** `FlushFileBuffers`. Directories can't be synced there, so the directory sync on create is skipped.
+
+The journal uses only portable file operations from the Go standard library: positioned writes, sync, truncate and, where available, `flock`. It relies on no particular kernel, filesystem or host feature.
 
 ### When a write or sync fails
 
@@ -174,6 +177,16 @@ What the lock doesn't guarantee:
 - **It is advisory.** Code that writes to the file without going through this package isn't stopped.
 - **Shared and network filesystems can defeat it.** On Linux NFS, `flock` is emulated with NFS byte-range locks. Those depend on the lock service and on leases, and a lease that lapses during a network partition can let a second client take the lock while the first still believes it holds it. SMB/CIFS and FUSE filesystems vary, and some accept the lock without enforcing it.
 - **It can't see other machines.** A writer on another node that mounts the same block device isn't stopped by a lock this node holds.
+
+## Storage and deployment
+
+Actlet runs wherever a container can, and it doesn't check or restrict where its session folder lives. What it guarantees, and what it leaves to whoever deploys it:
+
+**Actlet guarantees** that an acknowledged append was written and synced, and that reopening a journal recovers the valid committed prefix, dropping only a torn final batch. Both hold only as far as the storage honours sync. Storage that acknowledges a sync it hasn't done can lose acknowledged records on power loss, and Actlet can't detect that. Examples are write caches without power-loss protection, and some virtual disks and network filesystems.
+
+**Keeping the session folder is the deployer's job.** A container's own filesystem survives a restart of the same container, but not its replacement. To recover a session in a new container (a rescheduled Pod, a new task attempt, a host move), put the session folder on storage that outlives the container: a named volume, a host directory or a persistent volume claim, mounted at the same path. The image uses `/var/lib/actlet`. `make test-docker` shows both sides. It kills a writer container and recovers every acknowledged record in a new container on the same volume, then shows that the session is gone once the volume is deleted.
+
+**Run one writer per session folder.** Actlet takes the exclusive lock where it can and refuses a second writer it can see. Where locking isn't available, or a shared network filesystem defeats it, nothing stops two instances from writing the same journal. Don't point two running instances at one session folder.
 
 ## What the journal does not protect against
 
