@@ -40,9 +40,22 @@ build: ## Build the actlet binary into bin/
 run: build ## Build and run actlet (pass arguments with ARGS="...")
 	./$(BINARY) $(ARGS)
 
+FUZZ_TARGETS := FuzzScan FuzzOpen
+FUZZ_PKG     := ./internal/journal
+FUZZTIME     ?= 2m
+
 .PHONY: test
-test: ## Run tests with the race detector
+test: ## Run tests with the race detector, plus a short fuzz run
 	go test -race ./...
+	@for t in $(FUZZ_TARGETS); do \
+		go test -run '^$$' -fuzz "^$$t$$" -fuzztime 5s $(FUZZ_PKG) || exit 1; \
+	done
+
+.PHONY: fuzz
+fuzz: ## Fuzz the journal reader (FUZZTIME per target, default 2m)
+	@for t in $(FUZZ_TARGETS); do \
+		go test -run '^$$' -fuzz "^$$t$$" -fuzztime $(FUZZTIME) $(FUZZ_PKG) || exit 1; \
+	done
 
 .PHONY: bench
 bench: ## Run benchmarks (BENCH=regexp selects them)
