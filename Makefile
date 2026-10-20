@@ -76,7 +76,9 @@ image-devgw: ## Build the development gateway image (DEVGW_IMAGE, default actlet
 run: build ## Build and run actlet (pass arguments with ARGS="...")
 	./$(BIN_DIR)/actlet $(ARGS)
 
-FUZZ_TARGETS := FuzzScan FuzzOpen
+# Fuzz targets, as package:target.
+FUZZ_TARGETS := ./internal/journal:FuzzScan ./internal/journal:FuzzOpen \
+	./internal/attach:FuzzReadFile ./internal/attach:FuzzCommand ./sdk:FuzzWorkerMessages
 JOURNAL_PKG  := ./internal/journal
 FUZZTIME     ?= 2m
 
@@ -84,7 +86,7 @@ FUZZTIME     ?= 2m
 test: ## Run tests with the race detector, plus a short fuzz run
 	go test -race ./...
 	@for t in $(FUZZ_TARGETS); do \
-		go test -run '^$$' -fuzz "^$$t$$" -fuzztime 5s $(JOURNAL_PKG) || exit 1; \
+		go test -run '^$$' -fuzz "^$${t##*:}$$" -fuzztime 5s "$${t%%:*}" || exit 1; \
 	done
 
 .PHONY: test-docker
@@ -121,9 +123,9 @@ smoke-providers: ## One tiny real call per route of PROVIDERS=<file>; needs the 
 	go test -tags smoke -run '^TestSmoke$$' -count=1 -v ./sdk/adapters/router -args -providers="$(abspath $(PROVIDERS))"
 
 .PHONY: fuzz
-fuzz: ## Fuzz the journal reader (FUZZTIME per target, default 2m)
+fuzz: ## Fuzz the journal reader and the attach and gateway handlers (FUZZTIME per target, default 2m)
 	@for t in $(FUZZ_TARGETS); do \
-		go test -run '^$$' -fuzz "^$$t$$" -fuzztime $(FUZZTIME) $(JOURNAL_PKG) || exit 1; \
+		go test -run '^$$' -fuzz "^$${t##*:}$$" -fuzztime $(FUZZTIME) "$${t%%:*}" || exit 1; \
 	done
 
 .PHONY: bench

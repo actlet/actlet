@@ -32,7 +32,7 @@ type harness struct {
 	attach attachv0.AttachClient
 }
 
-func newHarness(t *testing.T, opts Options) *harness {
+func newHarness(t testing.TB, opts Options) *harness {
 	t.Helper()
 	if opts.Assign == nil {
 		opts.Assign = func(context.Context, *gatewayv0.RegisterRequest) (*gatewayv0.RegisterResponse, error) {
