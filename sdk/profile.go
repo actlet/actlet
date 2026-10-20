@@ -45,6 +45,17 @@ type Profile struct {
 	Budgets   []Budget    `json:"budgets,omitempty"`
 	Models    *Models     `json:"models,omitempty"`
 	Tools     []ToolGrant `json:"tools,omitempty"`
+	// Instructions are the implementor's instructions to the agent, added
+	// to Actlet's base prompt.
+	Instructions string `json:"instructions,omitempty"`
+	// BasePrompt replaces Actlet's base prompt.
+	BasePrompt string `json:"base_prompt,omitempty"`
+	// ToolsManifest describes what is installed in the container, for the
+	// agent's prompt.
+	ToolsManifest string `json:"tools_manifest,omitempty"`
+	// CheckpointEveryTurns is the number of model turns between execution
+	// checkpoints; 0 means every turn.
+	CheckpointEveryTurns uint32 `json:"checkpoint_every_turns,omitempty"`
 }
 
 // Limits caps concurrency. Zero means the worker's deployment ceiling.
@@ -229,6 +240,11 @@ func (p *Profile) Proto() (*gatewayv0.Profile, error) {
 		Limits:           &gatewayv0.Limits{MaxWorkers: p.Limits.MaxWorkers, MaxToolConcurrency: p.Limits.MaxToolConcurrency},
 		DefaultPauseMode: gatewayv0.PauseMode_PAUSE_MODE_DRAIN,
 		OnDisconnect:     gatewayv0.DisconnectBehavior_DISCONNECT_BEHAVIOR_CONTINUE_LOCAL,
+		Instructions:     p.Instructions,
+		BasePrompt:       p.BasePrompt,
+		ToolsManifest:    p.ToolsManifest,
+
+		CheckpointEveryTurns: p.CheckpointEveryTurns,
 	}
 	if p.DefaultPauseMode == "interrupt" {
 		out.DefaultPauseMode = gatewayv0.PauseMode_PAUSE_MODE_INTERRUPT

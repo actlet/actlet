@@ -63,6 +63,8 @@ func runRun(args []string, stdout, stderr io.Writer, signals <-chan os.Signal) i
 		workerID  = fs.String("worker-id", envDefault("ACTLET_WORKER_ID", hostname), "worker identity [ACTLET_WORKER_ID]")
 		logLevel  = fs.String("log-level", envDefault("ACTLET_LOG_LEVEL", "info"), "log level: debug, info, warn or error [ACTLET_LOG_LEVEL]")
 		logFormat = fs.String("log-format", envDefault("ACTLET_LOG_FORMAT", "text"), "log format: text or json [ACTLET_LOG_FORMAT]")
+		manifest  = fs.String("tools-manifest", envDefault("ACTLET_TOOLS_MANIFEST", "/etc/actlet/tools.md"),
+			"file describing what is installed, for the agent's prompt; ignored if missing [ACTLET_TOOLS_MANIFEST]")
 	)
 	durationFlag := func(name, env string, def time.Duration, usage string) *time.Duration {
 		d := def
@@ -127,6 +129,7 @@ func runRun(args []string, stdout, stderr io.Writer, signals <-chan os.Signal) i
 		ActivityQueue:      int(*queue),
 		ActivitySpillMax:   *spillMax,
 		FlushTimeout:       *flushTimeout,
+		ToolsManifest:      *manifest,
 		Logger:             log,
 	}
 	if signals == nil {

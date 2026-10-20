@@ -35,6 +35,11 @@ message Config {
   // "drain" or "interrupt".
   string default_pause_mode = 6;
   google.protobuf.Duration signal_deadline = 7;
+  // Agent tasks: the model alias, the model turns between checkpoints, and
+  // the tools the profile grants (none: all of them).
+  string model = 8;
+  uint32 checkpoint_every_turns = 9;
+  repeated string tools = 10;
 }
 
 // Command is a control command the session received, and what it did with

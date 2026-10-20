@@ -17,10 +17,12 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 
 	"github.com/actlet/actlet/internal/activity"
+	"github.com/actlet/actlet/internal/agent"
 	"github.com/actlet/actlet/internal/gwclient"
 	"github.com/actlet/actlet/internal/session"
 	"github.com/actlet/actlet/internal/session/sessionpb"
 	"github.com/actlet/actlet/internal/sessionfs"
+	"github.com/actlet/actlet/internal/tools"
 	gatewayv0 "github.com/actlet/actlet/proto/actlet/gateway/v0"
 )
 
@@ -47,11 +49,18 @@ type Config struct {
 	// be acknowledged; what's left is kept for the next run.
 	FlushTimeout time.Duration
 
+	// ToolsManifest is a file in the image describing what is installed,
+	// for the agent's prompt. A missing file is no manifest.
+	ToolsManifest string
+	// Tools overrides the programs the agent's tools use, such as the
+	// shell; see tools.Options.
+	Tools tools.Options
+
 	Logger *slog.Logger
 }
 
 // Capabilities are the features this worker announces when registering.
-var Capabilities = []string{"control.pause", "control.stop", "control.steer", "activity.v0", "task.demo"}
+var Capabilities = []string{"control.pause", "control.stop", "control.steer", "activity.v0", "task.demo", "task.agent", "inference.v0", "tools.local"}
 
 // Run runs the session and returns the process exit code. Each value
 // received on signals asks the session to pause, as an OS termination
@@ -132,6 +141,10 @@ func Run(ctx context.Context, cfg Config, signals <-chan os.Signal) int {
 		return fail("task", "err", err)
 	}
 	effective := effectiveConfig(cfg, resp.GetProfile())
+	agentSettings, err := agentSettings(cfg, resp.GetProfile(), effective)
+	if err != nil {
+		return fail("agent settings", "err", err)
+	}
 
 	pub := activity.New(activity.Options{
 		SessionID: sessionID, Epoch: epoch, Dir: folder.State(),
@@ -142,19 +155,23 @@ func Run(ctx context.Context, cfg Config, signals <-chan os.Signal) int {
 		log.Warn("activity backlog", "err", err)
 	}
 
+	reregister := func(ctx context.Context) error {
+		_, err := client.Register(ctx, registerReq())
+		return err
+	}
+	infer := func(ctx context.Context, req *gatewayv0.InferenceRequest) (*gwclient.Inference, error) {
+		return client.Infer(ctx, req, reregister)
+	}
 	sess, err := session.Start(session.Params{
 		Folder: folder, SessionID: sessionID, Epoch: epoch, Recovered: recovered,
 		Config: effective, MaxStopGrace: cfg.MaxStopGrace, Task: task,
+		Agent: agentSettings, Infer: infer,
 		WorkerID: cfg.WorkerID, Version: cfg.Version, Emit: pub.Emit, Logger: log,
 	})
 	if err != nil {
 		return fail("starting the session", "err", err)
 	}
 
-	reregister := func(ctx context.Context) error {
-		_, err := client.Register(ctx, registerReq())
-		return err
-	}
 	netCtx, cancelNet := context.WithCancel(context.Background())
 	defer cancelNet()
 	var wg sync.WaitGroup
@@ -264,14 +281,25 @@ func effectiveConfig(cfg Config, p *gatewayv0.Profile) *sessionpb.Config {
 	if p.GetDefaultPauseMode() == gatewayv0.PauseMode_PAUSE_MODE_INTERRUPT {
 		mode = "interrupt"
 	}
+	model := p.GetModels().GetRoles()["main"]
+	if model == "" {
+		model = "main"
+	}
+	var granted []string
+	for _, g := range p.GetTools() {
+		granted = append(granted, g.GetName())
+	}
 	return &sessionpb.Config{
-		ProfileId:          p.GetId(),
-		ProfileVersion:     p.GetVersion(),
-		MaxWorkers:         clamp(p.GetLimits().GetMaxWorkers(), cfg.MaxWorkers),
-		MaxToolConcurrency: clamp(p.GetLimits().GetMaxToolConcurrency(), cfg.MaxToolConcurrency),
-		StopGrace:          durationpb.New(grace),
-		DefaultPauseMode:   mode,
-		SignalDeadline:     durationpb.New(cfg.SignalDeadline),
+		Model:                model,
+		CheckpointEveryTurns: max(p.GetCheckpointEveryTurns(), 1),
+		Tools:                granted,
+		ProfileId:            p.GetId(),
+		ProfileVersion:       p.GetVersion(),
+		MaxWorkers:           clamp(p.GetLimits().GetMaxWorkers(), cfg.MaxWorkers),
+		MaxToolConcurrency:   clamp(p.GetLimits().GetMaxToolConcurrency(), cfg.MaxToolConcurrency),
+		StopGrace:            durationpb.New(grace),
+		DefaultPauseMode:     mode,
+		SignalDeadline:       durationpb.New(cfg.SignalDeadline),
 	}
 }
 
@@ -291,3 +319,27 @@ func (h controlHandler) Apply(ctx context.Context, cmd *gatewayv0.Command) (*gat
 func (h controlHandler) State() gatewayv0.SessionState { return h.s.State() }
 
 func (h controlHandler) Done() <-chan struct{} { return h.s.Done() }
+
+// agentSettings configures agent tasks from the profile and the image.
+func agentSettings(cfg Config, p *gatewayv0.Profile, effective *sessionpb.Config) (agent.Settings, error) {
+	manifest, err := agent.ReadManifest(cfg.ToolsManifest)
+	if err != nil {
+		return agent.Settings{}, fmt.Errorf("tools manifest: %w", err)
+	}
+	s := agent.Settings{
+		Model:           effective.GetModel(),
+		CheckpointEvery: uint64(effective.GetCheckpointEveryTurns()),
+		Prompt: agent.Prompt{
+			Base: p.GetBasePrompt(), Instructions: p.GetInstructions(),
+			Manifests: []string{manifest, p.GetToolsManifest()},
+		},
+		Tools: cfg.Tools,
+	}
+	if len(p.GetTools()) > 0 {
+		s.Tools.Grants = []tools.Grant{}
+		for _, g := range p.GetTools() {
+			s.Tools.Grants = append(s.Tools.Grants, tools.Grant{Name: g.GetName(), Settings: g.GetSettings()})
+		}
+	}
+	return s, nil
+}

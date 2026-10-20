@@ -1,0 +1,71 @@
+// Records the agent writes to the session journal. Every model call and
+// every tool call is recorded as an intent before it starts and an outcome
+// when it ends; checkpoints hold the whole conversation at model-turn
+// boundaries. Recovery starts from the latest checkpoint and replays the
+// records after it.
+//
+// EXPERIMENTAL (v0): this schema may change incompatibly.
+
+syntax = "proto3";
+
+package actlet.agent.v0;
+
+import "actlet/gateway/v0/gateway.proto";
+
+option go_package = "github.com/actlet/actlet/internal/agent/agentpb";
+
+// Checkpoint is the agent's execution state at a model-turn boundary:
+// everything needed for the next model call (kind "agent.checkpoint").
+message Checkpoint {
+  // Model turns completed.
+  uint64 turn = 1;
+  string model = 2;
+  string system = 3;
+  repeated actlet.gateway.v0.Message messages = 4;
+  bytes continuation = 5;
+  // Usage of all turns so far.
+  actlet.gateway.v0.Usage usage = 6;
+  // The version of Actlet's base prompt in system, or "custom".
+  string prompt_version = 7;
+}
+
+// InferenceIntent is a model call about to be made with the conversation
+// as it stands (kind "agent.inference.intent").
+message InferenceIntent {
+  string intent_id = 1;
+  // The turn the call makes, from 1.
+  uint64 turn = 2;
+}
+
+// InferenceOutcome is the model's answer (kind "agent.inference.outcome").
+message InferenceOutcome {
+  string intent_id = 1;
+  actlet.gateway.v0.Message message = 2;
+  actlet.gateway.v0.InferenceDone done = 3;
+  uint32 attempts = 4;
+}
+
+// ToolIntent is a tool call about to run (kind "tool.intent").
+message ToolIntent {
+  string intent_id = 1;
+  string call_id = 2;
+  string tool = 3;
+  // The call's JSON input.
+  string input = 4;
+  // Recovery data of the tool, such as file hashes.
+  bytes check = 5;
+  // The tool's recovery policy: "retry", "reconcile" or "never".
+  string policy = 6;
+}
+
+// ToolOutcome is a tool call's result (kind "tool.outcome").
+message ToolOutcome {
+  // Empty for a call refused before it ran.
+  string intent_id = 1;
+  string call_id = 2;
+  string content = 3;
+  bool is_error = 4;
+  bool outcome_unknown = 5;
+  // Decided by recovery rather than by running the call.
+  bool recovered = 6;
+}

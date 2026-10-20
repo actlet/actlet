@@ -53,6 +53,9 @@ func TestLoadProfileYAMLAndJSONAgree(t *testing.T) {
 	if tools := pb.GetTools(); len(tools) != 2 || tools[1].GetSettings()["route"] != "humans" {
 		t.Errorf("tools %v", tools)
 	}
+	if pb.GetInstructions() != "Write the report in British English.\n" || pb.GetToolsManifest() == "" || pb.GetCheckpointEveryTurns() != 2 {
+		t.Errorf("agent fields %q %q %d", pb.GetInstructions(), pb.GetToolsManifest(), pb.GetCheckpointEveryTurns())
+	}
 }
 
 func TestProfileFromGo(t *testing.T) {

@@ -20,6 +20,7 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 
+	"github.com/actlet/actlet/internal/agent"
 	"github.com/actlet/actlet/internal/journal"
 	"github.com/actlet/actlet/internal/session/sessionpb"
 	"github.com/actlet/actlet/internal/sessionfs"
@@ -92,6 +93,8 @@ type Recovered struct {
 	Ended *sessionpb.Ended
 	// Config is the last run's effective configuration.
 	Config *sessionpb.Config
+	// Agent are the agent's records from its latest checkpoint on.
+	Agent []journal.Record
 }
 
 // Resumable reports whether a new run may continue the session: it hasn't
@@ -153,6 +156,14 @@ func Recover(f sessionfs.Folder) (*Recovered, error) {
 }
 
 func (r *Recovered) apply(jr journal.Record) error {
+	if agent.IsRecord(jr.Kind) {
+		if jr.Kind == agent.KindCheckpoint {
+			r.Agent = r.Agent[:0]
+		}
+		jr.Data = append([]byte(nil), jr.Data...)
+		r.Agent = append(r.Agent, jr)
+		return nil
+	}
 	switch jr.Kind {
 	case kindStarted:
 		var m sessionpb.Started
@@ -195,8 +206,11 @@ type Params struct {
 	// MaxStopGrace caps the grace period of stop commands.
 	MaxStopGrace time.Duration
 	Task         *sessionfs.Task
-	WorkerID     string
-	Version      string
+	// Agent configures agent tasks, and Infer makes their model calls.
+	Agent    agent.Settings
+	Infer    agent.InferFunc
+	WorkerID string
+	Version  string
 	// Emit publishes an activity event. It must not block.
 	Emit   func(*gatewayv0.ActivityEvent)
 	Logger *slog.Logger
@@ -584,14 +598,55 @@ func (s *Session) run(nextStep uint64) {
 	close(s.done)
 }
 
-// work runs the task from nextStep until it completes or a pause or stop
-// takes effect.
+// work runs the task until it completes or a pause or stop takes effect.
 func (s *Session) work(nextStep uint64) Outcome {
-	failed := func(format string, args ...any) Outcome {
-		reason := fmt.Sprintf(format, args...)
-		s.emitText("failed: %s", reason)
-		return Outcome{State: gatewayv0.SessionState_SESSION_STATE_FAILED, Reason: reason}
+	if s.p.Task.Kind == agent.Kind {
+		return s.runAgent()
 	}
+	return s.runDemo(nextStep)
+}
+
+func (s *Session) failed(format string, args ...any) Outcome {
+	reason := fmt.Sprintf(format, args...)
+	s.emitText("failed: %s", reason)
+	return Outcome{State: gatewayv0.SessionState_SESSION_STATE_FAILED, Reason: reason}
+}
+
+// stoppedOutcome is the outcome of work that ended for a pause or stop.
+func (s *Session) stoppedOutcome() Outcome {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.target == gatewayv0.SessionState_SESSION_STATE_UNSPECIFIED {
+		return Outcome{State: gatewayv0.SessionState_SESSION_STATE_FAILED, Reason: "work stopped unexpectedly"}
+	}
+	return Outcome{State: s.target, Reason: s.reason}
+}
+
+func (s *Session) runAgent() Outcome {
+	if s.p.Infer == nil {
+		return s.failed("agent tasks need a gateway that serves models")
+	}
+	var records []journal.Record
+	if s.p.Recovered != nil {
+		records = s.p.Recovered.Agent
+	}
+	done, err := agent.Run(agent.Env{
+		Settings: s.p.Agent, Folder: s.p.Folder, Task: s.p.Task, SessionID: s.p.SessionID, Epoch: s.p.Epoch,
+		Records: records, Record: s.record, Emit: s.p.Emit, Infer: s.p.Infer,
+		Soft: s.soft, Hard: s.hard, WantsStop: s.wantsStop, Logger: s.log,
+	})
+	switch {
+	case err != nil:
+		return s.failed("%v", err)
+	case done:
+		return Outcome{State: gatewayv0.SessionState_SESSION_STATE_COMPLETED, Reason: "task completed"}
+	}
+	return s.stoppedOutcome()
+}
+
+// runDemo runs the demo task from nextStep.
+func (s *Session) runDemo(nextStep uint64) Outcome {
+	failed := s.failed
 	task, err := newDemoTask(s.p.Task)
 	if err != nil {
 		return failed("%v", err)
@@ -620,10 +675,5 @@ func (s *Session) work(nextStep uint64) Outcome {
 		s.emitText("task completed; deliverable %s", path)
 		return Outcome{State: gatewayv0.SessionState_SESSION_STATE_COMPLETED, Reason: "task completed"}
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.target == gatewayv0.SessionState_SESSION_STATE_UNSPECIFIED {
-		return Outcome{State: gatewayv0.SessionState_SESSION_STATE_FAILED, Reason: "work stopped unexpectedly"}
-	}
-	return Outcome{State: s.target, Reason: s.reason}
+	return s.stoppedOutcome()
 }

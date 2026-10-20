@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/actlet/actlet/internal/agent"
 	"github.com/actlet/actlet/internal/sessionfs"
 )
 
@@ -67,7 +68,7 @@ type demoTask struct {
 
 func newDemoTask(t *sessionfs.Task) (*demoTask, error) {
 	if t.Kind != DemoKind {
-		return nil, fmt.Errorf("unknown task kind %q: this build runs %q tasks", t.Kind, DemoKind)
+		return nil, fmt.Errorf("unknown task kind %q: this build runs %q and %q tasks", t.Kind, agent.Kind, DemoKind)
 	}
 	def := demoDefinition{Steps: 3, Step: duration(time.Second), Output: "result.txt"}
 	if err := decodeStrict(t.Definition, &def); err != nil {

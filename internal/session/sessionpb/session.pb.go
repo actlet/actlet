@@ -127,8 +127,13 @@ type Config struct {
 	// "drain" or "interrupt".
 	DefaultPauseMode string               `protobuf:"bytes,6,opt,name=default_pause_mode,json=defaultPauseMode,proto3" json:"default_pause_mode,omitempty"`
 	SignalDeadline   *durationpb.Duration `protobuf:"bytes,7,opt,name=signal_deadline,json=signalDeadline,proto3" json:"signal_deadline,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	// Agent tasks: the model alias, the model turns between checkpoints, and
+	// the tools the profile grants (none: all of them).
+	Model                string   `protobuf:"bytes,8,opt,name=model,proto3" json:"model,omitempty"`
+	CheckpointEveryTurns uint32   `protobuf:"varint,9,opt,name=checkpoint_every_turns,json=checkpointEveryTurns,proto3" json:"checkpoint_every_turns,omitempty"`
+	Tools                []string `protobuf:"bytes,10,rep,name=tools,proto3" json:"tools,omitempty"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
 }
 
 func (x *Config) Reset() {
@@ -206,6 +211,27 @@ func (x *Config) GetDefaultPauseMode() string {
 func (x *Config) GetSignalDeadline() *durationpb.Duration {
 	if x != nil {
 		return x.SignalDeadline
+	}
+	return nil
+}
+
+func (x *Config) GetModel() string {
+	if x != nil {
+		return x.Model
+	}
+	return ""
+}
+
+func (x *Config) GetCheckpointEveryTurns() uint32 {
+	if x != nil {
+		return x.CheckpointEveryTurns
+	}
+	return 0
+}
+
+func (x *Config) GetTools() []string {
+	if x != nil {
+		return x.Tools
 	}
 	return nil
 }
@@ -444,7 +470,7 @@ const file_internal_session_sessionpb_session_proto_rawDesc = "" +
 	"\x06config\x18\x03 \x01(\v2\x19.actlet.session.v0.ConfigR\x06config\x12\x18\n" +
 	"\aresumed\x18\x04 \x01(\bR\aresumed\x12\x1b\n" +
 	"\tworker_id\x18\x05 \x01(\tR\bworkerId\x12%\n" +
-	"\x0eactlet_version\x18\x06 \x01(\tR\ractletVersion\"\xcf\x02\n" +
+	"\x0eactlet_version\x18\x06 \x01(\tR\ractletVersion\"\xb1\x03\n" +
 	"\x06Config\x12\x1d\n" +
 	"\n" +
 	"profile_id\x18\x01 \x01(\tR\tprofileId\x12'\n" +
@@ -455,7 +481,11 @@ const file_internal_session_sessionpb_session_proto_rawDesc = "" +
 	"\n" +
 	"stop_grace\x18\x05 \x01(\v2\x19.google.protobuf.DurationR\tstopGrace\x12,\n" +
 	"\x12default_pause_mode\x18\x06 \x01(\tR\x10defaultPauseMode\x12B\n" +
-	"\x0fsignal_deadline\x18\a \x01(\v2\x19.google.protobuf.DurationR\x0esignalDeadline\"\x9f\x02\n" +
+	"\x0fsignal_deadline\x18\a \x01(\v2\x19.google.protobuf.DurationR\x0esignalDeadline\x12\x14\n" +
+	"\x05model\x18\b \x01(\tR\x05model\x124\n" +
+	"\x16checkpoint_every_turns\x18\t \x01(\rR\x14checkpointEveryTurns\x12\x14\n" +
+	"\x05tools\x18\n" +
+	" \x03(\tR\x05tools\"\x9f\x02\n" +
 	"\aCommand\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x16\n" +
 	"\x06origin\x18\x02 \x01(\tR\x06origin\x12\x14\n" +

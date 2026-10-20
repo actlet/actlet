@@ -1,4 +1,4 @@
-# A complete profile. Budgets, models and tools are schema only for now.
+# A complete profile. Budgets are schema only for now.
 schema: v0
 id: coding-default
 version: "3"
@@ -33,3 +33,8 @@ tools:
   - name: decide
     settings:
       route: humans
+instructions: |
+  Write the report in British English.
+tools_manifest: |
+  jq and ripgrep are installed.
+checkpoint_every_turns: 2

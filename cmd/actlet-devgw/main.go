@@ -307,10 +307,45 @@ func (g *gateway) printEvent(session string, ev *gatewayv0.ActivityEvent) {
 		what = b.Text.GetText()
 	case *gatewayv0.ActivityEvent_Gap:
 		what = fmt.Sprintf("gap: %d events dropped by the worker", b.Gap.GetDropped())
+	case *gatewayv0.ActivityEvent_ModelTurn:
+		m := b.ModelTurn
+		what = fmt.Sprintf("model turn %d (%s, %s): %s", m.GetTurn(), m.GetModel(),
+			strings.ToLower(strings.TrimPrefix(m.GetStopReason().String(), "STOP_REASON_")), oneLine(m.GetText(), 120))
+		if len(m.GetToolCalls()) > 0 {
+			what += " -> " + strings.Join(m.GetToolCalls(), ", ")
+		}
+	case *gatewayv0.ActivityEvent_ToolStarted:
+		what = fmt.Sprintf("tool %s %s: %s", b.ToolStarted.GetTool(), b.ToolStarted.GetCallId(), oneLine(b.ToolStarted.GetInput(), 120))
+	case *gatewayv0.ActivityEvent_ToolFinished:
+		f := b.ToolFinished
+		result := "ok"
+		switch {
+		case f.GetOutcomeUnknown():
+			result = "OUTCOME UNKNOWN"
+		case f.GetIsError():
+			result = "error"
+		}
+		what = fmt.Sprintf("tool %s %s %s in %v: %s", f.GetTool(), f.GetCallId(), result, f.GetTook().AsDuration().Round(time.Millisecond), oneLine(f.GetOutput(), 120))
+	case *gatewayv0.ActivityEvent_FileChange:
+		c := b.FileChange
+		verb := "changed"
+		if c.GetCreated() {
+			verb = "created"
+		}
+		what = fmt.Sprintf("file %s %s\n%s", verb, c.GetPath(), strings.TrimRight(c.GetDiff(), "\n"))
 	default:
 		what = fmt.Sprintf("%T", ev.Body)
 	}
 	g.printf("[%s %s] %s", short(session), ev.GetId(), what)
+}
+
+// oneLine shortens s to one line of at most n bytes.
+func oneLine(s string, n int) string {
+	s = strings.Join(strings.Fields(s), " ")
+	if len(s) > n {
+		s = s[:n] + "..."
+	}
+	return s
 }
 
 func short(id string) string {

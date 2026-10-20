@@ -16,6 +16,7 @@ import (
 
 	"google.golang.org/grpc"
 
+	"github.com/actlet/actlet/internal/crashpoint"
 	"github.com/actlet/actlet/internal/session"
 	"github.com/actlet/actlet/internal/sessionfs"
 	gatewayv0 "github.com/actlet/actlet/proto/actlet/gateway/v0"
@@ -24,10 +25,16 @@ import (
 
 const runHelperEnv = "ACTLET_RUN_HELPER"
 
-// TestRunHelper is `actlet run` in a separate process for TestCrashAfterAck.
+// crashpointEnv names the crash point the helper process dies at.
+const crashpointEnv = "ACTLET_TEST_CRASHPOINT"
+
+// TestRunHelper is `actlet run` in a separate process for the crash tests.
 func TestRunHelper(t *testing.T) {
 	if os.Getenv(runHelperEnv) == "" {
 		t.Skip("helper process only")
+	}
+	if p := os.Getenv(crashpointEnv); p != "" {
+		crashpoint.Set(p)
 	}
 	os.Exit(run([]string{"run", "-log-level", "warn"}, os.Stdout, os.Stderr))
 }
