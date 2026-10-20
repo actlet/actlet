@@ -46,9 +46,19 @@ type Options struct {
 	// requested ID is kept, or a new one is generated.
 	Assign func(ctx context.Context, req *gatewayv0.RegisterRequest) (*gatewayv0.RegisterResponse, error)
 
-	// Authenticate checks the bearer token sent with every call. Nil
-	// accepts every call. See StaticToken.
+	// Authenticate checks the bearer token sent with every call, workers'
+	// and viewers' (see RegisterAttach); grpc.Method(ctx) tells them
+	// apart. Nil accepts every call. See StaticToken.
 	Authenticate func(ctx context.Context, token string) error
+
+	// AuthorizeAttach decides whether an authenticated viewer may attach
+	// to a session; an error refuses it. Nil lets every authenticated
+	// viewer attach to every session.
+	AuthorizeAttach func(ctx context.Context, s *Session) error
+	// AttachCommands returns the commands a viewer may send a session:
+	// "steer", "pause" and "stop". Nil allows what the session's profile
+	// lets local viewers send: steer notes, unless it says otherwise.
+	AttachCommands func(ctx context.Context, s *Session) []string
 
 	// Store keeps the activity workers publish and tells the server what
 	// it already has. Nil means a MemoryStore.
@@ -132,6 +142,8 @@ type Server struct {
 	// Model calls by intent ID, and the answered ones, oldest first.
 	inferences map[inferenceKey]*inference
 	answered   []inferenceKey
+	// The sessions viewers watch.
+	relays map[string]*relay
 
 	// Draining: set once by Shutdown; streams watch drain and end.
 	drainOnce sync.Once
@@ -173,6 +185,7 @@ func NewServer(opts Options) (*Server, error) {
 		intake:     map[intakeKey]*sync.Mutex{},
 		publishing: map[string]*publishers{},
 		inferences: map[inferenceKey]*inference{},
+		relays:     map[string]*relay{},
 		drain:      make(chan struct{}),
 	}, nil
 }
@@ -380,7 +393,7 @@ func (s *Server) Register(ctx context.Context, req *gatewayv0.RegisterRequest) (
 		return nil, status.Errorf(codes.FailedPrecondition, "the profile requires features this worker doesn't support: %s", strings.Join(missing, ", "))
 	}
 	sess := s.sessionFor(resp.SessionId)
-	sess.registered(req)
+	sess.registered(req, resp.GetProfile())
 	s.log.Info("worker registered", "session", resp.SessionId, "worker", req.GetWorkerId(), "epoch", req.GetEpoch())
 	return resp, nil
 }
@@ -517,6 +530,7 @@ func (s *Server) PublishActivity(stream gatewayv0.Gateway_PublishActivityServer)
 		if err != nil {
 			return err
 		}
+		s.relayActivity(sid, fresh)
 		if s.opts.OnActivity != nil {
 			for _, ev := range fresh {
 				s.opts.OnActivity(sid, ev)

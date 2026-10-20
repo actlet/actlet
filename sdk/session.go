@@ -3,9 +3,12 @@ package sdk
 import (
 	"context"
 	"errors"
+	"slices"
 	"sync"
 	"time"
 
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -24,15 +27,22 @@ type Session struct {
 	srv     *Server
 	created time.Time
 
-	mu        sync.Mutex
-	workerID  string
-	epoch     uint64
-	state     gatewayv0.SessionState
-	stateTime time.Time
-	conn      *controlConn
-	pending   []*pendingCommand
-	byID      map[string]*pendingCommand
-	notify    chan struct{}
+	mu           sync.Mutex
+	workerID     string
+	version      string
+	capabilities []string
+	localAttach  *gatewayv0.LocalAttach
+	epoch        uint64
+	state        gatewayv0.SessionState
+	stateTime    time.Time
+	conn         *controlConn
+	pending      []*pendingCommand
+	byID         map[string]*pendingCommand
+	notify       chan struct{}
+	// File reads for viewers: waiting to be sent, and waiting for the
+	// worker's answer.
+	fileQueue []*gatewayv0.FileRequest
+	files     map[string]chan *gatewayv0.FileResponse
 }
 
 type pendingCommand struct {
@@ -53,6 +63,7 @@ func newSession(srv *Server, id string) *Session {
 		created: time.Now(),
 		byID:    map[string]*pendingCommand{},
 		notify:  make(chan struct{}, 1),
+		files:   map[string]chan *gatewayv0.FileResponse{},
 	}
 }
 
@@ -170,11 +181,74 @@ func (s *Session) wake() {
 	}
 }
 
-func (s *Session) registered(req *gatewayv0.RegisterRequest) {
+func (s *Session) registered(req *gatewayv0.RegisterRequest, profile *gatewayv0.Profile) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.workerID = req.GetWorkerId()
+	s.version = req.GetActletVersion()
+	s.capabilities = req.GetCapabilities()
+	s.localAttach = profile.GetLocalAttach()
 	s.epoch = req.GetEpoch()
+}
+
+// MaxFileReads bounds a session's file reads waiting for its worker; more
+// are refused until one is answered.
+const MaxFileReads = 16
+
+// ReadFile asks the session's worker for a file of its session folder,
+// for a viewer: one in inputs/, workspace/ or output/, named as tools
+// name it, relative to workspace/. The worker cuts large files short. An
+// error is a gRPC status: Unavailable when no worker is connected.
+//
+// A file read isn't a command: it isn't queued for a worker that isn't
+// connected, and it isn't sent again after a reconnect. Give ctx a
+// deadline.
+func (s *Session) ReadFile(ctx context.Context, path string) (*gatewayv0.FileResponse, error) {
+	s.mu.Lock()
+	switch {
+	case s.conn == nil:
+		s.mu.Unlock()
+		return nil, status.Error(codes.Unavailable, "the box isn't connected")
+	case !slices.Contains(s.capabilities, "attach.files"):
+		s.mu.Unlock()
+		return nil, status.Error(codes.Unimplemented, "the box doesn't serve files")
+	case len(s.files) >= MaxFileReads:
+		s.mu.Unlock()
+		return nil, status.Error(codes.ResourceExhausted, "too many file reads waiting")
+	}
+	req := &gatewayv0.FileRequest{Id: NewID(), Path: path}
+	answer := make(chan *gatewayv0.FileResponse, 1)
+	s.files[req.Id] = answer
+	s.fileQueue = append(s.fileQueue, req)
+	s.mu.Unlock()
+	s.wake()
+	defer func() {
+		s.mu.Lock()
+		delete(s.files, req.Id)
+		s.fileQueue = slices.DeleteFunc(s.fileQueue, func(q *gatewayv0.FileRequest) bool { return q == req })
+		s.mu.Unlock()
+	}()
+	select {
+	case resp := <-answer:
+		if c := codes.Code(resp.GetErrorCode()); c != codes.OK {
+			return nil, status.Error(c, resp.GetError())
+		}
+		return resp, nil
+	case <-ctx.Done():
+		return nil, status.FromContextError(ctx.Err()).Err()
+	}
+}
+
+// answered hands a worker's file to the read waiting for it.
+func (s *Session) answered(resp *gatewayv0.FileResponse) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if ch, ok := s.files[resp.GetId()]; ok {
+		select {
+		case ch <- resp:
+		default:
+		}
+	}
 }
 
 // attach makes conn the session's control stream, cancelling any previous
@@ -237,9 +311,16 @@ func (s *Session) sendCommands(ctx context.Context, conn *controlConn, stream in
 				batch = append(batch, p.cmd)
 			}
 		}
+		reads := s.fileQueue
+		s.fileQueue = nil
 		s.mu.Unlock()
 		for _, cmd := range batch {
 			if err := stream.Send(&gatewayv0.ControlDown{Msg: &gatewayv0.ControlDown_Command{Command: cmd}}); err != nil {
+				return err
+			}
+		}
+		for _, req := range reads {
+			if err := stream.Send(&gatewayv0.ControlDown{Msg: &gatewayv0.ControlDown_ReadFile{ReadFile: req}}); err != nil {
 				return err
 			}
 		}
@@ -272,6 +353,8 @@ func (s *Session) receiveControl(stream interface {
 			s.mu.Lock()
 			s.setStateLocked(m.Status.GetState())
 			s.mu.Unlock()
+		case *gatewayv0.ControlUp_File:
+			s.answered(m.File)
 		}
 	}
 }

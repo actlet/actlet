@@ -91,6 +91,19 @@ func (m *MemoryStore) Events(sessionID string) []*gatewayv0.ActivityEvent {
 	return out
 }
 
+// ReadActivity implements ActivityReader.
+func (m *MemoryStore) ReadActivity(ctx context.Context, sessionID string, fn func(*gatewayv0.ActivityEvent) error) error {
+	for _, ev := range m.Events(sessionID) {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if err := fn(ev); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // RecordingKind is the journal record kind of activity events in a
 // recording.
 const RecordingKind = "activity"
@@ -235,6 +248,52 @@ func (r *RecordingStore) Append(ctx context.Context, sessionID string, events []
 	}
 	r.mu.Unlock()
 	return nil
+}
+
+// ReadActivity implements ActivityReader: it reads the session's
+// recording as far as it is written.
+func (r *RecordingStore) ReadActivity(ctx context.Context, sessionID string, fn func(*gatewayv0.ActivityEvent) error) error {
+	if !ValidSessionID(sessionID) {
+		return fmt.Errorf("sdk: invalid session ID %q", sessionID)
+	}
+	f, err := os.Open(r.Path(sessionID))
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("sdk: recording: %w", err)
+	}
+	defer func() { _ = f.Close() }()
+	st, err := f.Stat()
+	if err != nil {
+		return fmt.Errorf("sdk: recording: %w", err)
+	}
+	jr, err := journal.NewReader(f, st.Size(), journal.ReaderOptions{})
+	if err != nil {
+		return fmt.Errorf("sdk: recording %s: %w", r.Path(sessionID), err)
+	}
+	defer jr.Close()
+	for {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		b, err := jr.Next()
+		if errors.Is(err, io.EOF) || errors.Is(err, journal.ErrTornTail) {
+			return nil // a batch being written is read next time
+		}
+		if err != nil {
+			return fmt.Errorf("sdk: recording %s: %w", r.Path(sessionID), err)
+		}
+		for _, rec := range b.Records {
+			ev := &gatewayv0.ActivityEvent{}
+			if err := proto.Unmarshal(rec.Data, ev); err != nil {
+				return fmt.Errorf("sdk: recording %s: record %d: %w", r.Path(sessionID), rec.Seq, err)
+			}
+			if err := fn(ev); err != nil {
+				return err
+			}
+		}
+	}
 }
 
 // Release implements ActivityReleaser: it closes the session's recording,

@@ -18,6 +18,7 @@ import (
 	"google.golang.org/grpc/test/bufconn"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	attachv0 "github.com/actlet/actlet/proto/actlet/attach/v0"
 	gatewayv0 "github.com/actlet/actlet/proto/actlet/gateway/v0"
 )
 
@@ -28,6 +29,7 @@ type harness struct {
 	srv    *Server
 	gs     *grpc.Server
 	client gatewayv0.GatewayClient
+	attach attachv0.AttachClient
 }
 
 func newHarness(t *testing.T, opts Options) *harness {
@@ -50,6 +52,7 @@ func newHarness(t *testing.T, opts Options) *harness {
 	lis := bufconn.Listen(1 << 20)
 	gs := grpc.NewServer(ServerOptions()...)
 	srv.RegisterService(gs)
+	srv.RegisterAttach(gs)
 	go func() { _ = gs.Serve(lis) }()
 	t.Cleanup(gs.Stop)
 
@@ -60,7 +63,7 @@ func newHarness(t *testing.T, opts Options) *harness {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = cc.Close() })
-	return &harness{srv: srv, gs: gs, client: gatewayv0.NewGatewayClient(cc)}
+	return &harness{srv: srv, gs: gs, client: gatewayv0.NewGatewayClient(cc), attach: attachv0.NewAttachClient(cc)}
 }
 
 func authed(ctx context.Context) context.Context {

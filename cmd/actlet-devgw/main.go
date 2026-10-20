@@ -52,6 +52,10 @@ Run a worker against it:
   actlet-devgw -token dev
   ACTLET_GATEWAY=127.0.0.1:7400 ACTLET_TOKEN=dev actlet run -session ./my-session
 
+Viewers attach to its sessions with the same token:
+
+  ACTLET_ATTACH_TOKEN=dev actlet-cli attach -gateway 127.0.0.1:7400
+
 Flags:
 `
 
@@ -92,7 +96,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		fs.PrintDefaults()
 	}
 	fs.StringVar(&cfg.listen, "listen", envDefault("ACTLET_DEVGW_LISTEN", "127.0.0.1:7400"), "address to listen on [ACTLET_DEVGW_LISTEN]")
-	fs.StringVar(&cfg.token, "token", envDefault("ACTLET_DEVGW_TOKEN", ""), "bearer token workers must send; empty accepts any [ACTLET_DEVGW_TOKEN]")
+	fs.StringVar(&cfg.token, "token", envDefault("ACTLET_DEVGW_TOKEN", ""), "bearer token workers and viewers must send; empty accepts any [ACTLET_DEVGW_TOKEN]")
 	fs.StringVar(&cfg.dataDir, "data", envDefault("ACTLET_DEVGW_DATA", "devgw-data"), "directory for activity recordings [ACTLET_DEVGW_DATA]")
 	var showVersion bool
 	fs.BoolVar(&showVersion, "version", false, "print version information and exit")
@@ -130,6 +134,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	}
 	gs := grpc.NewServer(sdk.ServerOptions()...)
 	gw.srv.RegisterService(gs)
+	gw.srv.RegisterAttach(gs)
 	go func() { _ = gs.Serve(lis) }()
 	log.Info("gateway listening", "addr", lis.Addr().String(), "data", cfg.dataDir)
 
