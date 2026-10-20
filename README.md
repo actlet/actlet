@@ -23,7 +23,7 @@ bin/actlet-devgw -token dev &
 ACTLET_GATEWAY=127.0.0.1:7400 ACTLET_TOKEN=dev bin/actlet run -session ./demo-session
 ```
 
-Type `pause drain`, `stop kill` or `steer <note>` into `actlet-devgw` to control the session. `actlet run` exits with 0 when the task completes, 3 when it pauses and 4 when it is stopped. Run it again on the same folder to resume a paused session. `actlet run -h` lists every flag and its environment variable.
+Type `pause drain`, `stop kill` or `steer <note>` into `actlet-devgw` to control the session. Give it a [profile](docs/profiles.md) with `-profile <file>`. `actlet run` exits with 0 when the task completes, 3 when it pauses and 4 when it is stopped. Run it again on the same folder to resume a paused session. `actlet run -h` lists every flag and its environment variable.
 
 A session lives in one folder:
 
@@ -49,11 +49,12 @@ make bench   # run the benchmarks
 make help    # list every target
 ```
 
-Binaries are static and CGO-free, so they run on any Linux base image, or none.
+Binaries are static and CGO-free and run natively on Linux, macOS and Windows, on amd64 and arm64.
 
 ```sh
-make dist    # cross-build dist/actlet_linux_amd64, dist/actlet_linux_arm64, ...
-make image   # build the actlet:dev container image (distroless, non-root)
+make dist         # cross-build actlet, actlet-cli and actlet-devgw for all six platforms into dist/
+make image        # build the actlet:dev container image (distroless, non-root)
+make image-devgw  # build the actlet-devgw:dev development gateway image
 ```
 
 The image runs as an unprivileged user with its working directory at `/var/lib/actlet`. To keep sessions across container replacement, mount a volume there. The container's own filesystem only survives a restart of the same container.

@@ -47,10 +47,10 @@ The worker calls `Register` before anything else:
 The gateway answers with:
 
 - `session_id`: the session to use. A gateway must keep the requested ID when resuming. Actlet refuses to continue a folder under a different session.
-- `profile`: the behaviour the orchestrator chooses. In v0 that is identity and version, limits, the default pause mode for OS signals, and the default stop grace period. Actlet clamps the profile to the ceilings set by its own deployment flags, and records the effective configuration in the journal. No credentials ever pass through the profile.
+- `profile`: the behaviour the orchestrator chooses: identity and version, limits, the default pause mode for OS signals, the default stop grace period, and the features the worker must support. Budgets, model aliases and tool grants are in the schema but not yet enforced. Actlet clamps the profile to the ceilings set by its own deployment flags, and records the effective configuration in the journal. No credentials ever pass through the profile. See [profiles](profiles.md).
 - `task`: the task. **The folder comes first:** if the folder already holds a `task.json`, that is used. Otherwise the gateway's task is written to `task.json`. A task has a schema version, an ID, a kind, and a JSON definition and input whose shape depends on the kind.
 
-Registration is retried with backoff while the gateway is unreachable. Errors that retrying can't fix stop the run: bad credentials, an unsupported protocol version, an invalid request.
+Registration is retried with backoff while the gateway is unreachable. Errors that retrying can't fix stop the run: bad credentials, an unsupported protocol version, an invalid request, or a profile requiring features the worker lacks. A gateway must check `profile.required_features` against the worker's `capabilities` and refuse with `FAILED_PRECONDITION`; the worker checks too.
 
 ## Control
 
@@ -154,4 +154,4 @@ ACTLET_GATEWAY=127.0.0.1:7400 ACTLET_TOKEN=dev \
   bin/actlet run -session ./demo-session
 ```
 
-`actlet-devgw` assigns a demo task, prints the activity it receives and records it under `devgw-data/`. Type commands on its standard input: `sessions`, `pause drain`, `pause interrupt`, `stop 5s`, `stop kill`, `steer <note>`, `use <session>`. After a pause, run the same `actlet run` command again to resume.
+`actlet-devgw` assigns a demo task (or `-task <file>`) with a default profile (or `-profile <file>`), prints the activity it receives and records it under `devgw-data/`. Read recordings with `actlet-cli replay inspect|export`. `make image-devgw` builds it as a container image. Type commands on its standard input: `sessions`, `pause drain`, `pause interrupt`, `stop 5s`, `stop kill`, `steer <note>`, `use <session>`. After a pause, run the same `actlet run` command again to resume.
