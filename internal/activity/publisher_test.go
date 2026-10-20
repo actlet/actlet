@@ -2,6 +2,7 @@ package activity
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -211,6 +212,9 @@ func TestCloseKeepsUnsentEventsForTheNextRun(t *testing.T) {
 	checkContiguous(t, evs, 4)
 	if b.Done() {
 		t.Error("backlog done before acknowledgement")
+	}
+	if _, err := b.Next(t.Context(), 10, 10); !errors.Is(err, ErrDrained) {
+		t.Errorf("Next past the end of a backlog: %v, want ErrDrained", err)
 	}
 	b.Ack(10)
 	if !b.Done() || spillExists(b) {

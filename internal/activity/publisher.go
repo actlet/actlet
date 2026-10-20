@@ -210,11 +210,19 @@ func (p *Publisher) spillLocked(ev *Event, limit int64) error {
 	return p.spill.append(ev, limit)
 }
 
+// ErrDrained is returned by Next when a closed publisher has no events
+// after the requested position: there will be no more.
+var ErrDrained = errors.New("activity: no more events")
+
 // Next returns up to max events after sequence number after, in order. It
 // waits until there is at least one, or ctx ends.
 func (p *Publisher) Next(ctx context.Context, after uint64, max int) ([]*Event, error) {
 	for {
 		p.mu.Lock()
+		if p.closed && p.gap == nil && after >= p.nextSeq-1 {
+			p.mu.Unlock()
+			return nil, ErrDrained
+		}
 		if p.gap != nil && p.nextSeq-1 <= after {
 			// Everything stored has been sent: report the drop now.
 			p.flushGapLocked()
