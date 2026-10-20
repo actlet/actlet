@@ -25,6 +25,7 @@ Usage:
   actlet <command> [arguments]
 
 Commands:
+  run        Run a session: connect to the gateway and run its task
   journal    Inspect and export session journals
   version    Print version information
   help       Print this help
@@ -45,6 +46,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 
 	cmd, rest := args[0], args[1:]
 	switch cmd {
+	case "run":
+		return runRun(rest, stdout, stderr, nil)
 	case "journal":
 		return runJournal(rest, stdout, stderr)
 	case "version":
