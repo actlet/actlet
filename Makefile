@@ -44,6 +44,10 @@ run: build ## Build and run actlet (pass arguments with ARGS="...")
 test: ## Run tests with the race detector
 	go test -race ./...
 
+.PHONY: bench
+bench: ## Run benchmarks (BENCH=regexp selects them)
+	go test -run '^$$' -bench '$(or $(BENCH),.)' ./...
+
 .PHONY: generate
 generate: ## Regenerate protobuf code (needs protoc)
 	protoc --go_out=. --go_opt=module=github.com/actlet/actlet $(PROTO_FILES)
