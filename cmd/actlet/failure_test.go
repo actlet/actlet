@@ -175,3 +175,53 @@ func waitFor(t *testing.T, cond func() bool) {
 		time.Sleep(20 * time.Millisecond)
 	}
 }
+
+// A run that starts while the previous one still holds the session
+// journal, as a replacement Pod may, waits for it to let go, then
+// recovers from what it wrote last.
+func TestRunWaitsForTheJournal(t *testing.T) {
+	if testing.Short() {
+		t.Skip("spawns processes")
+	}
+	g := newAgentGateway(t, strings.Replace(faultScript(2), "  - text: done\n", "  - delay: 60s\n    text: done\n", 1))
+	dir := sessionDir(t, nil)
+	cmd := g.worker(dir, "")
+	waitFor(t, func() bool { return len(filesIn(t, filepath.Join(dir, "workspace"))) == 2 })
+	_ = cmd.Process.Signal(syscall.SIGTERM)
+	if code := exitCode(t, cmd); code != session.ExitPaused {
+		t.Fatalf("exit %d, want paused", code)
+	}
+	held, err := journal.Open(filepath.Join(dir, ".actlet", "session.actlet"), journal.DefaultOptions(""))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !held.Locked() {
+		t.Skip("this filesystem can't lock")
+	}
+	next := g.command(dir, "")
+	var stderr strings.Builder
+	next.Stderr = &stderr
+	if err := next.Start(); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(time.Second)
+	if err := held.Close(); err != nil {
+		t.Fatal(err)
+	}
+	// It resumes as the session's second run; pause it again.
+	waitFor(t, func() bool {
+		for _, s := range g.srv.Sessions() {
+			if s.Connected() && s.Epoch() == 2 {
+				return true
+			}
+		}
+		return false
+	})
+	_ = next.Process.Signal(syscall.SIGTERM)
+	if code := exitCode(t, next); code != session.ExitPaused {
+		t.Fatalf("the second run: exit %d, want paused; stderr:\n%s", code, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "waiting for it to let go") {
+		t.Errorf("stderr:\n%s", stderr.String())
+	}
+}

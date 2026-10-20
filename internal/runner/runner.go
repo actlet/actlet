@@ -55,6 +55,10 @@ type Config struct {
 	// FlushTimeout bounds how long the run waits at the end for activity to
 	// be acknowledged; what's left is kept for the next run.
 	FlushTimeout time.Duration
+	// LockWait bounds how long the run waits for another run that still
+	// holds the session journal, such as one in a container that is being
+	// replaced, to let go of it.
+	LockWait time.Duration
 
 	// ToolsManifest is a file in the image describing what is installed,
 	// for the agent's prompt. A missing file is no manifest.
@@ -103,6 +107,12 @@ func Run(ctx context.Context, cfg Config, signals <-chan os.Signal) int {
 	folder, err := sessionfs.Open(cfg.SessionDir)
 	if err != nil {
 		return fail("session folder", "err", err)
+	}
+	// The previous run may still be shutting down, as when a replacement
+	// Pod starts before the old one is gone: recover from what it wrote
+	// last.
+	if err := waitForJournal(ctx, folder.Journal(), cfg.LockWait, log); err != nil {
+		return fail("another run holds the session journal", "err", err, "waited", cfg.LockWait)
 	}
 	recovered, err := session.Recover(folder)
 	if errors.Is(err, journal.ErrCorrupt) {
@@ -448,6 +458,21 @@ func (h controlHandler) ReadFile(req *gatewayv0.FileRequest) *gatewayv0.FileResp
 	}
 	return &gatewayv0.FileResponse{Path: resp.GetPath(), Content: resp.GetContent(), Size: resp.GetSize(),
 		Truncated: resp.GetTruncated(), Binary: resp.GetBinary()}
+}
+
+// waitForJournal waits up to limit for no other writer to hold the
+// journal, saying so if it has to wait.
+func waitForJournal(ctx context.Context, path string, limit time.Duration, log *slog.Logger) error {
+	quick, cancel := context.WithTimeout(ctx, 0)
+	err := journal.WaitUnlocked(quick, path)
+	cancel()
+	if !errors.Is(err, journal.ErrLocked) {
+		return err
+	}
+	log.Warn("another run holds the session journal; waiting for it to let go", "path", path, "limit", limit)
+	ctx, cancel = context.WithTimeout(ctx, limit)
+	defer cancel()
+	return journal.WaitUnlocked(ctx, path)
 }
 
 // skills writes the profile's skills to the session folder, replacing

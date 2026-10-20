@@ -105,6 +105,7 @@ func runRun(args []string, stdout, stderr io.Writer, signals <-chan os.Signal) i
 	signalDeadline := durationFlag("signal-deadline", "ACTLET_SIGNAL_DEADLINE", 8*time.Second,
 		"how long pausing on SIGTERM may take; keep it within the container stop timeout")
 	flushTimeout := durationFlag("flush-timeout", "ACTLET_FLUSH_TIMEOUT", 2*time.Second, "how long to wait at exit for activity to be delivered")
+	lockWait := durationFlag("lock-wait", "ACTLET_LOCK_WAIT", time.Minute, "how long to wait for a run that still holds the session journal, such as one being replaced, to end")
 	maxWorkers := intFlag("max-workers", "ACTLET_MAX_WORKERS", 4, "most workers a profile may use")
 	maxTools := intFlag("max-tool-concurrency", "ACTLET_MAX_TOOL_CONCURRENCY", 4, "most concurrent tool calls a profile may use")
 	queue := intFlag("activity-queue", "ACTLET_ACTIVITY_QUEUE", 1024, "activity events held in memory before spilling to disk")
@@ -171,6 +172,7 @@ func runRun(args []string, stdout, stderr io.Writer, signals <-chan os.Signal) i
 		ActivityQueue:      int(*queue),
 		ActivitySpillMax:   *spillMax,
 		FlushTimeout:       *flushTimeout,
+		LockWait:           *lockWait,
 		ToolsManifest:      *manifest,
 		SkillsDir:          *skillsDir,
 		NoAttach:           *noAttach,
