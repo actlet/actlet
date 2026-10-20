@@ -302,3 +302,28 @@ func (c *shellConfig) apply(settings map[string]string) error {
 	}
 	return nil
 }
+
+// writesSchema is the input property of programs that may declare what
+// they write.
+const writesSchema = `"writes":{"type":"array","items":{"type":"string"},` +
+	`"description":"the files or directories the command writes, if you know them, so that other tool calls can run alongside it; without it the command is assumed to write anything"}`
+
+// writeSet resolves declared write paths. Nil means everything.
+func (e *Env) writeSet(paths []string) ([]string, error) {
+	if paths == nil {
+		return nil, nil
+	}
+	out := []string{}
+	for _, p := range paths {
+		abs, err := e.resolve(p)
+		if err != nil {
+			return nil, fmt.Errorf("writes: %w", err)
+		}
+		real, err := realPath(abs)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, real)
+	}
+	return out, nil
+}

@@ -179,7 +179,11 @@ func (e *Env) planChange(path string, old []byte, existed bool, new []byte) (*Ca
 	if err != nil {
 		return nil, err
 	}
-	return &Call{Check: check, run: func(RunContext) Result {
+	real, err := realPath(path)
+	if err != nil {
+		return nil, err
+	}
+	return &Call{Check: check, writes: []string{real}, run: func(RunContext) Result {
 		// The file must still be what was planned against.
 		if now, err := currentHash(path); err != nil {
 			return errorResult("%v", err)

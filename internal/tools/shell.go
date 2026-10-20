@@ -21,14 +21,15 @@ func (e *Env) shellTool() *tool {
 				"automatically.", e.shellName(), e.shellCfg.timeout, e.shellCfg.maxTimeout, e.shellCfg.outputCap>>10),
 			Schema: json.RawMessage(`{"type":"object","properties":{` +
 				`"command":{"type":"string","description":"the command line"},` +
-				`"timeout_seconds":{"type":"integer","minimum":1}},` +
+				`"timeout_seconds":{"type":"integer","minimum":1},` + writesSchema + `},` +
 				`"required":["command"],"additionalProperties":false}`),
 			Policy: PolicyNever,
 		},
 		prepare: func(in json.RawMessage) (*Call, error) {
 			var args struct {
-				Command string `json:"command"`
-				Timeout int    `json:"timeout_seconds"`
+				Command string   `json:"command"`
+				Timeout int      `json:"timeout_seconds"`
+				Writes  []string `json:"writes"`
 			}
 			if err := decode(in, &args); err != nil {
 				return nil, err
@@ -40,8 +41,12 @@ func (e *Env) shellTool() *tool {
 			if err != nil {
 				return nil, err
 			}
+			writes, err := e.writeSet(args.Writes)
+			if err != nil {
+				return nil, err
+			}
 			argv := append(slices.Clone(e.shell), args.Command)
-			return &Call{run: func(ctx RunContext) Result {
+			return &Call{writes: writes, writesAll: writes == nil, run: func(ctx RunContext) Result {
 				return e.runProgram(ctx, argv, nil, timeout).result()
 			}}, nil
 		},

@@ -73,7 +73,7 @@ func (e *Env) pythonTool() *tool {
 				`"code":{"type":"string","description":"the script's source"},` +
 				`"path":{"type":"string","description":"a script file to run instead of code"},` +
 				`"args":{"type":"array","items":{"type":"string"},"description":"command-line arguments"},` +
-				`"timeout_seconds":{"type":"integer","minimum":1}},` +
+				`"timeout_seconds":{"type":"integer","minimum":1},` + writesSchema + `},` +
 				`"additionalProperties":false}`),
 			Policy: PolicyNever,
 		},
@@ -83,6 +83,7 @@ func (e *Env) pythonTool() *tool {
 				Path    string   `json:"path"`
 				Args    []string `json:"args"`
 				Timeout int      `json:"timeout_seconds"`
+				Writes  []string `json:"writes"`
 			}
 			if err := decode(in, &args); err != nil {
 				return nil, err
@@ -91,6 +92,10 @@ func (e *Env) pythonTool() *tool {
 				return nil, errors.New("give either code or path")
 			}
 			timeout, err := e.timeout(args.Timeout)
+			if err != nil {
+				return nil, err
+			}
+			writes, err := e.writeSet(args.Writes)
 			if err != nil {
 				return nil, err
 			}
@@ -103,7 +108,7 @@ func (e *Env) pythonTool() *tool {
 					return nil, err
 				}
 			}
-			return &Call{run: func(ctx RunContext) Result {
+			return &Call{writes: writes, writesAll: writes == nil, run: func(ctx RunContext) Result {
 				shown := e.display(script)
 				if args.Code != nil {
 					dir, err := os.MkdirTemp(e.tempDir, "python-")

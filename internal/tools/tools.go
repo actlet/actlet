@@ -95,7 +95,14 @@ type Call struct {
 	// PolicyReconcile tools.
 	Check []byte
 	run   func(ctx RunContext) Result
+	// The paths the call writes, or everything; see Locks.
+	writes    []string
+	writesAll bool
 }
+
+// Writes describes what the call writes: everything, or the listed paths.
+// A call that writes nothing is read-only.
+func (c *Call) Writes() (all bool, paths []string) { return c.writesAll, c.writes }
 
 // RunContext tells a running call when to stop.
 type RunContext struct {
