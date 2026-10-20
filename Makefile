@@ -129,8 +129,15 @@ fuzz: ## Fuzz the journal reader and the attach and gateway handlers (FUZZTIME p
 	done
 
 .PHONY: bench
-bench: ## Run benchmarks (BENCH=regexp selects them)
+bench: build ## Run the benchmarks (BENCH=regexp selects them), and measure the binaries as processes
 	go test -run '^$$' -bench '$(or $(BENCH),.)' ./...
+	go run test/bench/process.go -bin $(BIN_DIR)
+
+.PHONY: bench-linux
+bench-linux: ## Run make bench in a Linux container (needs Docker)
+	@if ! docker info >/dev/null 2>&1; then echo "bench-linux: Docker isn't available, skipping"; exit 0; fi; \
+		docker run --rm -v "$(CURDIR)":/src -w /src -v actlet-gomod:/go/pkg/mod -v actlet-gocache:/root/.cache/go-build \
+			golang:$(GO_IMAGE_VERSION) sh -c 'git config --global --add safe.directory /src; make bench BIN_DIR=bin-linux'
 
 .PHONY: generate
 generate: ## Regenerate protobuf and gRPC code (needs protoc)

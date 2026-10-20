@@ -15,7 +15,7 @@ Early development. What works today:
 - `actlet-cli` holds the tools for journals and recordings and attaches to running sessions; it never runs a session.
 - The session journal is the crash-recoverable record each session keeps ([format and guarantees](docs/journal-format.md)). `actlet-cli journal inspect|export` reads journals and `actlet-cli replay inspect|export|view` reads activity recordings.
 
-All protocols and formats are experimental (v0); [compatibility fixtures](test/compat) capture them. The [threat model](docs/security.md) says what Actlet trusts and how each surface is defended.
+All protocols and formats are experimental (v0); [compatibility fixtures](test/compat) capture them. The [threat model](docs/security.md) says what Actlet trusts and how each surface is defended, and [performance](docs/performance.md) what it costs.
 
 ## Running a session
 
