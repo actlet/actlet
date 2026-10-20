@@ -390,6 +390,10 @@ func (g *gateway) printEvent(session string, ev *gatewayv0.ActivityEvent) {
 			verb = "created"
 		}
 		what = fmt.Sprintf("file %s %s\n%s", verb, c.GetPath(), strings.TrimRight(c.GetDiff(), "\n"))
+	case *gatewayv0.ActivityEvent_Compaction:
+		c := b.Compaction
+		what = fmt.Sprintf("context compacted at %d tokens by %s: %d turns summarised, %d kept: %s", c.GetContextTokens(), c.GetModel(),
+			c.GetSummarizedTurns(), c.GetKeptTurns(), oneLine(c.GetSummary(), 120))
 	default:
 		what = fmt.Sprintf("%T", ev.Body)
 	}

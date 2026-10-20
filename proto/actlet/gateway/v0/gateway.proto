@@ -111,6 +111,28 @@ message Profile {
   // What a viewer attached to the box itself, such as the local TUI, may
   // do.
   LocalAttach local_attach = 15;
+  // When and how workers compact their context. Unset compacts by
+  // default.
+  CompactionPolicy compaction = 16;
+}
+
+// CompactionPolicy controls context compaction: when a worker's context
+// nears its model's context window, the worker has a model summarise its
+// older turns and carries on from the summary, its task and its recent
+// turns. The summary's model call goes through the gateway, with purpose
+// "compaction", and counts towards the budgets.
+message CompactionPolicy {
+  // "summarize" (the default) or "off".
+  string strategy = 1;
+  // Compact when a model call's context reaches this percentage of the
+  // alias's context window (ModelAlias.context_window). 0 means 80. A
+  // worker whose alias has no known window never compacts.
+  uint32 threshold_percent = 2;
+  // The alias that writes the summary. Empty means the catalog's
+  // "compaction" role, or else the worker's own model.
+  string model = 3;
+  // The most recent model turns kept as they are. 0 means 4.
+  uint32 keep_turns = 4;
 }
 
 // LocalAttach controls viewers attached to the box itself. The
@@ -450,6 +472,7 @@ message ActivityEvent {
     Progress progress = 23;
     Feedback feedback = 24;
     BudgetStatus budget_status = 25;
+    Compaction compaction = 26;
   }
 }
 
@@ -620,6 +643,22 @@ message BudgetUsage {
   string state = 5;
 }
 
+// Compaction reports that a worker's older turns were summarised to make
+// room in its context.
+message Compaction {
+  // The alias that wrote the summary.
+  string model = 1;
+  // The model turns the summary replaced, and those kept as they were.
+  uint32 summarized_turns = 2;
+  uint32 kept_turns = 3;
+  // The context's size in tokens at the model call before.
+  uint64 context_tokens = 4;
+  // The summary, possibly cut short.
+  string summary = 5;
+  // What the summary's model call used.
+  Usage usage = 6;
+}
+
 // --- Inference ---
 
 // InferenceRequest is one model call. The conversation is provider
@@ -644,7 +683,8 @@ message InferenceRequest {
   // 0 lets the gateway choose.
   uint32 max_output_tokens = 9;
   // Why the model is called: "agent" for a worker's turn, "llm" for the
-  // agent's llm tool, a one-off call with no tools.
+  // agent's llm tool, a one-off call with no tools, and "compaction" to
+  // summarise a worker's older turns.
   string purpose = 10;
   // The worker making the call: "root", "root.1", and so on.
   string worker = 11;

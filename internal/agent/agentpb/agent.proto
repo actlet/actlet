@@ -76,6 +76,13 @@ message WorkerState {
   bool refused = 17;
   // Set when the worker has finished.
   WorkerDone done = 18;
+  // A compaction under way.
+  CompactionIntent compacting = 19;
+  // Compactions so far. Once compacted, the first message ends with the
+  // summary.
+  uint32 compactions = 20;
+  // The context's size in tokens at the last model call; 0 when unknown.
+  uint64 context_tokens = 21;
 }
 
 // InferenceIntent is a model call about to be made with the worker's
@@ -156,4 +163,29 @@ message SteerDelivered {
   string command_id = 2;
   // The text added to the conversation.
   string text = 3;
+}
+
+// CompactionIntent starts a compaction (kind "agent.compaction.intent").
+// It is written after a checkpoint, and the summary's model call uses its
+// intent ID.
+message CompactionIntent {
+  string intent_id = 1;
+  string worker_id = 2;
+  // The summary replaces the messages after the first, up to this one.
+  uint32 cut = 3;
+  uint32 summarized_turns = 4;
+  uint32 kept_turns = 5;
+  // The alias that writes the summary.
+  string model = 6;
+  uint64 context_tokens = 7;
+}
+
+// CompactionOutcome ends a compaction with the summary (kind
+// "agent.compaction.outcome"). A checkpoint follows it.
+message CompactionOutcome {
+  string intent_id = 1;
+  string worker_id = 2;
+  string summary = 3;
+  actlet.gateway.v0.Usage usage = 4;
+  uint32 attempts = 5;
 }

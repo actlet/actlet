@@ -32,6 +32,8 @@ type turn struct {
 	check func(req *gatewayv0.InferenceRequest) error
 	// block holds the answer until the context ends.
 	block bool
+	// context, if set, is the input tokens the answer reports.
+	context uint64
 }
 
 // model answers each worker with the turn for the number of answers in
@@ -44,6 +46,8 @@ type model struct {
 	mu    sync.Mutex
 	calls []call
 	llm   []*gatewayv0.InferenceRequest // the llm tool's calls
+	// compactions are the summaries' calls.
+	compactions []*gatewayv0.InferenceRequest
 }
 
 type call struct {
@@ -60,11 +64,23 @@ func (m *model) infer(ctx context.Context, req *gatewayv0.InferenceRequest) (*gw
 			Message: &gatewayv0.Message{Role: gatewayv0.Role_ROLE_ASSISTANT, Parts: []*gatewayv0.Part{{Part: &gatewayv0.Part_Text{Text: "LLM says: " + messageText(req.GetMessages()[0])}}}},
 			Done:    &gatewayv0.InferenceDone{StopReason: gatewayv0.StopReason_STOP_REASON_END_TURN, Usage: &gatewayv0.Usage{InputTokens: 100, OutputTokens: 10, Cost: 0.5, Currency: "EUR"}}}, nil
 	}
+	if req.GetPurpose() == "compaction" {
+		m.mu.Lock()
+		m.compactions = append(m.compactions, req)
+		m.mu.Unlock()
+		return &gwclient.Inference{Attempts: 1,
+			Message: &gatewayv0.Message{Role: gatewayv0.Role_ROLE_ASSISTANT, Parts: []*gatewayv0.Part{{Part: &gatewayv0.Part_Text{Text: "SUMMARY"}}}},
+			Done:    &gatewayv0.InferenceDone{StopReason: gatewayv0.StopReason_STOP_REASON_END_TURN, Usage: &gatewayv0.Usage{InputTokens: 500, OutputTokens: 50}}}, nil
+	}
 	n := 0
 	for _, msg := range req.GetMessages() {
 		if msg.GetRole() == gatewayv0.Role_ROLE_ASSISTANT {
 			n++
 		}
+	}
+	// After a compaction, the continuation still counts the answers.
+	if c := req.GetContinuation(); len(c) == 1 && int(c[0]) > n {
+		n = int(c[0])
 	}
 	turns, script := m.turns, "root"
 	first := req.GetMessages()[0].GetParts()[0].GetText()
@@ -105,8 +121,12 @@ func (m *model) infer(ctx context.Context, req *gatewayv0.InferenceRequest) (*gw
 			stop = gatewayv0.StopReason_STOP_REASON_TOOL_USE
 		}
 	}
+	usage := &gatewayv0.Usage{InputTokens: 10, OutputTokens: 2}
+	if t.context > 0 {
+		usage.InputTokens = t.context
+	}
 	return &gwclient.Inference{Message: msg, Attempts: 1, Done: &gatewayv0.InferenceDone{
-		StopReason: stop, Continuation: []byte{byte(n + 1)}, Usage: &gatewayv0.Usage{InputTokens: 10, OutputTokens: 2},
+		StopReason: stop, Continuation: []byte{byte(n + 1)}, Usage: usage,
 	}}, nil
 }
 

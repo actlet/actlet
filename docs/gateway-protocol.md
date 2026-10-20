@@ -108,7 +108,7 @@ The folder's `.actlet/status` file holds the same state as text, for tools that 
 
 Activity events are numbered per epoch: sequence numbers start at 1 in every run and have no gaps. An event's ID is `<epoch>.<seq>`, unique within the session. Because each run is a new epoch, a restarted worker never reuses an ID the gateway has already seen.
 
-Event kinds in v0: session started, state change, command received, steer note, text output and gap; for agent tasks, model turn, tool started and finished (with the usage of calls through the gateway), file change (with a diff), subagent started and finished, and the agent's `progress` reports and `feedback`; `budget_status`, the budgets' use, at the start of each run, at alerts and limits, and when they change; and `session_info`, sent once at the start of each run, which describes the task, the effective configuration, budgets, models and tools for viewers. Events are small: activity describes what happened, and larger content belongs in the session folder.
+Event kinds in v0: session started, state change, command received, steer note, text output and gap; for agent tasks, model turn, tool started and finished (with the usage of calls through the gateway), file change (with a diff), subagent started and finished, `compaction` of a worker's context, and the agent's `progress` reports and `feedback`; `budget_status`, the budgets' use, at the start of each run, at alerts and limits, and when they change; and `session_info`, sent once at the start of each run, which describes the task, the effective configuration, budgets, models and tools for viewers. Events are small: activity describes what happened, and larger content belongs in the session folder.
 
 An agent's events name the worker they are about in `worker`: `root` for the session's agent, `root.1` for its first subagent, and so on (see [the agent](agent.md#subagents)). Events about the session itself have none.
 
@@ -133,7 +133,7 @@ When a run ends, the worker waits briefly (`-flush-timeout`) for outstanding eve
 An agent's model calls go to the gateway: Actlet holds no provider SDKs, endpoints or credentials. `Infer` sends one call:
 
 - `model`: an alias from the profile's catalogue, the one assigned to the worker's role (`main` or `subagent`), or one it may choose. The gateway resolves it to whatever provider and model it likes.
-- `purpose`: `agent` for a worker's turn, `llm` for the agent's `llm` tool (a one-off call with no tools); `worker` names the worker.
+- `purpose`: `agent` for a worker's turn, `llm` for the agent's `llm` tool (a one-off call with no tools), `compaction` for a summary of a worker's older turns when [its context fills](agent.md#context-compaction); `worker` names the worker.
 - `system`, `messages` and `tools`: a provider-neutral conversation. Messages are `user` or `assistant`, made of text, tool calls (`id`, `name`, JSON `input`) and tool results (`call_id`, `content`, `is_error`). Tools are described by name, description and JSON schema.
 - `continuation`: opaque bytes from the previous answer, passed back unchanged. A gateway can keep provider state in it, such as a response ID or cache keys; the worker never looks inside.
 - `intent_id`: the call's identity. The worker records it in its journal before calling, and uses it again for every retry of that call, including after a crash. The gateway treats it as an idempotency key.
@@ -144,7 +144,7 @@ A call is never continued after an interruption. The worker discards what an int
 
 `sdk.Options.OnInference` serves calls in Go. The SDK keeps recent answers by intent ID (`InferenceCache`, 256 by default): a repeated call gets the same answer, marked `replayed`, without reaching `OnInference`, and a repeat of a call still running waits for it. The cache is in memory; a gateway with several replicas, or one that restarts, can recognise intent IDs itself. A draining gateway lets running calls finish.
 
-Package `sdk/scripted` is a model that plays a YAML script of turns, for testing agents without a real model; `actlet-devgw -model <script>` serves it. A script can also answer `llm` calls, by their prompt, and `decide` calls, by their question, and set what each call costs.
+Package `sdk/scripted` is a model that plays a YAML script of turns, for testing agents without a real model; `actlet-devgw -model <script>` serves it. A script can also answer `llm` calls, by their prompt, `decide` calls, by their question, and `compaction` calls with a summary, and set what each call costs.
 
 ## Bridged tools
 

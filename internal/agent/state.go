@@ -83,6 +83,10 @@ func decode(r journal.Record) (proto.Message, error) {
 		m = &agentpb.WorkerDone{}
 	case KindSteer:
 		m = &agentpb.SteerDelivered{}
+	case KindCompactionIntent:
+		m = &agentpb.CompactionIntent{}
+	case KindCompactionOutcome:
+		m = &agentpb.CompactionOutcome{}
 	default:
 		return nil, nil
 	}
@@ -160,6 +164,18 @@ func (s *stateSet) apply(m proto.Message) error {
 		}
 		addUserText(w, m.GetText())
 		s.delivered[m.GetCommandId()] = true
+	case *agentpb.CompactionIntent:
+		w, err := worker(m.GetWorkerId())
+		if err != nil {
+			return err
+		}
+		w.Compacting = m
+	case *agentpb.CompactionOutcome:
+		w, err := worker(m.GetWorkerId())
+		if err != nil {
+			return err
+		}
+		return compacted(w, m)
 	}
 	return nil
 }
@@ -168,7 +184,9 @@ func (s *stateSet) apply(m proto.Message) error {
 func answered(w *agentpb.WorkerState, o *agentpb.InferenceOutcome) {
 	w.Messages = append(w.Messages, o.GetMessage())
 	w.Continuation = o.GetDone().GetContinuation()
-	addUsage(w.Usage, o.GetDone().GetUsage())
+	u := o.GetDone().GetUsage()
+	addUsage(w.Usage, u)
+	w.ContextTokens = u.GetInputTokens() + u.GetCacheReadTokens() + u.GetCacheWriteTokens() + u.GetOutputTokens()
 	w.Turn++
 	w.Inference = nil
 	switch {

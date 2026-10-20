@@ -66,7 +66,8 @@ type Provider struct {
 // Route sends an alias's calls to a provider's model.
 type Route struct {
 	Alias string `json:"alias"`
-	// Purpose, if set, limits the route to calls for it: "agent" or "llm".
+	// Purpose, if set, limits the route to calls for it: "agent", "llm"
+	// or "compaction".
 	Purpose  string          `json:"purpose,omitempty"`
 	Provider string          `json:"provider"`
 	Model    string          `json:"model"`
@@ -165,8 +166,8 @@ func New(cfg Config, getenv func(string) string) (*Router, error) {
 			continue
 		case rt.Model == "":
 			bad("%s: model is required", at)
-		case rt.Purpose != "" && rt.Purpose != "agent" && rt.Purpose != "llm":
-			bad("%s: purpose %q: use agent or llm", at, rt.Purpose)
+		case rt.Purpose != "" && rt.Purpose != "agent" && rt.Purpose != "llm" && rt.Purpose != "compaction":
+			bad("%s: purpose %q: use agent, llm or compaction", at, rt.Purpose)
 		}
 		m, ok := models[rt.Provider]
 		if !ok {

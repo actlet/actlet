@@ -42,6 +42,10 @@ type agentGateway struct {
 	// budgets are the profile's budgets, and tools its tool grants.
 	budgets []*gatewayv0.Budget
 	tools   []*gatewayv0.ToolGrant
+	// models, if set, replaces the profile's catalog; compaction is its
+	// compaction policy.
+	models     *gatewayv0.ModelCatalog
+	compaction *gatewayv0.CompactionPolicy
 
 	mu     sync.Mutex
 	events []*gatewayv0.ActivityEvent
@@ -96,11 +100,14 @@ func (g *agentGateway) start() {
 			g.mu.Unlock()
 		},
 		Assign: func(_ context.Context, req *gatewayv0.RegisterRequest) (*gatewayv0.RegisterResponse, error) {
+			models := g.models
+			if models == nil {
+				models = &gatewayv0.ModelCatalog{Aliases: []*gatewayv0.ModelAlias{{Alias: "scripted"}}, Roles: map[string]string{"main": "scripted"}}
+			}
 			return &gatewayv0.RegisterResponse{
 				SessionId: req.GetSessionId(),
-				Profile: &gatewayv0.Profile{Id: "agent", Models: &gatewayv0.ModelCatalog{
-					Aliases: []*gatewayv0.ModelAlias{{Alias: "scripted"}}, Roles: map[string]string{"main": "scripted"},
-				}, Limits: &gatewayv0.Limits{MaxWorkers: 4, MaxToolConcurrency: 4}, LocalAttach: g.local, Budgets: g.budgets, Tools: g.tools},
+				Profile: &gatewayv0.Profile{Id: "agent", Models: models, Limits: &gatewayv0.Limits{MaxWorkers: 4, MaxToolConcurrency: 4},
+					LocalAttach: g.local, Budgets: g.budgets, Tools: g.tools, Compaction: g.compaction},
 				Task: g.task,
 			}, nil
 		},

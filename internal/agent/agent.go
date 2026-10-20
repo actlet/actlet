@@ -53,6 +53,9 @@ const (
 	KindSpawn            = "agent.spawn"
 	KindWorkerDone       = "agent.worker.done"
 	KindSteer            = "agent.steer"
+
+	KindCompactionIntent  = "agent.compaction.intent"
+	KindCompactionOutcome = "agent.compaction.outcome"
 )
 
 // RootWorker is the ID of the session's own agent. Subagents are named
@@ -104,6 +107,10 @@ type Settings struct {
 	// LLMModel is the alias the llm tool uses unless the agent chooses
 	// one of Selectable; empty with no Selectable offers no llm tool.
 	LLMModel string
+	// Compaction is when and how workers compact their context, and
+	// ContextWindows the aliases' context windows in tokens, where known.
+	Compaction     CompactionPolicy
+	ContextWindows map[string]uint64
 }
 
 // CallToolFunc calls a bridged tool through the gateway.
@@ -434,7 +441,7 @@ func (b *box) commit(m proto.Message) error {
 	b.mu.Unlock()
 	if err == nil {
 		switch m := m.(type) {
-		case *agentpb.InferenceOutcome:
+		case *agentpb.InferenceOutcome, *agentpb.CompactionOutcome:
 			b.spent()
 		case *agentpb.ToolOutcome:
 			if m.GetUsage() != nil {
@@ -531,6 +538,10 @@ func kindOf(m proto.Message) string {
 		return KindWorkerDone
 	case *agentpb.SteerDelivered:
 		return KindSteer
+	case *agentpb.CompactionIntent:
+		return KindCompactionIntent
+	case *agentpb.CompactionOutcome:
+		return KindCompactionOutcome
 	}
 	panic(fmt.Sprintf("agent: no record kind for %T", m))
 }
@@ -617,6 +628,12 @@ func (w *worker) run() error {
 			return w.pauseCheckpoint()
 		case st.GetTurn() >= b.def.MaxTurns:
 			return w.end("", fmt.Errorf("the task used all %d model turns without finishing", b.def.MaxTurns))
+		}
+		if at, summarized, kept, due := b.compactionDue(st); st.GetCompacting() != nil || due && st.GetInference() == nil {
+			if err := w.compact(st, at, summarized, kept); err != nil {
+				return err
+			}
+			continue
 		}
 		if w.id == RootWorker {
 			if err := w.deliverSteers(); err != nil {

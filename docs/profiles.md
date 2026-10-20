@@ -53,6 +53,11 @@ instructions: |                 # the implementor's layer of the agent's prompt
 tools_manifest: |               # what is installed, for the agent
   Go 1.27, Node 22 and jq are installed.
 checkpoint_every_turns: 1       # model turns between checkpoints
+compaction:                     # when the context nears the model's window; on by default
+  strategy: summarize           # summarize (default) or off
+  threshold_percent: 80         # of the alias's context_window; 0 or missing: 80
+  model: fast                   # writes the summary; missing: the compaction role, or the worker's model
+  keep_turns: 4                 # recent model turns kept as they are; 0 or missing: 4
 local_attach:                   # what a viewer attached to the box, or by default through the orchestrator, may do
   commands: [steer]             # steer, pause and stop; [none] allows nothing
 ```
@@ -125,7 +130,7 @@ wire, err := p.Proto() // validates, then converts for RegisterResponse.Profile
 
 ## Models
 
-Workers never see provider names, endpoints or credentials. They see only the aliases the orchestrator defines, and which alias each role (`main`, `subagent`, `llm`) uses; the `llm` tool uses the `llm` role, or `processing`. The orchestrator resolves an alias when the worker asks for a model. The agent uses the `main` role's alias, or `main` when the profile has no models. Subagents use the `subagent` role's alias, or the agent's; the agent may pick one of `selectable` for a subagent instead. `selectable` must name defined aliases.
+Workers never see provider names, endpoints or credentials. They see only the aliases the orchestrator defines, and which alias each role (`main`, `subagent`, `llm`, `compaction`) uses; the `llm` tool uses the `llm` role, or `processing`. An alias's `context_window` lets workers [compact](agent.md#context-compaction) their context before it fills. The orchestrator resolves an alias when the worker asks for a model. The agent uses the `main` role's alias, or `main` when the profile has no models. Subagents use the `subagent` role's alias, or the agent's; the agent may pick one of `selectable` for a subagent instead. `selectable` must name defined aliases.
 
 ## The agent
 

@@ -56,6 +56,25 @@ type Profile struct {
 	CheckpointEveryTurns uint32 `json:"checkpoint_every_turns,omitempty"`
 	// LocalAttach controls viewers attached to the box itself.
 	LocalAttach *LocalAttach `json:"local_attach,omitempty"`
+	// Compaction is when and how workers compact their context. Unset
+	// compacts by default.
+	Compaction *Compaction `json:"compaction,omitempty"`
+}
+
+// Compaction is when and how workers compact their context: when it
+// nears the model's context window, a model summarises the older turns.
+type Compaction struct {
+	// Strategy is "summarize" (the default) or "off".
+	Strategy string `json:"strategy,omitempty"`
+	// ThresholdPercent of the alias's context window starts a
+	// compaction; 0 means 80.
+	ThresholdPercent uint32 `json:"threshold_percent,omitempty"`
+	// Model is the alias that writes the summary; empty means the
+	// "compaction" role, or else the worker's own model.
+	Model string `json:"model,omitempty"`
+	// KeepTurns are the most recent model turns kept as they are; 0
+	// means 4.
+	KeepTurns uint32 `json:"keep_turns,omitempty"`
 }
 
 // LocalAttach controls viewers attached to the box itself, such as the
@@ -242,6 +261,19 @@ func (p *Profile) Validate() error {
 			}
 		}
 	}
+	if c := p.Compaction; c != nil {
+		switch c.Strategy {
+		case "", "summarize", "off":
+		default:
+			bad("compaction.strategy %q: use summarize or off", c.Strategy)
+		}
+		if c.ThresholdPercent > 100 {
+			bad("compaction.threshold_percent above 100")
+		}
+		if c.Model != "" && p.Models != nil && !slices.ContainsFunc(p.Models.Aliases, func(a ModelAlias) bool { return a.Alias == c.Model }) {
+			bad("compaction.model: unknown alias %q", c.Model)
+		}
+	}
 	tools := map[string]bool{}
 	for i, t := range p.Tools {
 		if t.Name == "" {
@@ -292,6 +324,9 @@ func (p *Profile) Proto() (*gatewayv0.Profile, error) {
 	}
 	if la := p.LocalAttach; la != nil {
 		out.LocalAttach = &gatewayv0.LocalAttach{Commands: la.Commands, Disabled: la.Disabled}
+	}
+	if c := p.Compaction; c != nil {
+		out.Compaction = &gatewayv0.CompactionPolicy{Strategy: c.Strategy, ThresholdPercent: c.ThresholdPercent, Model: c.Model, KeepTurns: c.KeepTurns}
 	}
 	if p.DefaultPauseMode == "interrupt" {
 		out.DefaultPauseMode = gatewayv0.PauseMode_PAUSE_MODE_INTERRUPT

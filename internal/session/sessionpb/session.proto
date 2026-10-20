@@ -49,6 +49,8 @@ message Config {
   // The budgets, and the commands a local viewer may send.
   repeated actlet.gateway.v0.Budget budgets = 14;
   repeated string local_commands = 15;
+  // Context compaction, with its defaults filled in.
+  actlet.gateway.v0.CompactionPolicy compaction = 16;
 }
 
 // Command is a control command the session received, and what it did with

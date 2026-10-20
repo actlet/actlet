@@ -509,6 +509,13 @@ func (s *Session) Apply(ev *gatewayv0.ActivityEvent) {
 		default:
 			c.Status = ToolOK
 		}
+	case *gatewayv0.ActivityEvent_Compaction:
+		c := b.Compaction
+		s.Usage.add(c.GetUsage())
+		if w != nil {
+			w.Usage.add(c.GetUsage())
+			w.add(&Item{Kind: ItemSystem, Epoch: ev.GetEpoch(), Seq: ev.GetSeq(), Time: at, Text: Sanitize(compactionText(c))})
+		}
 	case *gatewayv0.ActivityEvent_Progress:
 		p := &Progress{Worker: Sanitize(ev.GetWorker()), Message: Sanitize(b.Progress.GetMessage()), Percent: -1, Time: at}
 		if b.Progress.Percent != nil {
@@ -824,6 +831,9 @@ func Describe(ev *gatewayv0.ActivityEvent) string {
 		return "progress: " + firstLine(b.Progress.GetMessage())
 	case *gatewayv0.ActivityEvent_Feedback:
 		return fmt.Sprintf("feedback (%s): %s", b.Feedback.GetKind(), firstLine(b.Feedback.GetMessage()))
+	case *gatewayv0.ActivityEvent_Compaction:
+		c := b.Compaction
+		return fmt.Sprintf("compaction (%s): %d turns summarised, %d kept, at %d tokens", c.GetModel(), c.GetSummarizedTurns(), c.GetKeptTurns(), c.GetContextTokens())
 	case *gatewayv0.ActivityEvent_BudgetStatus:
 		var parts []string
 		for _, u := range b.BudgetStatus.GetBudgets() {
@@ -832,6 +842,16 @@ func Describe(ev *gatewayv0.ActivityEvent) string {
 		return fmt.Sprintf("budget_status (%s): %s", b.BudgetStatus.GetReason(), strings.Join(parts, ", "))
 	}
 	return "an event this viewer doesn't know"
+}
+
+// compactionText describes a compaction in a worker's timeline.
+func compactionText(c *gatewayv0.Compaction) string {
+	turns := "turns"
+	if c.GetSummarizedTurns() == 1 {
+		turns = "turn"
+	}
+	return fmt.Sprintf("context compacted at %d tokens: %d %s summarised by %s, the last %d kept", c.GetContextTokens(),
+		c.GetSummarizedTurns(), turns, c.GetModel(), c.GetKeptTurns())
 }
 
 func firstLine(s string) string {

@@ -88,6 +88,17 @@ What a call writes is taken from its input, so an edit of a file that an earlier
 - Workers are named after their parent: `root` is the agent, `root.1` its first subagent, `root.1.2` that one's second. Every activity event and journal record names its worker, and `subagent_spawned` and `subagent_finished` events mark a subagent's start and end.
 - A subagent that fails, for example by using up its turns, returns the failure as the call's error result; the parent carries on. A panic ends only its own worker.
 
+## Context compaction
+
+Long tasks fill a model's context. When a model call's context, its input and output tokens, reaches `compaction.threshold_percent` (80 by default) of the worker's alias's `context_window`, the worker compacts it before its next call, as Claude Code's `/compact` does:
+
+- A model writes a summary of the older turns: the profile's `compaction.model`, else the catalogue's `compaction` role, else the worker's own model. The call goes through the gateway with purpose `compaction`, gets a transcript of the turns with long tool inputs and results cut short, and counts towards the [budgets](profiles.md#budgets).
+- The worker carries on with its first message, the task, now ending with the summary, followed by its `compaction.keep_turns` most recent turns (4 by default) as they were. A later compaction replaces the earlier summary. Calls in flight and pending tool results are never summarised: a worker compacts only between turns.
+- A `compaction` activity event reports it: the model, the turns summarised and kept, the context's size, the summary and the call's usage. Viewers show it in the worker's timeline.
+- A checkpoint is written before the compaction's intent and after its outcome. A crash in between makes the summary's call again with the same intent ID; one after it carries on from the compacted conversation.
+
+A worker whose alias has no `context_window` never compacts, nor does any worker with `compaction.strategy: off`.
+
 ## Durability and recovery
 
 Every model call and every tool call is written to the session journal as an **intent** before it starts and an **outcome** when it ends. Each record is written and applied to the workers' state as one step, so a **checkpoint** holds the state of every worker, calls in flight included. Checkpoints are written at model-turn boundaries: after every turn, or every `checkpoint_every_turns` turns from the profile, and when the session pauses. A checkpoint larger than a journal record (4 MiB), as long conversations make, is compressed and written in parts and then a small record that names them by checksum; a crash among the parts leaves the previous checkpoint the latest. A run restores every worker from the latest checkpoint, replays the records after it, and continues each worker:

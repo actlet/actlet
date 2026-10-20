@@ -261,7 +261,14 @@ type WorkerState struct {
 	Ended   bool `protobuf:"varint,16,opt,name=ended,proto3" json:"ended,omitempty"`
 	Refused bool `protobuf:"varint,17,opt,name=refused,proto3" json:"refused,omitempty"`
 	// Set when the worker has finished.
-	Done          *WorkerDone `protobuf:"bytes,18,opt,name=done,proto3" json:"done,omitempty"`
+	Done *WorkerDone `protobuf:"bytes,18,opt,name=done,proto3" json:"done,omitempty"`
+	// A compaction under way.
+	Compacting *CompactionIntent `protobuf:"bytes,19,opt,name=compacting,proto3" json:"compacting,omitempty"`
+	// Compactions so far. Once compacted, the first message ends with the
+	// summary.
+	Compactions uint32 `protobuf:"varint,20,opt,name=compactions,proto3" json:"compactions,omitempty"`
+	// The context's size in tokens at the last model call; 0 when unknown.
+	ContextTokens uint64 `protobuf:"varint,21,opt,name=context_tokens,json=contextTokens,proto3" json:"context_tokens,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -420,6 +427,27 @@ func (x *WorkerState) GetDone() *WorkerDone {
 		return x.Done
 	}
 	return nil
+}
+
+func (x *WorkerState) GetCompacting() *CompactionIntent {
+	if x != nil {
+		return x.Compacting
+	}
+	return nil
+}
+
+func (x *WorkerState) GetCompactions() uint32 {
+	if x != nil {
+		return x.Compactions
+	}
+	return 0
+}
+
+func (x *WorkerState) GetContextTokens() uint64 {
+	if x != nil {
+		return x.ContextTokens
+	}
+	return 0
 }
 
 // InferenceIntent is a model call about to be made with the worker's
@@ -971,6 +999,181 @@ func (x *SteerDelivered) GetText() string {
 	return ""
 }
 
+// CompactionIntent starts a compaction (kind "agent.compaction.intent").
+// It is written after a checkpoint, and the summary's model call uses its
+// intent ID.
+type CompactionIntent struct {
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	IntentId string                 `protobuf:"bytes,1,opt,name=intent_id,json=intentId,proto3" json:"intent_id,omitempty"`
+	WorkerId string                 `protobuf:"bytes,2,opt,name=worker_id,json=workerId,proto3" json:"worker_id,omitempty"`
+	// The summary replaces the messages after the first, up to this one.
+	Cut             uint32 `protobuf:"varint,3,opt,name=cut,proto3" json:"cut,omitempty"`
+	SummarizedTurns uint32 `protobuf:"varint,4,opt,name=summarized_turns,json=summarizedTurns,proto3" json:"summarized_turns,omitempty"`
+	KeptTurns       uint32 `protobuf:"varint,5,opt,name=kept_turns,json=keptTurns,proto3" json:"kept_turns,omitempty"`
+	// The alias that writes the summary.
+	Model         string `protobuf:"bytes,6,opt,name=model,proto3" json:"model,omitempty"`
+	ContextTokens uint64 `protobuf:"varint,7,opt,name=context_tokens,json=contextTokens,proto3" json:"context_tokens,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CompactionIntent) Reset() {
+	*x = CompactionIntent{}
+	mi := &file_internal_agent_agentpb_agent_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CompactionIntent) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CompactionIntent) ProtoMessage() {}
+
+func (x *CompactionIntent) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_agent_agentpb_agent_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CompactionIntent.ProtoReflect.Descriptor instead.
+func (*CompactionIntent) Descriptor() ([]byte, []int) {
+	return file_internal_agent_agentpb_agent_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *CompactionIntent) GetIntentId() string {
+	if x != nil {
+		return x.IntentId
+	}
+	return ""
+}
+
+func (x *CompactionIntent) GetWorkerId() string {
+	if x != nil {
+		return x.WorkerId
+	}
+	return ""
+}
+
+func (x *CompactionIntent) GetCut() uint32 {
+	if x != nil {
+		return x.Cut
+	}
+	return 0
+}
+
+func (x *CompactionIntent) GetSummarizedTurns() uint32 {
+	if x != nil {
+		return x.SummarizedTurns
+	}
+	return 0
+}
+
+func (x *CompactionIntent) GetKeptTurns() uint32 {
+	if x != nil {
+		return x.KeptTurns
+	}
+	return 0
+}
+
+func (x *CompactionIntent) GetModel() string {
+	if x != nil {
+		return x.Model
+	}
+	return ""
+}
+
+func (x *CompactionIntent) GetContextTokens() uint64 {
+	if x != nil {
+		return x.ContextTokens
+	}
+	return 0
+}
+
+// CompactionOutcome ends a compaction with the summary (kind
+// "agent.compaction.outcome"). A checkpoint follows it.
+type CompactionOutcome struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	IntentId      string                 `protobuf:"bytes,1,opt,name=intent_id,json=intentId,proto3" json:"intent_id,omitempty"`
+	WorkerId      string                 `protobuf:"bytes,2,opt,name=worker_id,json=workerId,proto3" json:"worker_id,omitempty"`
+	Summary       string                 `protobuf:"bytes,3,opt,name=summary,proto3" json:"summary,omitempty"`
+	Usage         *v0.Usage              `protobuf:"bytes,4,opt,name=usage,proto3" json:"usage,omitempty"`
+	Attempts      uint32                 `protobuf:"varint,5,opt,name=attempts,proto3" json:"attempts,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CompactionOutcome) Reset() {
+	*x = CompactionOutcome{}
+	mi := &file_internal_agent_agentpb_agent_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CompactionOutcome) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CompactionOutcome) ProtoMessage() {}
+
+func (x *CompactionOutcome) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_agent_agentpb_agent_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CompactionOutcome.ProtoReflect.Descriptor instead.
+func (*CompactionOutcome) Descriptor() ([]byte, []int) {
+	return file_internal_agent_agentpb_agent_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *CompactionOutcome) GetIntentId() string {
+	if x != nil {
+		return x.IntentId
+	}
+	return ""
+}
+
+func (x *CompactionOutcome) GetWorkerId() string {
+	if x != nil {
+		return x.WorkerId
+	}
+	return ""
+}
+
+func (x *CompactionOutcome) GetSummary() string {
+	if x != nil {
+		return x.Summary
+	}
+	return ""
+}
+
+func (x *CompactionOutcome) GetUsage() *v0.Usage {
+	if x != nil {
+		return x.Usage
+	}
+	return nil
+}
+
+func (x *CompactionOutcome) GetAttempts() uint32 {
+	if x != nil {
+		return x.Attempts
+	}
+	return 0
+}
+
 var File_internal_agent_agentpb_agent_proto protoreflect.FileDescriptor
 
 const file_internal_agent_agentpb_agent_proto_rawDesc = "" +
@@ -989,7 +1192,7 @@ const file_internal_agent_agentpb_agent_proto_rawDesc = "" +
 	"\x0eCheckpointPart\x12\x16\n" +
 	"\x06sha256\x18\x01 \x01(\fR\x06sha256\x12\x14\n" +
 	"\x05index\x18\x02 \x01(\rR\x05index\x12\x12\n" +
-	"\x04data\x18\x03 \x01(\fR\x04data\"\xbe\x05\n" +
+	"\x04data\x18\x03 \x01(\fR\x04data\"\xca\x06\n" +
 	"\vWorkerState\x12\x1b\n" +
 	"\tworker_id\x18\x01 \x01(\tR\bworkerId\x12\x1b\n" +
 	"\tparent_id\x18\x02 \x01(\tR\bparentId\x12$\n" +
@@ -1009,7 +1212,12 @@ const file_internal_agent_agentpb_agent_proto_rawDesc = "" +
 	"\aresults\x18\x0f \x03(\v2\x1c.actlet.agent.v0.ToolOutcomeR\aresults\x12\x14\n" +
 	"\x05ended\x18\x10 \x01(\bR\x05ended\x12\x18\n" +
 	"\arefused\x18\x11 \x01(\bR\arefused\x12/\n" +
-	"\x04done\x18\x12 \x01(\v2\x1b.actlet.agent.v0.WorkerDoneR\x04done\"_\n" +
+	"\x04done\x18\x12 \x01(\v2\x1b.actlet.agent.v0.WorkerDoneR\x04done\x12A\n" +
+	"\n" +
+	"compacting\x18\x13 \x01(\v2!.actlet.agent.v0.CompactionIntentR\n" +
+	"compacting\x12 \n" +
+	"\vcompactions\x18\x14 \x01(\rR\vcompactions\x12%\n" +
+	"\x0econtext_tokens\x18\x15 \x01(\x04R\rcontextTokens\"_\n" +
 	"\x0fInferenceIntent\x12\x1b\n" +
 	"\tintent_id\x18\x01 \x01(\tR\bintentId\x12\x12\n" +
 	"\x04turn\x18\x02 \x01(\x04R\x04turn\x12\x1b\n" +
@@ -1053,7 +1261,22 @@ const file_internal_agent_agentpb_agent_proto_rawDesc = "" +
 	"\tworker_id\x18\x01 \x01(\tR\bworkerId\x12\x1d\n" +
 	"\n" +
 	"command_id\x18\x02 \x01(\tR\tcommandId\x12\x12\n" +
-	"\x04text\x18\x03 \x01(\tR\x04textB1Z/github.com/actlet/actlet/internal/agent/agentpbb\x06proto3"
+	"\x04text\x18\x03 \x01(\tR\x04text\"\xe5\x01\n" +
+	"\x10CompactionIntent\x12\x1b\n" +
+	"\tintent_id\x18\x01 \x01(\tR\bintentId\x12\x1b\n" +
+	"\tworker_id\x18\x02 \x01(\tR\bworkerId\x12\x10\n" +
+	"\x03cut\x18\x03 \x01(\rR\x03cut\x12)\n" +
+	"\x10summarized_turns\x18\x04 \x01(\rR\x0fsummarizedTurns\x12\x1d\n" +
+	"\n" +
+	"kept_turns\x18\x05 \x01(\rR\tkeptTurns\x12\x14\n" +
+	"\x05model\x18\x06 \x01(\tR\x05model\x12%\n" +
+	"\x0econtext_tokens\x18\a \x01(\x04R\rcontextTokens\"\xb3\x01\n" +
+	"\x11CompactionOutcome\x12\x1b\n" +
+	"\tintent_id\x18\x01 \x01(\tR\bintentId\x12\x1b\n" +
+	"\tworker_id\x18\x02 \x01(\tR\bworkerId\x12\x18\n" +
+	"\asummary\x18\x03 \x01(\tR\asummary\x12.\n" +
+	"\x05usage\x18\x04 \x01(\v2\x18.actlet.gateway.v0.UsageR\x05usage\x12\x1a\n" +
+	"\battempts\x18\x05 \x01(\rR\battemptsB1Z/github.com/actlet/actlet/internal/agent/agentpbb\x06proto3"
 
 var (
 	file_internal_agent_agentpb_agent_proto_rawDescOnce sync.Once
@@ -1067,42 +1290,46 @@ func file_internal_agent_agentpb_agent_proto_rawDescGZIP() []byte {
 	return file_internal_agent_agentpb_agent_proto_rawDescData
 }
 
-var file_internal_agent_agentpb_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
+var file_internal_agent_agentpb_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
 var file_internal_agent_agentpb_agent_proto_goTypes = []any{
-	(*Checkpoint)(nil),       // 0: actlet.agent.v0.Checkpoint
-	(*PackedCheckpoint)(nil), // 1: actlet.agent.v0.PackedCheckpoint
-	(*CheckpointPart)(nil),   // 2: actlet.agent.v0.CheckpointPart
-	(*WorkerState)(nil),      // 3: actlet.agent.v0.WorkerState
-	(*InferenceIntent)(nil),  // 4: actlet.agent.v0.InferenceIntent
-	(*InferenceOutcome)(nil), // 5: actlet.agent.v0.InferenceOutcome
-	(*ToolIntent)(nil),       // 6: actlet.agent.v0.ToolIntent
-	(*ToolOutcome)(nil),      // 7: actlet.agent.v0.ToolOutcome
-	(*Spawn)(nil),            // 8: actlet.agent.v0.Spawn
-	(*WorkerDone)(nil),       // 9: actlet.agent.v0.WorkerDone
-	(*SteerDelivered)(nil),   // 10: actlet.agent.v0.SteerDelivered
-	(*v0.Message)(nil),       // 11: actlet.gateway.v0.Message
-	(*v0.Usage)(nil),         // 12: actlet.gateway.v0.Usage
-	(*v0.InferenceDone)(nil), // 13: actlet.gateway.v0.InferenceDone
+	(*Checkpoint)(nil),        // 0: actlet.agent.v0.Checkpoint
+	(*PackedCheckpoint)(nil),  // 1: actlet.agent.v0.PackedCheckpoint
+	(*CheckpointPart)(nil),    // 2: actlet.agent.v0.CheckpointPart
+	(*WorkerState)(nil),       // 3: actlet.agent.v0.WorkerState
+	(*InferenceIntent)(nil),   // 4: actlet.agent.v0.InferenceIntent
+	(*InferenceOutcome)(nil),  // 5: actlet.agent.v0.InferenceOutcome
+	(*ToolIntent)(nil),        // 6: actlet.agent.v0.ToolIntent
+	(*ToolOutcome)(nil),       // 7: actlet.agent.v0.ToolOutcome
+	(*Spawn)(nil),             // 8: actlet.agent.v0.Spawn
+	(*WorkerDone)(nil),        // 9: actlet.agent.v0.WorkerDone
+	(*SteerDelivered)(nil),    // 10: actlet.agent.v0.SteerDelivered
+	(*CompactionIntent)(nil),  // 11: actlet.agent.v0.CompactionIntent
+	(*CompactionOutcome)(nil), // 12: actlet.agent.v0.CompactionOutcome
+	(*v0.Message)(nil),        // 13: actlet.gateway.v0.Message
+	(*v0.Usage)(nil),          // 14: actlet.gateway.v0.Usage
+	(*v0.InferenceDone)(nil),  // 15: actlet.gateway.v0.InferenceDone
 }
 var file_internal_agent_agentpb_agent_proto_depIdxs = []int32{
 	3,  // 0: actlet.agent.v0.Checkpoint.workers:type_name -> actlet.agent.v0.WorkerState
 	1,  // 1: actlet.agent.v0.Checkpoint.packed:type_name -> actlet.agent.v0.PackedCheckpoint
-	11, // 2: actlet.agent.v0.WorkerState.messages:type_name -> actlet.gateway.v0.Message
-	12, // 3: actlet.agent.v0.WorkerState.usage:type_name -> actlet.gateway.v0.Usage
+	13, // 2: actlet.agent.v0.WorkerState.messages:type_name -> actlet.gateway.v0.Message
+	14, // 3: actlet.agent.v0.WorkerState.usage:type_name -> actlet.gateway.v0.Usage
 	4,  // 4: actlet.agent.v0.WorkerState.inference:type_name -> actlet.agent.v0.InferenceIntent
-	11, // 5: actlet.agent.v0.WorkerState.pending:type_name -> actlet.gateway.v0.Message
+	13, // 5: actlet.agent.v0.WorkerState.pending:type_name -> actlet.gateway.v0.Message
 	6,  // 6: actlet.agent.v0.WorkerState.intents:type_name -> actlet.agent.v0.ToolIntent
 	7,  // 7: actlet.agent.v0.WorkerState.results:type_name -> actlet.agent.v0.ToolOutcome
 	9,  // 8: actlet.agent.v0.WorkerState.done:type_name -> actlet.agent.v0.WorkerDone
-	11, // 9: actlet.agent.v0.InferenceOutcome.message:type_name -> actlet.gateway.v0.Message
-	13, // 10: actlet.agent.v0.InferenceOutcome.done:type_name -> actlet.gateway.v0.InferenceDone
-	12, // 11: actlet.agent.v0.ToolOutcome.usage:type_name -> actlet.gateway.v0.Usage
-	3,  // 12: actlet.agent.v0.Spawn.worker:type_name -> actlet.agent.v0.WorkerState
-	13, // [13:13] is the sub-list for method output_type
-	13, // [13:13] is the sub-list for method input_type
-	13, // [13:13] is the sub-list for extension type_name
-	13, // [13:13] is the sub-list for extension extendee
-	0,  // [0:13] is the sub-list for field type_name
+	11, // 9: actlet.agent.v0.WorkerState.compacting:type_name -> actlet.agent.v0.CompactionIntent
+	13, // 10: actlet.agent.v0.InferenceOutcome.message:type_name -> actlet.gateway.v0.Message
+	15, // 11: actlet.agent.v0.InferenceOutcome.done:type_name -> actlet.gateway.v0.InferenceDone
+	14, // 12: actlet.agent.v0.ToolOutcome.usage:type_name -> actlet.gateway.v0.Usage
+	3,  // 13: actlet.agent.v0.Spawn.worker:type_name -> actlet.agent.v0.WorkerState
+	14, // 14: actlet.agent.v0.CompactionOutcome.usage:type_name -> actlet.gateway.v0.Usage
+	15, // [15:15] is the sub-list for method output_type
+	15, // [15:15] is the sub-list for method input_type
+	15, // [15:15] is the sub-list for extension type_name
+	15, // [15:15] is the sub-list for extension extendee
+	0,  // [0:15] is the sub-list for field type_name
 }
 
 func init() { file_internal_agent_agentpb_agent_proto_init() }
@@ -1116,7 +1343,7 @@ func file_internal_agent_agentpb_agent_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_internal_agent_agentpb_agent_proto_rawDesc), len(file_internal_agent_agentpb_agent_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   11,
+			NumMessages:   13,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

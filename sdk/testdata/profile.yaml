@@ -41,3 +41,7 @@ instructions: |
 tools_manifest: |
   jq and ripgrep are installed.
 checkpoint_every_turns: 2
+compaction:
+  threshold_percent: 75
+  model: fast
+  keep_turns: 3

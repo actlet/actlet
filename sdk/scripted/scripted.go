@@ -34,9 +34,13 @@
 //	    text: It's about sales.
 //	    usage: {input: 300, output: 20}
 //	    cost: 0.001              # what the call cost, in the price's currency
+//	summary:                     # the answer to compaction calls
+//	  text: Read the input; the sum is 3.
+//	  usage: {input: 900, output: 40}
 //
 // The turn played is chosen by the number of model answers already in the
-// conversation, so a repeated call gets the same turn. A conversation
+// conversation, or, once a compaction summarised some, by the previous
+// turn's continuation, so a repeated call gets the same turn. A conversation
 // whose first message contains a subagent script's phrase plays that
 // script instead. A call that doesn't match the script (its tool results,
 // or the continuation of the previous turn) fails with
@@ -71,6 +75,8 @@ type Script struct {
 	// Decisions answer decide calls; LLM answers the llm tool's calls.
 	Decisions []Decision  `json:"decisions,omitempty"`
 	LLM       []LLMAnswer `json:"llm,omitempty"`
+	// Summary answers compaction calls; by default with a short text.
+	Summary *LLMAnswer `json:"summary,omitempty"`
 }
 
 // Decision answers the decide calls whose question contains Match.
@@ -246,6 +252,16 @@ func (m *Model) Calls() []Call {
 
 func continuation(turn int) []byte { return []byte("scripted:" + strconv.Itoa(turn)) }
 
+// continuationTurn returns the turn a continuation ended.
+func continuationTurn(c []byte) (int, bool) {
+	s, ok := strings.CutPrefix(string(c), "scripted:")
+	if !ok {
+		return 0, false
+	}
+	n, err := strconv.Atoi(s)
+	return n, err == nil
+}
+
 // Decides returns the intent IDs of the decide calls answered so far.
 func (m *Model) Decides() []string {
 	m.mu.Lock()
@@ -309,6 +325,32 @@ func (m *Model) serveLLM(call *sdk.InferenceCall) error {
 	return status.Errorf(codes.FailedPrecondition, "scripted model: no llm answer for the prompt %q", prompt.String())
 }
 
+// serveSummary answers a compaction call with the script's summary.
+func (m *Model) serveSummary(call *sdk.InferenceCall) error {
+	a := m.script.Summary
+	if a == nil {
+		a = &LLMAnswer{Text: "The earlier turns, summarised."}
+	}
+	in := 0
+	for _, msg := range call.Request.GetMessages() {
+		for _, p := range msg.GetParts() {
+			in += len(p.GetText())
+		}
+	}
+	m.mu.Lock()
+	m.calls = append(m.calls, Call{Intent: call.Request.GetIntentId(), Turn: 1, Time: time.Now(), Script: "summary"})
+	m.mu.Unlock()
+	if err := call.Text(a.Text); err != nil {
+		return err
+	}
+	usage := &gatewayv0.Usage{InputTokens: uint64(in/4 + 1), OutputTokens: uint64(len(a.Text)/4 + 1)}
+	if a.Usage != nil {
+		usage.InputTokens, usage.OutputTokens = a.Usage.Input, a.Usage.Output
+	}
+	m.price(usage, a.Cost)
+	return call.Done(&gatewayv0.InferenceDone{StopReason: gatewayv0.StopReason_STOP_REASON_END_TURN, Usage: usage})
+}
+
 // price sets a call's cost: the given one, or what the price makes of its
 // tokens.
 func (m *Model) price(usage *gatewayv0.Usage, cost *float64) {
@@ -326,8 +368,11 @@ func (m *Model) price(usage *gatewayv0.Usage, cost *float64) {
 
 // Serve answers a call with the script's turn for it.
 func (m *Model) Serve(ctx context.Context, call *sdk.InferenceCall) error {
-	if call.Request.GetPurpose() == "llm" {
+	switch call.Request.GetPurpose() {
+	case "llm":
 		return m.serveLLM(call)
+	case "compaction":
+		return m.serveSummary(call)
 	}
 	a, err := m.Answer(ctx, call.Request)
 	if err != nil {
@@ -365,6 +410,9 @@ func (m *Model) Answer(ctx context.Context, req *gatewayv0.InferenceRequest) (*A
 		if msg.GetRole() == gatewayv0.Role_ROLE_ASSISTANT {
 			n++
 		}
+	}
+	if k, ok := continuationTurn(req.GetContinuation()); ok && k > n {
+		n = k // a compaction summarised some answers
 	}
 	turns, script := m.script.Turns, ""
 	if msgs := req.GetMessages(); len(msgs) > 0 {

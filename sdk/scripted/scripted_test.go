@@ -229,3 +229,34 @@ llm:
 		t.Error("a cost without a price was accepted")
 	}
 }
+
+// Compaction calls get the summary, and a compacted conversation, with
+// fewer answers than turns played, plays on from its continuation.
+func TestCompaction(t *testing.T) {
+	m, err := Parse([]byte(`
+turns:
+  - text: one
+  - text: two
+  - text: three
+summary:
+  text: Said one and two.
+  usage: {input: 50, output: 5}
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, id := gateway(t, m)
+	msg := func(role gatewayv0.Role, s string) *gatewayv0.Message {
+		return &gatewayv0.Message{Role: role, Parts: []*gatewayv0.Part{{Part: &gatewayv0.Part_Text{Text: s}}}}
+	}
+	text, _, done, err := answer(t, c, &gatewayv0.InferenceRequest{SessionId: id, Epoch: 1, IntentId: "c1", Purpose: "compaction",
+		Messages: []*gatewayv0.Message{msg(gatewayv0.Role_ROLE_USER, "the transcript")}})
+	if err != nil || text != "Said one and two." || done.GetUsage().GetInputTokens() != 50 {
+		t.Fatalf("summary: %q %v %v", text, done, err)
+	}
+	text, _, _, err = answer(t, c, &gatewayv0.InferenceRequest{SessionId: id, Epoch: 1, IntentId: "t3", Continuation: continuation(2),
+		Messages: []*gatewayv0.Message{msg(gatewayv0.Role_ROLE_USER, "task and summary"), msg(gatewayv0.Role_ROLE_ASSISTANT, "two"), msg(gatewayv0.Role_ROLE_USER, "go on")}})
+	if err != nil || text != "three" {
+		t.Errorf("after the compaction: %q %v", text, err)
+	}
+}

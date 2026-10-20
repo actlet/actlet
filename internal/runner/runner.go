@@ -373,6 +373,18 @@ func effectiveConfig(cfg Config, p *gatewayv0.Profile) *sessionpb.Config {
 		}
 		return v
 	}
+	compaction := &gatewayv0.CompactionPolicy{
+		Strategy:         p.GetCompaction().GetStrategy(),
+		ThresholdPercent: orDefault(p.GetCompaction().GetThresholdPercent(), agent.DefaultCompactionThreshold),
+		Model:            p.GetCompaction().GetModel(),
+		KeepTurns:        orDefault(p.GetCompaction().GetKeepTurns(), agent.DefaultCompactionKeepTurns),
+	}
+	if compaction.Strategy == "" {
+		compaction.Strategy = "summarize"
+	}
+	if compaction.Model == "" {
+		compaction.Model = p.GetModels().GetRoles()["compaction"]
+	}
 	return &sessionpb.Config{
 		Model:                model,
 		SubagentModel:        subModel,
@@ -389,6 +401,7 @@ func effectiveConfig(cfg Config, p *gatewayv0.Profile) *sessionpb.Config {
 		SignalDeadline:       durationpb.New(cfg.SignalDeadline),
 		Budgets:              p.GetBudgets(),
 		LocalCommands:        attach.AllowedCommands(p.GetLocalAttach()),
+		Compaction:           compaction,
 	}
 }
 
@@ -443,6 +456,28 @@ func agentSettings(cfg Config, p *gatewayv0.Profile, effective *sessionpb.Config
 		},
 		Tools:    cfg.Tools,
 		LLMModel: p.GetModels().GetRoles()["llm"],
+	}
+	c := effective.GetCompaction()
+	switch c.GetStrategy() {
+	case "summarize":
+	case "off":
+		s.Compaction.Off = true
+	default:
+		return agent.Settings{}, fmt.Errorf("compaction strategy %q: want \"summarize\" or \"off\"", c.GetStrategy())
+	}
+	if c.GetThresholdPercent() > 100 {
+		return agent.Settings{}, fmt.Errorf("compaction threshold %d%%: over 100%%", c.GetThresholdPercent())
+	}
+	s.Compaction.ThresholdPercent = c.GetThresholdPercent()
+	s.Compaction.Model = c.GetModel()
+	s.Compaction.KeepTurns = int(c.GetKeepTurns())
+	for _, a := range p.GetModels().GetAliases() {
+		if a.GetContextWindow() > 0 {
+			if s.ContextWindows == nil {
+				s.ContextWindows = map[string]uint64{}
+			}
+			s.ContextWindows[a.GetAlias()] = a.GetContextWindow()
+		}
 	}
 	if s.LLMModel == "" {
 		s.LLMModel = p.GetModels().GetRoles()["processing"]

@@ -57,6 +57,9 @@ func TestLoadProfileYAMLAndJSONAgree(t *testing.T) {
 	if tools := pb.GetTools(); len(tools) != 2 || tools[1].GetSettings()["route"] != "humans" {
 		t.Errorf("tools %v", tools)
 	}
+	if c := pb.GetCompaction(); c.GetThresholdPercent() != 75 || c.GetModel() != "fast" || c.GetKeepTurns() != 3 {
+		t.Errorf("compaction %v", c)
+	}
 	if pb.GetInstructions() != "Write the report in British English.\n" || pb.GetToolsManifest() == "" || pb.GetCheckpointEveryTurns() != 2 {
 		t.Errorf("agent fields %q %q %d", pb.GetInstructions(), pb.GetToolsManifest(), pb.GetCheckpointEveryTurns())
 	}
@@ -124,10 +127,16 @@ func TestProfileValidation(t *testing.T) {
 		"selectable unknown alias": func(p *Profile) {
 			p.Models = &Models{Aliases: []ModelAlias{{Alias: "a"}}, Selectable: []string{"b"}}
 		},
-		"duplicate alias": func(p *Profile) { p.Models = &Models{Aliases: []ModelAlias{{Alias: "a"}, {Alias: "a"}}} },
-		"empty alias":     func(p *Profile) { p.Models = &Models{Aliases: []ModelAlias{{}}} },
-		"duplicate tool":  func(p *Profile) { p.Tools = []ToolGrant{{Name: "shell"}, {Name: "shell"}} },
-		"empty tool":      func(p *Profile) { p.Tools = []ToolGrant{{}} },
+		"duplicate alias":               func(p *Profile) { p.Models = &Models{Aliases: []ModelAlias{{Alias: "a"}, {Alias: "a"}}} },
+		"empty alias":                   func(p *Profile) { p.Models = &Models{Aliases: []ModelAlias{{}}} },
+		"duplicate tool":                func(p *Profile) { p.Tools = []ToolGrant{{Name: "shell"}, {Name: "shell"}} },
+		"empty tool":                    func(p *Profile) { p.Tools = []ToolGrant{{}} },
+		"unknown compaction strategy":   func(p *Profile) { p.Compaction = &Compaction{Strategy: "truncate"} },
+		"compaction threshold over 100": func(p *Profile) { p.Compaction = &Compaction{ThresholdPercent: 101} },
+		"compaction by unknown alias": func(p *Profile) {
+			p.Models = &Models{Aliases: []ModelAlias{{Alias: "a"}}}
+			p.Compaction = &Compaction{Model: "b"}
+		},
 	}
 	for name, mutate := range cases {
 		p := base()

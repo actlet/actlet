@@ -141,6 +141,8 @@ type Config struct {
 	// The budgets, and the commands a local viewer may send.
 	Budgets       []*v0.Budget `protobuf:"bytes,14,rep,name=budgets,proto3" json:"budgets,omitempty"`
 	LocalCommands []string     `protobuf:"bytes,15,rep,name=local_commands,json=localCommands,proto3" json:"local_commands,omitempty"`
+	// Context compaction, with its defaults filled in.
+	Compaction    *v0.CompactionPolicy `protobuf:"bytes,16,opt,name=compaction,proto3" json:"compaction,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -276,6 +278,13 @@ func (x *Config) GetBudgets() []*v0.Budget {
 func (x *Config) GetLocalCommands() []string {
 	if x != nil {
 		return x.LocalCommands
+	}
+	return nil
+}
+
+func (x *Config) GetCompaction() *v0.CompactionPolicy {
+	if x != nil {
+		return x.Compaction
 	}
 	return nil
 }
@@ -668,7 +677,7 @@ const file_internal_session_sessionpb_session_proto_rawDesc = "" +
 	"\x06config\x18\x03 \x01(\v2\x19.actlet.session.v0.ConfigR\x06config\x12\x18\n" +
 	"\aresumed\x18\x04 \x01(\bR\aresumed\x12\x1b\n" +
 	"\tworker_id\x18\x05 \x01(\tR\bworkerId\x12%\n" +
-	"\x0eactlet_version\x18\x06 \x01(\tR\ractletVersion\"\x87\x05\n" +
+	"\x0eactlet_version\x18\x06 \x01(\tR\ractletVersion\"\xcc\x05\n" +
 	"\x06Config\x12\x1d\n" +
 	"\n" +
 	"profile_id\x18\x01 \x01(\tR\tprofileId\x12'\n" +
@@ -688,7 +697,10 @@ const file_internal_session_sessionpb_session_proto_rawDesc = "" +
 	"\x12max_subagent_depth\x18\f \x01(\rR\x10maxSubagentDepth\x12#\n" +
 	"\rmax_subagents\x18\r \x01(\rR\fmaxSubagents\x123\n" +
 	"\abudgets\x18\x0e \x03(\v2\x19.actlet.gateway.v0.BudgetR\abudgets\x12%\n" +
-	"\x0elocal_commands\x18\x0f \x03(\tR\rlocalCommands\"\x9f\x02\n" +
+	"\x0elocal_commands\x18\x0f \x03(\tR\rlocalCommands\x12C\n" +
+	"\n" +
+	"compaction\x18\x10 \x01(\v2#.actlet.gateway.v0.CompactionPolicyR\n" +
+	"compaction\"\x9f\x02\n" +
 	"\aCommand\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x16\n" +
 	"\x06origin\x18\x02 \x01(\tR\x06origin\x12\x14\n" +
@@ -744,21 +756,23 @@ var file_internal_session_sessionpb_session_proto_goTypes = []any{
 	(*Ended)(nil),               // 6: actlet.session.v0.Ended
 	(*durationpb.Duration)(nil), // 7: google.protobuf.Duration
 	(*v0.Budget)(nil),           // 8: actlet.gateway.v0.Budget
-	(v0.BudgetKind)(0),          // 9: actlet.gateway.v0.BudgetKind
+	(*v0.CompactionPolicy)(nil), // 9: actlet.gateway.v0.CompactionPolicy
+	(v0.BudgetKind)(0),          // 10: actlet.gateway.v0.BudgetKind
 }
 var file_internal_session_sessionpb_session_proto_depIdxs = []int32{
-	1, // 0: actlet.session.v0.Started.config:type_name -> actlet.session.v0.Config
-	7, // 1: actlet.session.v0.Config.stop_grace:type_name -> google.protobuf.Duration
-	7, // 2: actlet.session.v0.Config.signal_deadline:type_name -> google.protobuf.Duration
-	8, // 3: actlet.session.v0.Config.budgets:type_name -> actlet.gateway.v0.Budget
-	7, // 4: actlet.session.v0.Command.stop_grace:type_name -> google.protobuf.Duration
-	1, // 5: actlet.session.v0.ConfigRevision.config:type_name -> actlet.session.v0.Config
-	9, // 6: actlet.session.v0.BudgetEvent.kind:type_name -> actlet.gateway.v0.BudgetKind
-	7, // [7:7] is the sub-list for method output_type
-	7, // [7:7] is the sub-list for method input_type
-	7, // [7:7] is the sub-list for extension type_name
-	7, // [7:7] is the sub-list for extension extendee
-	0, // [0:7] is the sub-list for field type_name
+	1,  // 0: actlet.session.v0.Started.config:type_name -> actlet.session.v0.Config
+	7,  // 1: actlet.session.v0.Config.stop_grace:type_name -> google.protobuf.Duration
+	7,  // 2: actlet.session.v0.Config.signal_deadline:type_name -> google.protobuf.Duration
+	8,  // 3: actlet.session.v0.Config.budgets:type_name -> actlet.gateway.v0.Budget
+	9,  // 4: actlet.session.v0.Config.compaction:type_name -> actlet.gateway.v0.CompactionPolicy
+	7,  // 5: actlet.session.v0.Command.stop_grace:type_name -> google.protobuf.Duration
+	1,  // 6: actlet.session.v0.ConfigRevision.config:type_name -> actlet.session.v0.Config
+	10, // 7: actlet.session.v0.BudgetEvent.kind:type_name -> actlet.gateway.v0.BudgetKind
+	8,  // [8:8] is the sub-list for method output_type
+	8,  // [8:8] is the sub-list for method input_type
+	8,  // [8:8] is the sub-list for extension type_name
+	8,  // [8:8] is the sub-list for extension extendee
+	0,  // [0:8] is the sub-list for field type_name
 }
 
 func init() { file_internal_session_sessionpb_session_proto_init() }

@@ -54,6 +54,8 @@ func (e *events) add(worker string, body any) {
 		ev.Body = &gatewayv0.ActivityEvent_Feedback{Feedback: b}
 	case *gatewayv0.BudgetStatus:
 		ev.Body = &gatewayv0.ActivityEvent_BudgetStatus{BudgetStatus: b}
+	case *gatewayv0.Compaction:
+		ev.Body = &gatewayv0.ActivityEvent_Compaction{Compaction: b}
 	case string:
 		ev.Body = &gatewayv0.ActivityEvent_Text{Text: &gatewayv0.Text{Text: b}}
 	default:
@@ -358,5 +360,26 @@ func TestProfileUpdateCommand(t *testing.T) {
 		if got := s.Log[0].Text; got != "command c1: "+tc.want+" accepted" {
 			t.Errorf("log %q", got)
 		}
+	}
+}
+
+// A compaction shows in its worker's timeline, and its call's usage
+// counts.
+func TestCompaction(t *testing.T) {
+	var e events
+	e.add("root", &gatewayv0.ModelTurn{Turn: 1, Model: "large", Usage: &gatewayv0.Usage{InputTokens: 900, OutputTokens: 10}})
+	e.add("root", &gatewayv0.Compaction{Model: "fast", SummarizedTurns: 1, KeptTurns: 4, ContextTokens: 910, Summary: "did things",
+		Usage: &gatewayv0.Usage{InputTokens: 800, OutputTokens: 40}})
+	s := fold(e.out)
+	w := s.Worker("root")
+	if len(w.Items) != 2 || w.Items[1].Kind != ItemSystem ||
+		w.Items[1].Text != "context compacted at 910 tokens: 1 turn summarised by fast, the last 4 kept" {
+		t.Errorf("items %+v", w.Items)
+	}
+	if w.Usage.Input != 1700 || s.Usage.Output != 50 {
+		t.Errorf("usage %+v, %+v", w.Usage, s.Usage)
+	}
+	if got := Describe(e.out[1]); got != "compaction (fast): 1 turns summarised, 4 kept, at 910 tokens" {
+		t.Errorf("describe %q", got)
 	}
 }
