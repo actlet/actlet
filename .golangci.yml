@@ -1,0 +1,24 @@
+version: "2"
+
+linters:
+  # The standard set (errcheck, govet, ineffassign, staticcheck, unused) plus a
+  # few cheap linters that catch real bugs. Style is left to gofmt/goimports.
+  default: standard
+  enable:
+    - bodyclose
+    - errorlint
+    - misspell
+    - nolintlint
+    - unconvert
+  settings:
+    errcheck:
+      exclude-functions:
+        # Writes of human-readable CLI output; a failed write has nowhere to be reported.
+        - fmt.Fprint
+        - fmt.Fprintf
+        - fmt.Fprintln
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
