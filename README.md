@@ -6,17 +6,18 @@ Actlet is deliberately not a web app, a model-provider gateway, a sandbox manage
 
 ## Status
 
-Early development. Nothing is usable yet: the repository currently holds only the build, test and CI scaffolding and a stub `actlet` binary.
+Early development. Nothing is usable yet. So far the repository holds the build, test and CI scaffolding and an experimental session journal: the crash-recoverable file Actlet will use to resume sessions ([format and guarantees](docs/journal-format.md)). `actlet journal inspect` and `actlet journal export --jsonl` read journals.
 
 ## Building and testing
 
-Requirements: Go 1.27 or newer and GNU Make. `make setup` installs the pinned version of `golangci-lint` used by `make check`.
+Requirements: Go 1.27 or newer and GNU Make. `make setup` installs the pinned versions of `golangci-lint`, used by `make check`, and `protoc-gen-go`, used by `make generate` (which also needs `protoc`).
 
 ```sh
-make setup   # download modules, install golangci-lint
+make setup   # download modules, install development tools
 make build   # build bin/actlet
 make test    # run the tests with the race detector
 make check   # gofmt, go vet, golangci-lint, go.mod tidiness
+make bench   # run the benchmarks
 make help    # list every target
 ```
 

@@ -1,0 +1,183 @@
+# Session journal format
+
+The session journal is the file Actlet uses to recover a session after a pause, a stop or a crash. It is the authoritative record of execution progress, so it has to stay readable after the process dies at any moment, and it must never claim that something is saved when it isn't.
+
+This document describes the on-disk format, what "durable" means for it, how a damaged journal is recovered, and what the format does **not** protect against.
+
+> **Status: experimental.** This is format version 0. The layout, the record schema and the guarantees below may change incompatibly, and version 0 journals may not be readable by later versions. The provisional file extension is `.actlet`.
+
+The implementation lives in `internal/journal`. Run `actlet journal inspect <file>` to look inside a journal and `actlet journal export --jsonl <file>` to dump its records.
+
+## Design in brief
+
+- **Append-only.** Records are only ever added at the end of the file. Nothing already written is modified in place. The only rewrite is when recovery cuts off an incomplete final batch.
+- **Batches.** Records are grouped into batches. Each batch is encoded and compressed on its own, checksummed, and closed by a commit trailer. A reader can validate and decode any batch without the ones before it, apart from the sequence-number check.
+- **One writer.** A single goroutine owns the file and writes batches in order. Any number of goroutines can submit records to it. An exclusive file lock keeps other processes out.
+- **Acknowledge after sync.** `Append` returns only after the batch holding the record has been written *and* synced to stable storage.
+- **Bounded reading.** Readers check every length against configured limits before allocating or reading anything, and they hold at most one batch in memory.
+
+## File layout
+
+All integers are little-endian.
+
+```
+file   := header batch*
+batch  := batch-header payload checksum trailer
+```
+
+### File header
+
+| Offset | Size | Field | Notes |
+|---:|---:|---|---|
+| 0 | 8 | magic | `89 41 43 54 4C 45 54 0A` (`\x89ACTLET\n`) |
+| 8 | 2 | format version | `0` |
+| 10 | 2 | flags | must be `0` |
+| 12 | 2 | session ID length *n* | 1–255 |
+| 14 | *n* | session ID | UTF-8 |
+| 14+*n* | 4 | header CRC | CRC-32C of bytes `0 .. 14+n` |
+
+The non-ASCII first byte and the trailing newline make it easy to spot a file that went through a text-mode transfer, or a file that isn't a journal at all.
+
+### Batch
+
+| Offset | Size | Field | Notes |
+|---:|---:|---|---|
+| 0 | 4 | batch magic | `AJBH` |
+| 4 | 1 | codec | `0` none, `1` zstd |
+| 5 | 1 | checksum algorithm | `1` CRC-32C |
+| 6 | 2 | flags | must be `0` |
+| 8 | 8 | first sequence number | |
+| 16 | 4 | record count | at least 1 |
+| 20 | 4 | stored payload length | bytes on disk |
+| 24 | 4 | raw payload length | bytes after decoding |
+| 28 | 4 | header CRC | CRC-32C of bytes `0 .. 28` |
+| 32 | *stored* | payload | encoded records |
+| 32+*stored* | 4 | batch checksum | over the 32-byte header and the payload |
+| 36+*stored* | 4 | commit trailer | `AJBC` |
+
+The batch header has its own CRC, which is always CRC-32C. The reader can then trust the lengths, or reject them, before it reads the payload. The batch checksum algorithm is recorded per batch so it can be swapped later. Framing costs 40 bytes per batch.
+
+### Payload and records
+
+The decoded payload is one Protobuf message (`internal/journal/journalpb/journal.proto`):
+
+```proto
+message Batch  { repeated Record records = 1; }
+message Record {
+  uint64 seq = 1;            // contiguous across the journal, starting at 1
+  string kind = 2;           // e.g. "tool.intent"; meaning defined by higher layers
+  int64  time_unix_nano = 3; // when the record was appended
+  bytes  data = 4;           // opaque to the storage layer
+}
+```
+
+The storage layer doesn't interpret `kind` or `data`. Schemas for execution state, checkpoints and tool operations belong to higher layers and will get their own versioning.
+
+Payloads are compressed with Zstandard at its fastest level, one frame per batch. If compression doesn't make a batch smaller, which is typical for single tiny records or random data, the batch is stored uncompressed with codec `0`.
+
+Sequence numbers are contiguous across batches. A reader rejects a batch whose first sequence number doesn't follow the previous batch, or whose records aren't numbered consecutively from it.
+
+## Writing and durability
+
+A record goes through four levels. The journal only ever reports the third:
+
+1. **Buffered:** handed to the writer, not yet in the file.
+2. **Written:** in the file, which may mean only the OS page cache.
+3. **Durable (acknowledged):** written and synced. `Append` returned a sequence number.
+4. **Survives replacement:** on storage that outlives the container or Pod. This is the deployment's job: use a volume that persists.
+
+To commit a batch, the writer:
+
+1. encodes the records and compresses the payload;
+2. writes header, payload, checksum and trailer with a single positioned write at the end of the valid data;
+3. syncs the file;
+4. only then answers every `Append` in the batch with its sequence number.
+
+Records that arrive while a batch is being synced wait and go into the next batch together (group commit), so a sync is shared by every concurrent appender. `BatchPolicy` caps records and bytes per batch. It can also make the first record wait up to `MaxDelay` for others to join it.
+
+**Creating** a journal uses exclusive create (it fails if the file exists), writes and syncs the header, and then syncs the parent directory. Without the directory sync, a crash could lose the directory entry and with it the whole file.
+
+**Platform behaviour of "sync":**
+
+- **Linux:** `fsync(2)`. On local filesystems such as ext4 and xfs this flushes the file's data and metadata and asks the device to flush its write cache.
+- **macOS:** Go's `File.Sync` issues `fcntl(F_FULLFSYNC)`, which also drains the drive's cache. Plain `fsync(2)` on macOS doesn't guarantee that data reaches stable storage across a power loss. `F_FULLFSYNC` does, but it costs several milliseconds per call.
+
+### When a write or sync fails
+
+Any failed or short write, or failed sync, **stops the writer**. The failing `Append` returns an error wrapping `ErrNotDurable`. Every later `Append` fails immediately with `ErrWriterFailed`, and the file isn't touched again. The journal has to be reopened, which recovers it as described below.
+
+A failed sync is never retried. On Linux, after `fsync` reports an error the kernel may already have marked the unwritten pages clean or dropped them. A second `fsync` can then "succeed" without the data ever reaching disk.
+
+### Unacknowledged records may survive
+
+A batch can be fully written but not acknowledged: the process dies between the write and the end of the sync, or the sync fails after the data reached the disk anyway. Such a batch is complete and valid, so recovery keeps it. **Reopening can therefore show records that no caller ever saw acknowledged.** Higher layers must treat records after the last acknowledged sequence number as uncertain, for example by using stable IDs and reconciling them, and must never assume they don't exist.
+
+`Append` also returns `ErrNotDurable` when its context ends after the record was handed to the writer: the record may still be written.
+
+## Recovery
+
+`Open` takes the lock, then reads the journal from the start and validates every batch. It stops at the first problem and classifies it:
+
+| What the reader finds | Classification | What `Open` does |
+|---|---|---|
+| End of file exactly after a batch | clean end | append after it |
+| Fewer bytes left than a batch header | **torn tail** | truncate, sync, append |
+| A valid batch header whose batch extends past end of file | **torn tail** | truncate, sync, append |
+| An invalid batch header, and only zero bytes until end of file | **torn tail** (the filesystem extended the file but the data never arrived) | truncate, sync, append |
+| A full-length batch whose trailer and everything after it are zero | **torn tail** | truncate, sync, append |
+| An invalid batch header followed by non-zero data | **corruption** | refuse to open, leave the file as is |
+| A bad commit trailer (not zero) | **corruption** | refuse |
+| A checksum mismatch in a batch with a valid trailer | **corruption** | refuse |
+| A payload that doesn't decode, a wrong record count or a sequence gap | **corruption** | refuse |
+| A length or count above the configured limits | **limit exceeded** | refuse |
+| An unknown format version, codec, checksum or flag | **unsupported** | refuse |
+
+The committed prefix is everything before the first problem. A torn tail was never acknowledged, so cutting it off loses nothing that was promised. Corruption inside complete data is never skipped or silently truncated. It is reported with its offset, and someone has to decide what to do. `actlet journal inspect` shows exactly where it is.
+
+The file header is written and synced before `Create` returns, so a journal with a damaged or missing header is reported as corrupt, never as torn.
+
+Readers don't take the lock. `actlet journal inspect` can look at a journal while it's being written, and it then usually sees a clean end, possibly a torn tail.
+
+## Limits
+
+Readers enforce these, and writers never produce anything beyond them. Defaults:
+
+| Limit | Default |
+|---|---|
+| decoded batch payload | 16 MiB |
+| stored batch payload | 16 MiB |
+| records per batch | 65,536 |
+| record data | 4 MiB |
+| record kind | 128 bytes |
+| session ID | 255 bytes |
+
+Lengths are checked before anything is allocated or read. The Zstandard decoder is capped at the decoded batch limit, for both output size and window size. A small "decompression bomb" frame is therefore rejected after allocating about the limit, not the size it claims or expands to. An oversized record is rejected by `Append` with `ErrLimit` and doesn't use up a sequence number.
+
+## Exclusive writer lock
+
+The writer takes `flock(LOCK_EX | LOCK_NB)` on the journal file and holds it until `Close`.
+
+What this guarantees:
+
+- A second writer, in another process or in the same process through a second `Open`, is refused with `ErrLocked`. Each open of the file has its own lock.
+- The lock is released automatically when the process exits or is killed. There are no stale lock files to clean up.
+- The file descriptor is close-on-exec, so child processes don't inherit the lock.
+- If the filesystem doesn't support `flock` and returns an error other than "already locked", `Open` and `Create` fail. They don't continue unprotected.
+
+What it doesn't guarantee:
+
+- **It is advisory.** Code that writes to the file without going through this package isn't stopped.
+- **Network and shared filesystems.** On Linux NFS, `flock` is emulated with NFS byte-range locks. Those depend on the lock service and on leases, and a lease that lapses during a network partition can let a second client take the lock while the first still believes it holds it. SMB/CIFS and FUSE filesystems vary, and some accept the lock without enforcing it. macOS NFS mounts may reject `flock` entirely, and the writer then fails closed. **Keep journals on a local filesystem:** a node-local disk, or a block volume mounted by one node (for example a Kubernetes `ReadWriteOncePod` volume).
+- **Other machines.** A lock can't stop a writer on another node that mounts the same block device. Single-attachment volumes, or an orchestrator-side lease, have to prevent that.
+
+## What the journal does not protect against
+
+- Losing or deleting the volume. The journal can only be as durable as the storage under it.
+- Storage that lies about syncing: drive caches without power-loss protection, or a hypervisor or network block layer that acknowledges flushes it hasn't done.
+- Media corruption in general. Checksums *detect* corruption; they can't repair it.
+- Tampering. CRC-32C isn't a cryptographic hash, and compression isn't encryption. Don't store credentials in a journal.
+- Side effects that already happened outside the journal, such as a command that ran or a file that was written, and workspace files the journal doesn't contain.
+
+### A note on power loss
+
+The process-kill tests show that a killed process leaves a valid journal: a write either completes in the page cache or doesn't happen. A power loss is different. Writes that haven't been synced can reach the disk partially and out of order, for example a batch's trailer without all of its payload. Because nothing unsynced was ever acknowledged, such a batch is always the *last* one in the file. It still fails its checksum and is currently reported as corruption rather than as a torn tail, which is the conservative choice. Whether a checksum failure in the final batch should be treated as a torn tail is an open design question.
