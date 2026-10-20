@@ -808,25 +808,28 @@ func (m *Model) budgetLine(b view.BudgetState) string {
 }
 
 // budgetUsed is what the session has used of a budget: the latest figure
-// the viewer has, from the model calls or the budget status.
+// the viewer has, from the budget status or, as usage only grows, the
+// model calls and the time since, if they say more.
 func (m *Model) budgetUsed(b view.BudgetState) (float64, bool) {
 	s := m.sess
 	used, ok := b.Used, b.Used >= 0
+	live := -1.0
 	switch b.Kind {
 	case gatewayv0.BudgetKind_BUDGET_KIND_MONEY:
-		if s.Usage.Cost > 0 && s.Usage.Currency == b.Currency && s.Usage.Cost > used {
-			return s.Usage.Cost, true
+		if s.Usage.Cost > 0 && s.Usage.Currency == b.Currency {
+			live = s.Usage.Cost
 		}
 	case gatewayv0.BudgetKind_BUDGET_KIND_TOKENS:
-		if n := float64(s.Usage.Input + s.Usage.Output); n > 0 && !ok {
-			return n, true
+		if n := s.Usage.Input + s.Usage.Output; n > 0 {
+			live = float64(n)
 		}
 	case gatewayv0.BudgetKind_BUDGET_KIND_TIME:
-		if !ok {
-			if d, ok := m.elapsedTime(); ok {
-				return d.Seconds(), true
-			}
+		if d, ok := m.elapsedTime(); ok {
+			live = d.Seconds()
 		}
+	}
+	if live > used {
+		return live, true
 	}
 	return used, ok
 }
