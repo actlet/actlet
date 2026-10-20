@@ -1,0 +1,38 @@
+# A routing table for actlet-devgw -providers: which provider and model
+# answers each model alias of the profile. The keys come from the
+# environment variables named here; nothing else holds them.
+#
+# Model names and prices are illustrative: use your providers' current
+# model names and prices.
+providers:
+  claude:
+    type: anthropic
+    api_key_env: ANTHROPIC_API_KEY
+  gpt:
+    type: openai
+    api_key_env: OPENAI_API_KEY
+  luna:                              # an OpenAI-compatible endpoint
+    type: openai
+    base_url: https://luna.example.com/v1
+    api_key_env: LUNA_API_KEY
+    max_tokens_field: max_tokens
+  nexos:
+    type: nexos
+    api_key_env: NEXOS_API_KEY
+  jev:
+    type: typesafe
+    api_key_env: TYPESAFE_API_KEY
+
+prices:                              # per million tokens, by model name
+  claude-sonnet-4-5: {currency: USD, input: 3, output: 15, cache_read: 0.3, cache_write: 3.75}
+  gpt-5-mini: {currency: USD, input: 0.25, output: 2, cache_read: 0.025}
+
+routes:
+  - {alias: main, provider: claude, model: claude-sonnet-4-5, params: {max_tokens: 8192}}
+  - {alias: large, provider: claude, model: claude-sonnet-4-5, params: {max_tokens: 8192}}
+  - {alias: fast, provider: gpt, model: gpt-5-mini}
+  - {alias: large, purpose: llm, provider: gpt, model: gpt-5-mini}   # side work goes to the cheaper model
+
+decide:                              # answers the agent's decide calls
+  provider: jev
+  model: jev-latest

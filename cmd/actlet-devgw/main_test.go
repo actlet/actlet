@@ -19,6 +19,7 @@ import (
 	"github.com/actlet/actlet/internal/runner"
 	"github.com/actlet/actlet/internal/session"
 	"github.com/actlet/actlet/sdk"
+	"github.com/actlet/actlet/sdk/adapters/router"
 	"github.com/actlet/actlet/sdk/scripted"
 )
 
@@ -197,6 +198,10 @@ func TestExamplesLoad(t *testing.T) {
 				t.Errorf("%s: %v", dir, err)
 			}
 		}
+	}
+	r, err := router.Load(filepath.Join("..", "..", "examples", "providers.yaml"), func(string) string { return "a-key" })
+	if err != nil || !r.Decides() || len(r.Aliases()) != 4 {
+		t.Errorf("providers.yaml: %v", err)
 	}
 }
 

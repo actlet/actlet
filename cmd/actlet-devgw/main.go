@@ -29,6 +29,7 @@ import (
 	"github.com/actlet/actlet/internal/buildinfo"
 	gatewayv0 "github.com/actlet/actlet/proto/actlet/gateway/v0"
 	"github.com/actlet/actlet/sdk"
+	"github.com/actlet/actlet/sdk/adapters/router"
 	"github.com/actlet/actlet/sdk/scripted"
 )
 
@@ -77,6 +78,7 @@ type config struct {
 	drainTimeout time.Duration
 	heartbeat    time.Duration
 	modelScript  string
+	providers    string
 }
 
 func main() {
@@ -107,6 +109,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	fs.StringVar(&cfg.demoDef, "demo", `{"steps":5,"step":"2s","ticks":2}`, "definition of the default demo task")
 	fs.StringVar(&cfg.demoInput, "demo-input", `{"message":"hello from actlet-devgw"}`, "input of the default demo task")
 	fs.StringVar(&cfg.modelScript, "model", "", "serve model calls from this script of turns, YAML or JSON (default: no model)")
+	fs.StringVar(&cfg.providers, "providers", "", "serve model and decide calls with real providers, routed by this table, YAML or JSON; keys come from the environment variables it names")
 	fs.StringVar(&cfg.profile, "profile", "", "profile file to assign, JSON or YAML (default: built from the flags below)")
 	fs.StringVar(&cfg.profileID, "profile-id", "dev", "ID of the default profile")
 	fs.StringVar(&cfg.pauseMode, "pause-mode", "drain", "default profile's pause mode on SIGTERM: drain or interrupt")
@@ -226,6 +229,35 @@ func newGateway(cfg config, out io.Writer, log *slog.Logger) (*gateway, error) {
 	}
 	if cfg.token != "" {
 		opts.Authenticate = sdk.StaticToken(cfg.token)
+	}
+	if cfg.modelScript != "" && cfg.providers != "" {
+		return nil, errors.New("use -model or -providers, not both")
+	}
+	if cfg.providers != "" {
+		r, err := router.Load(cfg.providers, os.Getenv)
+		if err != nil {
+			return nil, err
+		}
+		opts.OnInference = func(ctx context.Context, call *sdk.InferenceCall) error {
+			req := call.Request
+			g.printf("[%s] model call %s (%s, %s, %d messages)", short(req.GetSessionId()), short(req.GetIntentId()), req.GetModel(), req.GetPurpose(), len(req.GetMessages()))
+			err := r.OnInference(ctx, call)
+			if err != nil {
+				g.printf("[%s] model call %s failed: %v", short(req.GetSessionId()), short(req.GetIntentId()), err)
+			}
+			return err
+		}
+		if r.Decides() {
+			opts.OnDecide = func(ctx context.Context, d *sdk.DecideRequest) (*sdk.Decision, error) {
+				g.printf("[%s] %s asks to decide: %s", short(d.Session.ID()), d.Worker, oneLine(d.Question, 120))
+				dec, err := r.OnDecide(ctx, d)
+				if err == nil {
+					g.printf("[%s] decided: %s", short(d.Session.ID()), dec.Decision)
+				}
+				return dec, err
+			}
+		}
+		log.Info("serving models through providers", "routes", strings.Join(r.Aliases(), ", "), "decide", r.Decides())
 	}
 	if cfg.modelScript != "" {
 		model, err := scripted.Load(cfg.modelScript)
