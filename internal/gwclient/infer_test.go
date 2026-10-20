@@ -160,3 +160,22 @@ func TestCallToolRetries(t *testing.T) {
 		t.Errorf("refused call: %v after %d attempts", err, len(intents))
 	}
 }
+
+// Rate limits are retried; a call larger than the gateway accepts is not,
+// since it stays too large.
+func TestRetryable(t *testing.T) {
+	for _, tc := range []struct {
+		err  error
+		want bool
+	}{
+		{status.Error(codes.ResourceExhausted, "rate limited"), true},
+		{status.Error(codes.ResourceExhausted, "grpc: received message larger than max (5242880 vs. 4194304)"), false},
+		{status.Error(codes.Unavailable, "down"), true},
+		{status.Error(codes.InvalidArgument, "bad"), false},
+		{errIdle, true},
+	} {
+		if got := retryable(tc.err); got != tc.want {
+			t.Errorf("%v: retryable %v", tc.err, got)
+		}
+	}
+}

@@ -5,11 +5,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 
 	gatewayv0 "github.com/actlet/actlet/proto/actlet/gateway/v0"
 )
@@ -35,10 +37,19 @@ func retryable(err error) bool {
 		return true
 	}
 	switch status.Code(err) {
-	case codes.Unavailable, codes.ResourceExhausted, codes.Aborted, codes.DeadlineExceeded, codes.NotFound:
+	case codes.ResourceExhausted:
+		// A rate limit passes; a call larger than the gateway accepts
+		// stays too large.
+		return !tooLarge(err)
+	case codes.Unavailable, codes.Aborted, codes.DeadlineExceeded, codes.NotFound:
 		return true
 	}
 	return false
+}
+
+// tooLarge reports gRPC refusing a message for its size.
+func tooLarge(err error) bool {
+	return strings.Contains(status.Convert(err).Message(), "larger than max")
 }
 
 // Infer makes a model call. It retries transient failures with backoff,
@@ -54,6 +65,10 @@ func (c *Client) Infer(ctx context.Context, req *gatewayv0.InferenceRequest, rer
 		}
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
+		}
+		if tooLarge(err) {
+			return nil, fmt.Errorf("model call of %d bytes, more than the gateway accepts (gateways built on the SDK take %d): %w",
+				proto.Size(req), maxReceive, err)
 		}
 		if !retryable(err) {
 			return nil, fmt.Errorf("model call: %w", err)

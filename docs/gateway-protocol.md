@@ -140,6 +140,8 @@ An agent's model calls go to the gateway: Actlet holds no provider SDKs, endpoin
 
 The answer streams text deltas and complete tool calls in the order the model produced them, then `done`: the stop reason (`end_turn`, `tool_use`, `max_tokens`, `refusal`), token usage (with the call's `cost` and `currency` when the gateway knows them) and the next continuation.
 
+A call carries the whole conversation, which can be large before the worker [compacts it](agent.md#context-compaction), so a gateway must accept messages of up to 64 MiB, more than gRPC's default 4 MiB; `sdk.ServerOptions` sets it. A worker whose call is refused for its size fails the session with that reason rather than retrying.
+
 A call is never continued after an interruption. The worker discards what an interrupted attempt received and makes the call again from its last journaled state, with the same intent ID. It retries `UNAVAILABLE`, `RESOURCE_EXHAUSTED`, `ABORTED` and `DEADLINE_EXCEEDED`, and an answer that ends without `done` or goes quiet for five minutes; `NOT_FOUND` makes it register again first. Any other error fails the session with the gateway's message.
 
 `sdk.Options.OnInference` serves calls in Go. The SDK keeps recent answers by intent ID (`InferenceCache`, 256 by default): a repeated call gets the same answer, marked `replayed`, without reaching `OnInference`, and a repeat of a call still running waits for it. The cache is in memory; a gateway with several replicas, or one that restarts, can recognise intent IDs itself. A draining gateway lets running calls finish.

@@ -122,10 +122,17 @@ func StaticToken(token string) func(context.Context, string) error {
 	}
 }
 
-// ServerOptions returns gRPC server options that match the keepalive
-// settings Actlet workers use. Pass them to grpc.NewServer.
+// MaxMessageSize is the largest message a gateway must accept from a
+// worker: a model call carries the whole conversation, which can be large
+// before the worker compacts it. gRPC's default is 4 MiB.
+const MaxMessageSize = 64 << 20
+
+// ServerOptions returns gRPC server options that match what Actlet
+// workers send: the keepalive settings they use, and messages up to
+// MaxMessageSize. Pass them to grpc.NewServer.
 func ServerOptions() []grpc.ServerOption {
 	return []grpc.ServerOption{
+		grpc.MaxRecvMsgSize(MaxMessageSize),
 		grpc.KeepaliveEnforcementPolicy(keepalive.EnforcementPolicy{
 			MinTime:             5 * time.Second,
 			PermitWithoutStream: true,

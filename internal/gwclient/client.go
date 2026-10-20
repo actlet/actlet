@@ -137,6 +137,8 @@ func New(cfg Config) (*Client, error) {
 			Timeout:             10 * time.Second,
 			PermitWithoutStream: true,
 		}),
+		// A registration's profile can carry skills of a few MiB.
+		grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(maxReceive)),
 	}
 	if cfg.Token != "" {
 		opts = append(opts, grpc.WithPerRPCCredentials(bearer{token: cfg.Token, tls: cfg.TLS}))
@@ -597,3 +599,6 @@ func (c *Client) activityOnce(ctx context.Context, sessionID string, src Activit
 		mu.Unlock()
 	}
 }
+
+// maxReceive bounds a message from the gateway.
+const maxReceive = 64 << 20
