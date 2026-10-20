@@ -101,6 +101,19 @@ message Profile {
   // How many model turns pass between execution checkpoints. 0 means
   // every turn.
   uint32 checkpoint_every_turns = 14;
+  // What a viewer attached to the box itself, such as the local TUI, may
+  // do.
+  LocalAttach local_attach = 15;
+}
+
+// LocalAttach controls viewers attached to the box itself. The
+// orchestrator's commands always take precedence.
+message LocalAttach {
+  // Commands a local viewer may send: "steer", "pause" and "stop". Empty
+  // allows steer notes only; ["none"] allows nothing.
+  repeated string commands = 1;
+  // No local attach at all.
+  bool disabled = 2;
 }
 
 message Budget {
@@ -157,6 +170,8 @@ message ModelAlias {
   string alias = 1;
   string description = 2;
   repeated string capabilities = 3;
+  // The model's context window in tokens, when known.
+  uint64 context_window = 4;
 }
 
 // ToolGrant allows the session to use a tool.
@@ -368,7 +383,38 @@ message ActivityEvent {
     FileChange file_change = 19;
     SubagentSpawned subagent_spawned = 20;
     SubagentFinished subagent_finished = 21;
+    SessionInfo session_info = 22;
   }
+}
+
+// SessionInfo describes a run once, at its start, for viewers: its task,
+// effective configuration and tools.
+message SessionInfo {
+  string task_id = 1;
+  string task_kind = 2;
+  // task.json, possibly cut short.
+  string task = 3;
+  // The run's effective configuration, as JSON.
+  string config = 4;
+  repeated Budget budgets = 5;
+  ModelCatalog models = 6;
+  // The tools the agent has, and the profile's grants.
+  repeated ToolInfo tools = 7;
+  repeated ToolGrant grants = 8;
+  // What is installed, from the tools manifests, possibly cut short.
+  string tools_manifest = 9;
+  string worker_id = 10;
+  string actlet_version = 11;
+  // Commands a local viewer may send.
+  repeated string local_commands = 12;
+}
+
+message ToolInfo {
+  string name = 1;
+  // What recovery does with an interrupted call: "retry", "reconcile",
+  // "never" or "spawn".
+  string policy = 2;
+  string description = 3;
 }
 
 message SessionStarted {
@@ -458,6 +504,8 @@ message SubagentSpawned {
   // The subtask, possibly cut short.
   string task = 2;
   string model = 3;
+  // The parent's spawn_subagent call that waits for it.
+  string call_id = 4;
 }
 
 // SubagentFinished is a subagent ending; its result goes back to its
@@ -571,4 +619,7 @@ message Usage {
   uint64 output_tokens = 2;
   uint64 cache_read_tokens = 3;
   uint64 cache_write_tokens = 4;
+  // What the call cost, in currency, when the gateway knows.
+  double cost = 5;
+  string currency = 6;
 }

@@ -17,7 +17,9 @@
 //	        input: {code: "print(1 + 2)"}
 //	    delay: 1s                # answer after a pause
 //	    expect_once: [metric]    # texts the conversation has exactly once
+//	    usage: {input: 1200, output: 80}  # tokens to report
 //	  - text: The sum is 3.     # no tool calls: the task ends
+//	price: {currency: EUR, input: 3, output: 15}  # per million tokens
 //	subagents:                   # scripts for subagents, by their subtask
 //	  - match: count the words   # a phrase in the subtask
 //	    turns:
@@ -54,6 +56,21 @@ import (
 type Script struct {
 	Turns     []Turn      `json:"turns"`
 	Subagents []Subscript `json:"subagents,omitempty"`
+	// Price, if set, makes each call report a cost.
+	Price *Price `json:"price,omitempty"`
+}
+
+// Price is what tokens cost, per million.
+type Price struct {
+	Currency string  `json:"currency"`
+	Input    float64 `json:"input"`
+	Output   float64 `json:"output"`
+}
+
+// TurnUsage sets the tokens a turn reports.
+type TurnUsage struct {
+	Input  uint64 `json:"input"`
+	Output uint64 `json:"output"`
 }
 
 // Subscript is the script of the subagents whose subtask contains Match.
@@ -77,6 +94,9 @@ type Turn struct {
 	// Delay holds the answer back, to try pausing or crashing during a
 	// model call.
 	Delay sdk.Duration `json:"delay,omitempty"`
+	// Usage sets the tokens the turn reports; by default they follow the
+	// conversation's length.
+	Usage *TurnUsage `json:"usage,omitempty"`
 }
 
 // ToolCall is a tool the model calls.
@@ -261,9 +281,17 @@ func (m *Model) Serve(ctx context.Context, call *sdk.InferenceCall) error {
 			in += len(p.GetText()) + len(p.GetToolResult().GetContent()) + len(p.GetToolCall().GetInput())
 		}
 	}
+	usage := &gatewayv0.Usage{InputTokens: uint64(in/4 + 1), OutputTokens: uint64(len(turn.Text)/4 + 1)}
+	if turn.Usage != nil {
+		usage.InputTokens, usage.OutputTokens = turn.Usage.Input, turn.Usage.Output
+	}
+	if p := m.script.Price; p != nil {
+		usage.Cost = (float64(usage.InputTokens)*p.Input + float64(usage.OutputTokens)*p.Output) / 1e6
+		usage.Currency = p.Currency
+	}
 	return call.Done(&gatewayv0.InferenceDone{
 		StopReason:   stop,
-		Usage:        &gatewayv0.Usage{InputTokens: uint64(in/4 + 1), OutputTokens: uint64(len(turn.Text)/4 + 1)},
+		Usage:        usage,
 		Continuation: continuation(n + 1),
 	})
 }

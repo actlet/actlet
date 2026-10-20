@@ -56,6 +56,18 @@ type Profile struct {
 	// CheckpointEveryTurns is the number of model turns between execution
 	// checkpoints; 0 means every turn.
 	CheckpointEveryTurns uint32 `json:"checkpoint_every_turns,omitempty"`
+	// LocalAttach controls viewers attached to the box itself.
+	LocalAttach *LocalAttach `json:"local_attach,omitempty"`
+}
+
+// LocalAttach controls viewers attached to the box itself, such as the
+// local TUI.
+type LocalAttach struct {
+	// Commands they may send: "steer", "pause", "stop". Empty allows steer
+	// notes only; ["none"] allows nothing.
+	Commands []string `json:"commands,omitempty"`
+	// Disabled turns local attach off.
+	Disabled bool `json:"disabled,omitempty"`
 }
 
 // Limits caps concurrency. Zero means the worker's deployment ceiling.
@@ -104,6 +116,8 @@ type ModelAlias struct {
 	Alias        string   `json:"alias"`
 	Description  string   `json:"description,omitempty"`
 	Capabilities []string `json:"capabilities,omitempty"`
+	// ContextWindow is the model's context window in tokens, if known.
+	ContextWindow uint64 `json:"context_window,omitempty"`
 }
 
 // ToolGrant allows a tool.
@@ -217,6 +231,19 @@ func (p *Profile) Validate() error {
 			}
 		}
 	}
+	if la := p.LocalAttach; la != nil {
+		for _, c := range la.Commands {
+			switch c {
+			case "steer", "pause", "stop":
+			case "none":
+				if len(la.Commands) > 1 {
+					bad("local_attach.commands: \"none\" can't be combined with others")
+				}
+			default:
+				bad("local_attach.commands: unknown command %q; use steer, pause, stop or none", c)
+			}
+		}
+	}
 	tools := map[string]bool{}
 	for i, t := range p.Tools {
 		if t.Name == "" {
@@ -265,6 +292,9 @@ func (p *Profile) Proto() (*gatewayv0.Profile, error) {
 
 		CheckpointEveryTurns: p.CheckpointEveryTurns,
 	}
+	if la := p.LocalAttach; la != nil {
+		out.LocalAttach = &gatewayv0.LocalAttach{Commands: la.Commands, Disabled: la.Disabled}
+	}
 	if p.DefaultPauseMode == "interrupt" {
 		out.DefaultPauseMode = gatewayv0.PauseMode_PAUSE_MODE_INTERRUPT
 	}
@@ -285,7 +315,7 @@ func (p *Profile) Proto() (*gatewayv0.Profile, error) {
 		out.Models = &gatewayv0.ModelCatalog{Roles: m.Roles, Selectable: m.Selectable}
 		for _, a := range m.Aliases {
 			out.Models.Aliases = append(out.Models.Aliases, &gatewayv0.ModelAlias{
-				Alias: a.Alias, Description: a.Description, Capabilities: a.Capabilities,
+				Alias: a.Alias, Description: a.Description, Capabilities: a.Capabilities, ContextWindow: a.ContextWindow,
 			})
 		}
 	}

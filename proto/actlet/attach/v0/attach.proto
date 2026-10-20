@@ -1,0 +1,115 @@
+// Actlet attach protocol, version 0.
+//
+// A running Actlet box serves it to viewers: the local TUI over a Unix
+// socket in the session folder, and the same calls can serve remote
+// viewers. Viewers watch the session's activity and may send the commands
+// the profile allows. Execution never depends on a viewer: a viewer that
+// reads too slowly skips events rather than holding the box up.
+//
+// EXPERIMENTAL (v0): messages may change incompatibly until v1.
+
+syntax = "proto3";
+
+package actlet.attach.v0;
+
+import "actlet/gateway/v0/gateway.proto";
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/actlet/actlet/proto/actlet/attach/v0;attachv0";
+
+service Attach {
+  // Info describes the session, the box's resource use and what the
+  // viewer may do. Viewers call it again to refresh the figures.
+  rpc Info(InfoRequest) returns (InfoResponse);
+
+  // Watch streams the run's activity: the events the box still holds
+  // after the requested sequence number, then new ones as they happen.
+  rpc Watch(WatchRequest) returns (stream WatchResponse);
+
+  // Command sends a command as a local operator, if the profile allows
+  // it. It is recorded with origin "local" and acknowledged like any
+  // other.
+  rpc Command(CommandRequest) returns (actlet.gateway.v0.CommandAck);
+
+  // ReadFile returns a file of the session, read only: one in inputs/,
+  // workspace/ or output/, never outside them, also not through symbolic
+  // links. A large file is cut short.
+  rpc ReadFile(ReadFileRequest) returns (ReadFileResponse);
+}
+
+message InfoRequest {}
+
+message InfoResponse {
+  string session_id = 1;
+  uint64 epoch = 2;
+  string worker_id = 3;
+  string actlet_version = 4;
+  actlet.gateway.v0.SessionState state = 5;
+  // Commands this viewer may send: "steer", "pause", "stop".
+  repeated string commands = 6;
+  Stats stats = 7;
+}
+
+// Stats are the box's figures now.
+message Stats {
+  google.protobuf.Timestamp started = 1;
+  // Bytes in the session folder, and in output/.
+  int64 folder_bytes = 2;
+  int64 output_bytes = 3;
+  // Memory the process holds from the operating system, and CPU time it
+  // has used.
+  uint64 memory_bytes = 4;
+  google.protobuf.Duration cpu = 5;
+  // The gateway's address, and whether the control stream is up.
+  string gateway = 6;
+  bool gateway_connected = 7;
+}
+
+message WatchRequest {
+  // Send events after this sequence number of the current run; 0 sends
+  // everything the box still holds.
+  uint64 after_seq = 1;
+}
+
+message WatchResponse {
+  oneof msg {
+    actlet.gateway.v0.ActivityEvent event = 1;
+    Skipped skipped = 2;
+  }
+}
+
+// Skipped reports events the viewer won't get: older than what the box
+// holds, or dropped because the viewer read too slowly.
+message Skipped {
+  uint64 count = 1;
+  string reason = 2;
+}
+
+message CommandRequest {
+  // Who sends it, for the record, such as "local tui".
+  string actor = 1;
+  oneof action {
+    actlet.gateway.v0.Steer steer = 10;
+    actlet.gateway.v0.Pause pause = 11;
+    actlet.gateway.v0.Stop stop = 12;
+  }
+}
+
+message ReadFileRequest {
+  // The path as tools show it: relative to workspace/, such as
+  // "report.md" or "../output/report.md".
+  string path = 1;
+}
+
+message ReadFileResponse {
+  // The path relative to the session folder, such as
+  // "output/report.md".
+  string path = 1;
+  // The start of the file, up to the limit.
+  bytes content = 2;
+  int64 size = 3;
+  bool truncated = 4;
+  // The file holds binary data, which isn't returned.
+  bool binary = 5;
+}
