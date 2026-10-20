@@ -403,6 +403,52 @@ func TestRecordingStoreSurvivesRestart(t *testing.T) {
 	}
 }
 
+// Two replicas share a recording directory. Once the worker's activity
+// streams to one replica end, the other can take the session over, while
+// the first keeps running.
+func TestRecordingHandover(t *testing.T) {
+	dir := t.TempDir()
+	stores := make([]*RecordingStore, 2)
+	replicas := make([]*harness, 2)
+	for i := range stores {
+		var err error
+		if stores[i], err = NewRecordingStore(dir); err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = stores[i].Close() })
+		replicas[i] = newHarness(t, Options{Store: stores[i]})
+	}
+	id := replicas[0].register(t, "")
+	p := replicas[0].connectActivity(t, id, 1)
+	p.send(t, events(1, 1, 4))
+	p.cancel() // the worker leaves replica 0
+
+	replicas[1].register(t, id)
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		ctx, cancel := context.WithCancel(authed(t.Context()))
+		stream, err := replicas[1].client.PublishActivity(ctx)
+		if err == nil {
+			err = stream.Send(&gatewayv0.ActivityUp{Msg: &gatewayv0.ActivityUp_Hello{Hello: &gatewayv0.ActivityHello{SessionId: id, Epoch: 1}}})
+		}
+		var ack *gatewayv0.ActivityAck
+		if err == nil {
+			ack, err = stream.Recv()
+		}
+		cancel()
+		if err == nil {
+			if ack.GetAckedSeq() != 4 {
+				t.Fatalf("replica 1 acknowledges %d, want 4", ack.GetAckedSeq())
+			}
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("replica 1 can't take the session over: %v", err)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
 type slowStore struct {
 	*MemoryStore
 	delay time.Duration

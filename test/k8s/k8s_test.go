@@ -112,6 +112,15 @@ func (k *kube) logs(pod string) string {
 	return out
 }
 
+// dumpLogs logs the end of every pod's log, to see why the test failed.
+func (k *kube) dumpLogs() {
+	out, _ := k.run("kubectl", "get", "pods", "-o", "jsonpath={.items[*].metadata.name}")
+	for _, pod := range strings.Fields(out) {
+		logs, _ := k.run("kubectl", "logs", pod, "--tail", "40")
+		k.t.Logf("--- %s (last 40 lines)\n%s", pod, logs)
+	}
+}
+
 // waitFor polls cond until it is true or the timeout passes.
 func (k *kube) waitFor(what string, timeout time.Duration, cond func() bool) {
 	k.t.Helper()
@@ -222,6 +231,12 @@ func TestKubernetesPath(t *testing.T) {
 		t.Log("deleting the kind cluster")
 		if out, err := k.run("kind", "delete", "cluster", "--name", clusterName, "--kubeconfig", k.kubeconfig); err != nil {
 			t.Errorf("deleting the cluster: %v\n%s", err, out)
+		}
+	})
+	// Runs before the cluster is deleted.
+	t.Cleanup(func() {
+		if t.Failed() {
+			k.dumpLogs()
 		}
 	})
 	k.must("kind", "load", "docker-image", workerImage, gatewayImage, "--name", clusterName)

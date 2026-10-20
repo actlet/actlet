@@ -29,6 +29,15 @@ type ActivityStore interface {
 	Append(ctx context.Context, sessionID string, events []*gatewayv0.ActivityEvent) error
 }
 
+// An ActivityReleaser is an ActivityStore that holds resources per session,
+// such as an open file or a lock. The server calls Release when no activity
+// stream of the session is open on it any more, for example because the
+// worker paused or moved to another gateway replica. The next stream
+// acquires them again.
+type ActivityReleaser interface {
+	Release(sessionID string) error
+}
+
 // MemoryStore is an ActivityStore that keeps events in memory.
 type MemoryStore struct {
 	mu     sync.Mutex
@@ -93,6 +102,9 @@ const RecordingKind = "activity"
 //
 // Every Append is synced before it returns: an acknowledged event is on
 // disk.
+//
+// A recording is open, and locked, while the session has activity streams
+// on the server; gateway replicas may share the directory on one host.
 type RecordingStore struct {
 	dir string
 
@@ -223,6 +235,20 @@ func (r *RecordingStore) Append(ctx context.Context, sessionID string, events []
 	}
 	r.mu.Unlock()
 	return nil
+}
+
+// Release implements ActivityReleaser: it closes the session's recording,
+// releasing its lock, so that another gateway replica sharing the directory
+// can take the session over.
+func (r *RecordingStore) Release(sessionID string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	rec, ok := r.sessions[sessionID]
+	if !ok {
+		return nil
+	}
+	delete(r.sessions, sessionID)
+	return rec.w.Close()
 }
 
 // Close closes all open recordings.

@@ -104,11 +104,19 @@ type Server struct {
 	mu       sync.Mutex
 	sessions map[string]*Session
 	intake   map[intakeKey]*sync.Mutex
+	// publishing counts the open activity streams per session, for
+	// ActivityReleaser stores.
+	publishing map[string]*publishers
 
 	// Draining: set once by Shutdown; streams watch drain and end.
 	drainOnce sync.Once
 	drain     chan struct{}
 	streams   sync.WaitGroup
+}
+
+type publishers struct {
+	mu sync.Mutex
+	n  int
 }
 
 type intakeKey struct {
@@ -128,11 +136,12 @@ func NewServer(opts Options) (*Server, error) {
 		opts.Logger = slog.Default()
 	}
 	return &Server{
-		opts:     opts,
-		log:      opts.Logger,
-		sessions: map[string]*Session{},
-		intake:   map[intakeKey]*sync.Mutex{},
-		drain:    make(chan struct{}),
+		opts:       opts,
+		log:        opts.Logger,
+		sessions:   map[string]*Session{},
+		intake:     map[intakeKey]*sync.Mutex{},
+		publishing: map[string]*publishers{},
+		drain:      make(chan struct{}),
 	}, nil
 }
 
@@ -170,6 +179,33 @@ func (s *Server) sessionFor(id string) *Session {
 		s.sessions[id] = sess
 	}
 	return sess
+}
+
+// publish records an activity stream of the session opening, and
+// returns the function to call when it ends. When the session's last
+// stream ends, an ActivityReleaser store releases the session. A stream
+// opening meanwhile waits, so it never sees a store that is releasing.
+func (s *Server) publish(session string) (end func()) {
+	s.mu.Lock()
+	p, ok := s.publishing[session]
+	if !ok {
+		p = &publishers{}
+		s.publishing[session] = p
+	}
+	s.mu.Unlock()
+	p.mu.Lock()
+	p.n++
+	p.mu.Unlock()
+	return func() {
+		p.mu.Lock()
+		defer p.mu.Unlock()
+		p.n--
+		if r, ok := s.opts.Store.(ActivityReleaser); ok && p.n == 0 {
+			if err := r.Release(session); err != nil {
+				s.log.Warn("activity store: releasing the session", "session", session, "err", err)
+			}
+		}
+	}
 }
 
 func (s *Server) intakeLock(session string, epoch uint64) *sync.Mutex {
@@ -389,6 +425,7 @@ func (s *Server) PublishActivity(stream gatewayv0.Gateway_PublishActivityServer)
 	if epoch == 0 {
 		return status.Error(codes.InvalidArgument, "epoch must be at least 1")
 	}
+	defer s.publish(sid)()
 	lock := s.intakeLock(sid, epoch)
 
 	lock.Lock()
@@ -426,6 +463,10 @@ func (s *Server) PublishActivity(stream gatewayv0.Gateway_PublishActivityServer)
 		var r received
 		select {
 		case r = <-recv:
+		case <-ctx.Done():
+			// The worker went away; the receiving goroutine may have
+			// ended without handing over its error.
+			return ctx.Err()
 		case <-s.drain:
 			return errDraining
 		}

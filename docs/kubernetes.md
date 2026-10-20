@@ -43,7 +43,7 @@ For this to work:
 
 - Give the gateway Pod a `terminationGracePeriodSeconds` longer than its drain timeout. The dev gateway drains within `-drain-timeout`, 10s by default.
 - Use a **readiness probe**, so a Pod that is starting isn't chosen yet and a terminating one drops out of the Service's endpoints.
-- Replicas must **share activity state**. A replica that takes over a session must know what the previous one stored, or deduplication fails. The dev gateway shares a directory of recordings, and each session's recording is locked by the replica serving it and released when that replica drains. That only works on one node; a real orchestrator needs a shared database or object store.
+- Replicas must **share activity state**. A replica that takes over a session must know what the previous one stored, or deduplication fails. The dev gateway shares a directory of recordings. Each session's recording is locked by the replica the worker's activity streams go to, and released when they end there: when the worker moves to another replica, pauses or exits, or the replica drains. (A store that holds per-session resources implements `sdk.ActivityReleaser` to be told.) That only works on one node; a real orchestrator needs a shared database or object store.
 - Commands that a draining replica hadn't had acknowledged must be resent by the orchestrator. Workers recognise repeated command IDs, so resending is safe.
 
 ### Keepalives
