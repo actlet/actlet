@@ -6,6 +6,8 @@ required_features: [control.pause, control.stop, activity.v0]
 limits:
   max_workers: 2
   max_tool_concurrency: 4
+  max_subagent_depth: 1
+  max_subagents: 3
 default_pause_mode: interrupt
 stop_grace: 45s
 budgets:
@@ -28,6 +30,7 @@ models:
     main: large
     subagent: fast
     llm: fast
+  selectable: [fast, large]
 tools:
   - name: shell
   - name: decide

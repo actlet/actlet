@@ -47,7 +47,10 @@ func TestLoadProfileYAMLAndJSONAgree(t *testing.T) {
 		b[1].GetKind() != gatewayv0.BudgetKind_BUDGET_KIND_MONEY || b[1].GetCurrency() != "EUR" {
 		t.Errorf("budgets %v", b)
 	}
-	if m := pb.GetModels(); m.GetRoles()["main"] != "large" || len(m.GetAliases()) != 2 {
+	if l := pb.GetLimits(); l.GetMaxSubagentDepth() != 1 || l.GetMaxSubagents() != 3 {
+		t.Errorf("limits %v", l)
+	}
+	if m := pb.GetModels(); m.GetRoles()["main"] != "large" || len(m.GetAliases()) != 2 || len(m.GetSelectable()) != 2 {
 		t.Errorf("models %v", m)
 	}
 	if tools := pb.GetTools(); len(tools) != 2 || tools[1].GetSettings()["route"] != "humans" {
@@ -116,6 +119,9 @@ func TestProfileValidation(t *testing.T) {
 		},
 		"role to unknown alias": func(p *Profile) {
 			p.Models = &Models{Aliases: []ModelAlias{{Alias: "a"}}, Roles: map[string]string{"main": "b"}}
+		},
+		"selectable unknown alias": func(p *Profile) {
+			p.Models = &Models{Aliases: []ModelAlias{{Alias: "a"}}, Selectable: []string{"b"}}
 		},
 		"duplicate alias": func(p *Profile) { p.Models = &Models{Aliases: []ModelAlias{{Alias: "a"}, {Alias: "a"}}} },
 		"empty alias":     func(p *Profile) { p.Models = &Models{Aliases: []ModelAlias{{}}} },

@@ -148,6 +148,9 @@ message ModelCatalog {
   repeated ModelAlias aliases = 1;
   // Which alias each role uses, for example "main", "subagent" or "llm".
   map<string, string> roles = 2;
+  // The aliases the agent may choose itself for a call, such as a cheaper
+  // model for a subagent's bulk work.
+  repeated string selectable = 3;
 }
 
 message ModelAlias {
@@ -164,8 +167,15 @@ message ToolGrant {
 }
 
 message Limits {
+  // Workers (the agent and its subagents) running at once.
   uint32 max_workers = 1;
+  // Tool calls of one model turn running at once.
   uint32 max_tool_concurrency = 2;
+  // How deep subagents may nest: 1 lets the agent spawn subagents that
+  // can't spawn their own. 0 means the worker's default.
+  uint32 max_subagent_depth = 3;
+  // Subagents a session may create in all. 0 means the worker's default.
+  uint32 max_subagents = 4;
 }
 
 enum DisconnectBehavior {
@@ -341,6 +351,10 @@ message ActivityEvent {
   uint64 epoch = 2;
   uint64 seq = 3;
   google.protobuf.Timestamp time = 4;
+  // The worker the event is about: "root" for the session's agent,
+  // "root.1" for its first subagent, and so on. Empty for the session
+  // itself.
+  string worker = 5;
   oneof body {
     SessionStarted started = 10;
     StateChange state = 11;
@@ -352,6 +366,8 @@ message ActivityEvent {
     ToolStarted tool_started = 17;
     ToolFinished tool_finished = 18;
     FileChange file_change = 19;
+    SubagentSpawned subagent_spawned = 20;
+    SubagentFinished subagent_finished = 21;
   }
 }
 
@@ -433,6 +449,24 @@ message FileChange {
   bool created = 3;
   // A unified diff, possibly cut short.
   string diff = 4;
+}
+
+// SubagentSpawned is a subagent starting; the event's worker is the new
+// subagent.
+message SubagentSpawned {
+  string parent = 1;
+  // The subtask, possibly cut short.
+  string task = 2;
+  string model = 3;
+}
+
+// SubagentFinished is a subagent ending; its result goes back to its
+// parent.
+message SubagentFinished {
+  bool is_error = 1;
+  // The result, possibly cut short.
+  string result = 2;
+  uint64 turns = 3;
 }
 
 // --- Inference ---

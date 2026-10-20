@@ -326,6 +326,15 @@ func (g *gateway) printEvent(session string, ev *gatewayv0.ActivityEvent) {
 			result = "error"
 		}
 		what = fmt.Sprintf("tool %s %s %s in %v: %s", f.GetTool(), f.GetCallId(), result, f.GetTook().AsDuration().Round(time.Millisecond), oneLine(f.GetOutput(), 120))
+	case *gatewayv0.ActivityEvent_SubagentSpawned:
+		what = fmt.Sprintf("subagent started by %s (%s): %s", b.SubagentSpawned.GetParent(), b.SubagentSpawned.GetModel(), oneLine(b.SubagentSpawned.GetTask(), 120))
+	case *gatewayv0.ActivityEvent_SubagentFinished:
+		f := b.SubagentFinished
+		result := "finished"
+		if f.GetIsError() {
+			result = "failed"
+		}
+		what = fmt.Sprintf("subagent %s after %d turns: %s", result, f.GetTurns(), oneLine(f.GetResult(), 120))
 	case *gatewayv0.ActivityEvent_FileChange:
 		c := b.FileChange
 		verb := "changed"
@@ -335,6 +344,9 @@ func (g *gateway) printEvent(session string, ev *gatewayv0.ActivityEvent) {
 		what = fmt.Sprintf("file %s %s\n%s", verb, c.GetPath(), strings.TrimRight(c.GetDiff(), "\n"))
 	default:
 		what = fmt.Sprintf("%T", ev.Body)
+	}
+	if w := ev.GetWorker(); w != "" {
+		what = w + ": " + what
 	}
 	g.printf("[%s %s] %s", short(session), ev.GetId(), what)
 }

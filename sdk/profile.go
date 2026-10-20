@@ -60,8 +60,16 @@ type Profile struct {
 
 // Limits caps concurrency. Zero means the worker's deployment ceiling.
 type Limits struct {
-	MaxWorkers         uint32 `json:"max_workers,omitempty"`
+	// MaxWorkers bounds the workers (the agent and its subagents) running
+	// at once.
+	MaxWorkers uint32 `json:"max_workers,omitempty"`
+	// MaxToolConcurrency bounds the tool calls of one model turn running
+	// at once.
 	MaxToolConcurrency uint32 `json:"max_tool_concurrency,omitempty"`
+	// MaxSubagentDepth bounds how deep subagents nest, and MaxSubagents
+	// how many a session creates. Zero means the worker's default.
+	MaxSubagentDepth uint32 `json:"max_subagent_depth,omitempty"`
+	MaxSubagents     uint32 `json:"max_subagents,omitempty"`
 }
 
 // Budget limits one resource.
@@ -85,6 +93,9 @@ type Models struct {
 	Aliases []ModelAlias `json:"aliases"`
 	// Roles maps a role, such as "main", "subagent" or "llm", to an alias.
 	Roles map[string]string `json:"roles,omitempty"`
+	// Selectable are the aliases the agent may choose itself, such as for
+	// a subagent.
+	Selectable []string `json:"selectable,omitempty"`
 }
 
 // ModelAlias is a model as the orchestrator presents it: a real model name
@@ -192,6 +203,11 @@ func (p *Profile) Validate() error {
 			}
 			aliases[a.Alias] = true
 		}
+		for _, alias := range m.Selectable {
+			if !aliases[alias] {
+				bad("models.selectable: unknown alias %q", alias)
+			}
+		}
 		for role, alias := range m.Roles {
 			if role == "" {
 				bad("models.roles: empty role")
@@ -237,7 +253,10 @@ func (p *Profile) Proto() (*gatewayv0.Profile, error) {
 		Id:               p.ID,
 		Version:          p.Version,
 		RequiredFeatures: p.RequiredFeatures,
-		Limits:           &gatewayv0.Limits{MaxWorkers: p.Limits.MaxWorkers, MaxToolConcurrency: p.Limits.MaxToolConcurrency},
+		Limits: &gatewayv0.Limits{
+			MaxWorkers: p.Limits.MaxWorkers, MaxToolConcurrency: p.Limits.MaxToolConcurrency,
+			MaxSubagentDepth: p.Limits.MaxSubagentDepth, MaxSubagents: p.Limits.MaxSubagents,
+		},
 		DefaultPauseMode: gatewayv0.PauseMode_PAUSE_MODE_DRAIN,
 		OnDisconnect:     gatewayv0.DisconnectBehavior_DISCONNECT_BEHAVIOR_CONTINUE_LOCAL,
 		Instructions:     p.Instructions,
@@ -263,7 +282,7 @@ func (p *Profile) Proto() (*gatewayv0.Profile, error) {
 		})
 	}
 	if m := p.Models; m != nil {
-		out.Models = &gatewayv0.ModelCatalog{Roles: m.Roles}
+		out.Models = &gatewayv0.ModelCatalog{Roles: m.Roles, Selectable: m.Selectable}
 		for _, a := range m.Aliases {
 			out.Models.Aliases = append(out.Models.Aliases, &gatewayv0.ModelAlias{
 				Alias: a.Alias, Description: a.Description, Capabilities: a.Capabilities,
