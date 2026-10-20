@@ -78,6 +78,8 @@ A command with an action the worker doesn't know is rejected rather than ignored
 
 The worker opens the stream with a `ControlHello` (session, epoch, state), reports its state on a heartbeat, and sends a final status as it exits. States are `running`, `pausing`, `stopping`, and the final `paused`, `stopped`, `completed` or `failed`.
 
+The gateway sends a `Heartbeat` down the stream when it is otherwise idle (`sdk.Options.Heartbeat`, every 15s by default), so that a proxy with a read timeout in that direction doesn't cut it. Workers ignore heartbeats.
+
 ## Ending a run
 
 Pausing and stopping end the process. There is no paused process waiting for a resume command. Exit codes tell the orchestrator why:

@@ -54,7 +54,7 @@ func TestDevGateway(t *testing.T) {
 	discard := slog.New(slog.DiscardHandler)
 	g, err := newGateway(config{
 		token: "dev", dataDir: t.TempDir(), profileID: "dev", pauseMode: "drain",
-		stopGrace: time.Second, cmdTimeout: 10 * time.Second,
+		stopGrace: time.Second, cmdTimeout: 10 * time.Second, heartbeat: 20 * time.Millisecond,
 		demoDef: `{"steps":50,"step":"50ms"}`, demoInput: `{"message":"hi"}`,
 	}, out, discard)
 	if err != nil {

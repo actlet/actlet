@@ -1289,6 +1289,7 @@ type ControlDown struct {
 	// Types that are valid to be assigned to Msg:
 	//
 	//	*ControlDown_Command
+	//	*ControlDown_Heartbeat
 	Msg           isControlDown_Msg `protobuf_oneof:"msg"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1340,6 +1341,15 @@ func (x *ControlDown) GetCommand() *Command {
 	return nil
 }
 
+func (x *ControlDown) GetHeartbeat() *Heartbeat {
+	if x != nil {
+		if x, ok := x.Msg.(*ControlDown_Heartbeat); ok {
+			return x.Heartbeat
+		}
+	}
+	return nil
+}
+
 type isControlDown_Msg interface {
 	isControlDown_Msg()
 }
@@ -1348,7 +1358,60 @@ type ControlDown_Command struct {
 	Command *Command `protobuf:"bytes,1,opt,name=command,proto3,oneof"`
 }
 
+type ControlDown_Heartbeat struct {
+	Heartbeat *Heartbeat `protobuf:"bytes,2,opt,name=heartbeat,proto3,oneof"`
+}
+
 func (*ControlDown_Command) isControlDown_Msg() {}
+
+func (*ControlDown_Heartbeat) isControlDown_Msg() {}
+
+// Heartbeat keeps an idle control stream busy in the gateway-to-worker
+// direction, so that proxies with read timeouts, such as NGINX's
+// grpc_read_timeout, don't cut it. Workers ignore it.
+type Heartbeat struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Time          *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=time,proto3" json:"time,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Heartbeat) Reset() {
+	*x = Heartbeat{}
+	mi := &file_actlet_gateway_v0_gateway_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Heartbeat) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Heartbeat) ProtoMessage() {}
+
+func (x *Heartbeat) ProtoReflect() protoreflect.Message {
+	mi := &file_actlet_gateway_v0_gateway_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Heartbeat.ProtoReflect.Descriptor instead.
+func (*Heartbeat) Descriptor() ([]byte, []int) {
+	return file_actlet_gateway_v0_gateway_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *Heartbeat) GetTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.Time
+	}
+	return nil
+}
 
 // Command is an instruction to the worker. The worker records every command
 // durably before acknowledging it, and acknowledges a repeated ID again
@@ -1372,7 +1435,7 @@ type Command struct {
 
 func (x *Command) Reset() {
 	*x = Command{}
-	mi := &file_actlet_gateway_v0_gateway_proto_msgTypes[12]
+	mi := &file_actlet_gateway_v0_gateway_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1384,7 +1447,7 @@ func (x *Command) String() string {
 func (*Command) ProtoMessage() {}
 
 func (x *Command) ProtoReflect() protoreflect.Message {
-	mi := &file_actlet_gateway_v0_gateway_proto_msgTypes[12]
+	mi := &file_actlet_gateway_v0_gateway_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1397,7 +1460,7 @@ func (x *Command) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Command.ProtoReflect.Descriptor instead.
 func (*Command) Descriptor() ([]byte, []int) {
-	return file_actlet_gateway_v0_gateway_proto_rawDescGZIP(), []int{12}
+	return file_actlet_gateway_v0_gateway_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *Command) GetId() string {
@@ -1489,7 +1552,7 @@ type Pause struct {
 
 func (x *Pause) Reset() {
 	*x = Pause{}
-	mi := &file_actlet_gateway_v0_gateway_proto_msgTypes[13]
+	mi := &file_actlet_gateway_v0_gateway_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1501,7 +1564,7 @@ func (x *Pause) String() string {
 func (*Pause) ProtoMessage() {}
 
 func (x *Pause) ProtoReflect() protoreflect.Message {
-	mi := &file_actlet_gateway_v0_gateway_proto_msgTypes[13]
+	mi := &file_actlet_gateway_v0_gateway_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1514,7 +1577,7 @@ func (x *Pause) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Pause.ProtoReflect.Descriptor instead.
 func (*Pause) Descriptor() ([]byte, []int) {
-	return file_actlet_gateway_v0_gateway_proto_rawDescGZIP(), []int{13}
+	return file_actlet_gateway_v0_gateway_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *Pause) GetMode() PauseMode {
@@ -1539,7 +1602,7 @@ type Stop struct {
 
 func (x *Stop) Reset() {
 	*x = Stop{}
-	mi := &file_actlet_gateway_v0_gateway_proto_msgTypes[14]
+	mi := &file_actlet_gateway_v0_gateway_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1551,7 +1614,7 @@ func (x *Stop) String() string {
 func (*Stop) ProtoMessage() {}
 
 func (x *Stop) ProtoReflect() protoreflect.Message {
-	mi := &file_actlet_gateway_v0_gateway_proto_msgTypes[14]
+	mi := &file_actlet_gateway_v0_gateway_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1564,7 +1627,7 @@ func (x *Stop) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Stop.ProtoReflect.Descriptor instead.
 func (*Stop) Descriptor() ([]byte, []int) {
-	return file_actlet_gateway_v0_gateway_proto_rawDescGZIP(), []int{14}
+	return file_actlet_gateway_v0_gateway_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *Stop) GetGrace() *durationpb.Duration {
@@ -1591,7 +1654,7 @@ type Steer struct {
 
 func (x *Steer) Reset() {
 	*x = Steer{}
-	mi := &file_actlet_gateway_v0_gateway_proto_msgTypes[15]
+	mi := &file_actlet_gateway_v0_gateway_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1603,7 +1666,7 @@ func (x *Steer) String() string {
 func (*Steer) ProtoMessage() {}
 
 func (x *Steer) ProtoReflect() protoreflect.Message {
-	mi := &file_actlet_gateway_v0_gateway_proto_msgTypes[15]
+	mi := &file_actlet_gateway_v0_gateway_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1616,7 +1679,7 @@ func (x *Steer) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Steer.ProtoReflect.Descriptor instead.
 func (*Steer) Descriptor() ([]byte, []int) {
-	return file_actlet_gateway_v0_gateway_proto_rawDescGZIP(), []int{15}
+	return file_actlet_gateway_v0_gateway_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *Steer) GetNote() string {
@@ -1641,7 +1704,7 @@ type CommandAck struct {
 
 func (x *CommandAck) Reset() {
 	*x = CommandAck{}
-	mi := &file_actlet_gateway_v0_gateway_proto_msgTypes[16]
+	mi := &file_actlet_gateway_v0_gateway_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1653,7 +1716,7 @@ func (x *CommandAck) String() string {
 func (*CommandAck) ProtoMessage() {}
 
 func (x *CommandAck) ProtoReflect() protoreflect.Message {
-	mi := &file_actlet_gateway_v0_gateway_proto_msgTypes[16]
+	mi := &file_actlet_gateway_v0_gateway_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1666,7 +1729,7 @@ func (x *CommandAck) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CommandAck.ProtoReflect.Descriptor instead.
 func (*CommandAck) Descriptor() ([]byte, []int) {
-	return file_actlet_gateway_v0_gateway_proto_rawDescGZIP(), []int{16}
+	return file_actlet_gateway_v0_gateway_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *CommandAck) GetCommandId() string {
@@ -1714,7 +1777,7 @@ type Status struct {
 
 func (x *Status) Reset() {
 	*x = Status{}
-	mi := &file_actlet_gateway_v0_gateway_proto_msgTypes[17]
+	mi := &file_actlet_gateway_v0_gateway_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1726,7 +1789,7 @@ func (x *Status) String() string {
 func (*Status) ProtoMessage() {}
 
 func (x *Status) ProtoReflect() protoreflect.Message {
-	mi := &file_actlet_gateway_v0_gateway_proto_msgTypes[17]
+	mi := &file_actlet_gateway_v0_gateway_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1739,7 +1802,7 @@ func (x *Status) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Status.ProtoReflect.Descriptor instead.
 func (*Status) Descriptor() ([]byte, []int) {
-	return file_actlet_gateway_v0_gateway_proto_rawDescGZIP(), []int{17}
+	return file_actlet_gateway_v0_gateway_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *Status) GetState() SessionState {
@@ -1769,7 +1832,7 @@ type ActivityUp struct {
 
 func (x *ActivityUp) Reset() {
 	*x = ActivityUp{}
-	mi := &file_actlet_gateway_v0_gateway_proto_msgTypes[18]
+	mi := &file_actlet_gateway_v0_gateway_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1781,7 +1844,7 @@ func (x *ActivityUp) String() string {
 func (*ActivityUp) ProtoMessage() {}
 
 func (x *ActivityUp) ProtoReflect() protoreflect.Message {
-	mi := &file_actlet_gateway_v0_gateway_proto_msgTypes[18]
+	mi := &file_actlet_gateway_v0_gateway_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1794,7 +1857,7 @@ func (x *ActivityUp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ActivityUp.ProtoReflect.Descriptor instead.
 func (*ActivityUp) Descriptor() ([]byte, []int) {
-	return file_actlet_gateway_v0_gateway_proto_rawDescGZIP(), []int{18}
+	return file_actlet_gateway_v0_gateway_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *ActivityUp) GetMsg() isActivityUp_Msg {
@@ -1849,7 +1912,7 @@ type ActivityHello struct {
 
 func (x *ActivityHello) Reset() {
 	*x = ActivityHello{}
-	mi := &file_actlet_gateway_v0_gateway_proto_msgTypes[19]
+	mi := &file_actlet_gateway_v0_gateway_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1861,7 +1924,7 @@ func (x *ActivityHello) String() string {
 func (*ActivityHello) ProtoMessage() {}
 
 func (x *ActivityHello) ProtoReflect() protoreflect.Message {
-	mi := &file_actlet_gateway_v0_gateway_proto_msgTypes[19]
+	mi := &file_actlet_gateway_v0_gateway_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1874,7 +1937,7 @@ func (x *ActivityHello) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ActivityHello.ProtoReflect.Descriptor instead.
 func (*ActivityHello) Descriptor() ([]byte, []int) {
-	return file_actlet_gateway_v0_gateway_proto_rawDescGZIP(), []int{19}
+	return file_actlet_gateway_v0_gateway_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *ActivityHello) GetSessionId() string {
@@ -1901,7 +1964,7 @@ type ActivityBatch struct {
 
 func (x *ActivityBatch) Reset() {
 	*x = ActivityBatch{}
-	mi := &file_actlet_gateway_v0_gateway_proto_msgTypes[20]
+	mi := &file_actlet_gateway_v0_gateway_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1913,7 +1976,7 @@ func (x *ActivityBatch) String() string {
 func (*ActivityBatch) ProtoMessage() {}
 
 func (x *ActivityBatch) ProtoReflect() protoreflect.Message {
-	mi := &file_actlet_gateway_v0_gateway_proto_msgTypes[20]
+	mi := &file_actlet_gateway_v0_gateway_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1926,7 +1989,7 @@ func (x *ActivityBatch) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ActivityBatch.ProtoReflect.Descriptor instead.
 func (*ActivityBatch) Descriptor() ([]byte, []int) {
-	return file_actlet_gateway_v0_gateway_proto_rawDescGZIP(), []int{20}
+	return file_actlet_gateway_v0_gateway_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *ActivityBatch) GetEvents() []*ActivityEvent {
@@ -1948,7 +2011,7 @@ type ActivityAck struct {
 
 func (x *ActivityAck) Reset() {
 	*x = ActivityAck{}
-	mi := &file_actlet_gateway_v0_gateway_proto_msgTypes[21]
+	mi := &file_actlet_gateway_v0_gateway_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1960,7 +2023,7 @@ func (x *ActivityAck) String() string {
 func (*ActivityAck) ProtoMessage() {}
 
 func (x *ActivityAck) ProtoReflect() protoreflect.Message {
-	mi := &file_actlet_gateway_v0_gateway_proto_msgTypes[21]
+	mi := &file_actlet_gateway_v0_gateway_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1973,7 +2036,7 @@ func (x *ActivityAck) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ActivityAck.ProtoReflect.Descriptor instead.
 func (*ActivityAck) Descriptor() ([]byte, []int) {
-	return file_actlet_gateway_v0_gateway_proto_rawDescGZIP(), []int{21}
+	return file_actlet_gateway_v0_gateway_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *ActivityAck) GetEpoch() uint64 {
@@ -2015,7 +2078,7 @@ type ActivityEvent struct {
 
 func (x *ActivityEvent) Reset() {
 	*x = ActivityEvent{}
-	mi := &file_actlet_gateway_v0_gateway_proto_msgTypes[22]
+	mi := &file_actlet_gateway_v0_gateway_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2027,7 +2090,7 @@ func (x *ActivityEvent) String() string {
 func (*ActivityEvent) ProtoMessage() {}
 
 func (x *ActivityEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_actlet_gateway_v0_gateway_proto_msgTypes[22]
+	mi := &file_actlet_gateway_v0_gateway_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2040,7 +2103,7 @@ func (x *ActivityEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ActivityEvent.ProtoReflect.Descriptor instead.
 func (*ActivityEvent) Descriptor() ([]byte, []int) {
-	return file_actlet_gateway_v0_gateway_proto_rawDescGZIP(), []int{22}
+	return file_actlet_gateway_v0_gateway_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *ActivityEvent) GetId() string {
@@ -2185,7 +2248,7 @@ type SessionStarted struct {
 
 func (x *SessionStarted) Reset() {
 	*x = SessionStarted{}
-	mi := &file_actlet_gateway_v0_gateway_proto_msgTypes[23]
+	mi := &file_actlet_gateway_v0_gateway_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2197,7 +2260,7 @@ func (x *SessionStarted) String() string {
 func (*SessionStarted) ProtoMessage() {}
 
 func (x *SessionStarted) ProtoReflect() protoreflect.Message {
-	mi := &file_actlet_gateway_v0_gateway_proto_msgTypes[23]
+	mi := &file_actlet_gateway_v0_gateway_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2210,7 +2273,7 @@ func (x *SessionStarted) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SessionStarted.ProtoReflect.Descriptor instead.
 func (*SessionStarted) Descriptor() ([]byte, []int) {
-	return file_actlet_gateway_v0_gateway_proto_rawDescGZIP(), []int{23}
+	return file_actlet_gateway_v0_gateway_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *SessionStarted) GetEpoch() uint64 {
@@ -2252,7 +2315,7 @@ type StateChange struct {
 
 func (x *StateChange) Reset() {
 	*x = StateChange{}
-	mi := &file_actlet_gateway_v0_gateway_proto_msgTypes[24]
+	mi := &file_actlet_gateway_v0_gateway_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2264,7 +2327,7 @@ func (x *StateChange) String() string {
 func (*StateChange) ProtoMessage() {}
 
 func (x *StateChange) ProtoReflect() protoreflect.Message {
-	mi := &file_actlet_gateway_v0_gateway_proto_msgTypes[24]
+	mi := &file_actlet_gateway_v0_gateway_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2277,7 +2340,7 @@ func (x *StateChange) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StateChange.ProtoReflect.Descriptor instead.
 func (*StateChange) Descriptor() ([]byte, []int) {
-	return file_actlet_gateway_v0_gateway_proto_rawDescGZIP(), []int{24}
+	return file_actlet_gateway_v0_gateway_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *StateChange) GetFrom() SessionState {
@@ -2312,7 +2375,7 @@ type CommandReceived struct {
 
 func (x *CommandReceived) Reset() {
 	*x = CommandReceived{}
-	mi := &file_actlet_gateway_v0_gateway_proto_msgTypes[25]
+	mi := &file_actlet_gateway_v0_gateway_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2324,7 +2387,7 @@ func (x *CommandReceived) String() string {
 func (*CommandReceived) ProtoMessage() {}
 
 func (x *CommandReceived) ProtoReflect() protoreflect.Message {
-	mi := &file_actlet_gateway_v0_gateway_proto_msgTypes[25]
+	mi := &file_actlet_gateway_v0_gateway_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2337,7 +2400,7 @@ func (x *CommandReceived) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CommandReceived.ProtoReflect.Descriptor instead.
 func (*CommandReceived) Descriptor() ([]byte, []int) {
-	return file_actlet_gateway_v0_gateway_proto_rawDescGZIP(), []int{25}
+	return file_actlet_gateway_v0_gateway_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *CommandReceived) GetCommand() *Command {
@@ -2372,7 +2435,7 @@ type SteerNote struct {
 
 func (x *SteerNote) Reset() {
 	*x = SteerNote{}
-	mi := &file_actlet_gateway_v0_gateway_proto_msgTypes[26]
+	mi := &file_actlet_gateway_v0_gateway_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2384,7 +2447,7 @@ func (x *SteerNote) String() string {
 func (*SteerNote) ProtoMessage() {}
 
 func (x *SteerNote) ProtoReflect() protoreflect.Message {
-	mi := &file_actlet_gateway_v0_gateway_proto_msgTypes[26]
+	mi := &file_actlet_gateway_v0_gateway_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2397,7 +2460,7 @@ func (x *SteerNote) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SteerNote.ProtoReflect.Descriptor instead.
 func (*SteerNote) Descriptor() ([]byte, []int) {
-	return file_actlet_gateway_v0_gateway_proto_rawDescGZIP(), []int{26}
+	return file_actlet_gateway_v0_gateway_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *SteerNote) GetNote() string {
@@ -2431,7 +2494,7 @@ type Text struct {
 
 func (x *Text) Reset() {
 	*x = Text{}
-	mi := &file_actlet_gateway_v0_gateway_proto_msgTypes[27]
+	mi := &file_actlet_gateway_v0_gateway_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2443,7 +2506,7 @@ func (x *Text) String() string {
 func (*Text) ProtoMessage() {}
 
 func (x *Text) ProtoReflect() protoreflect.Message {
-	mi := &file_actlet_gateway_v0_gateway_proto_msgTypes[27]
+	mi := &file_actlet_gateway_v0_gateway_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2456,7 +2519,7 @@ func (x *Text) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Text.ProtoReflect.Descriptor instead.
 func (*Text) Descriptor() ([]byte, []int) {
-	return file_actlet_gateway_v0_gateway_proto_rawDescGZIP(), []int{27}
+	return file_actlet_gateway_v0_gateway_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *Text) GetText() string {
@@ -2478,7 +2541,7 @@ type Gap struct {
 
 func (x *Gap) Reset() {
 	*x = Gap{}
-	mi := &file_actlet_gateway_v0_gateway_proto_msgTypes[28]
+	mi := &file_actlet_gateway_v0_gateway_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2490,7 +2553,7 @@ func (x *Gap) String() string {
 func (*Gap) ProtoMessage() {}
 
 func (x *Gap) ProtoReflect() protoreflect.Message {
-	mi := &file_actlet_gateway_v0_gateway_proto_msgTypes[28]
+	mi := &file_actlet_gateway_v0_gateway_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2503,7 +2566,7 @@ func (x *Gap) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Gap.ProtoReflect.Descriptor instead.
 func (*Gap) Descriptor() ([]byte, []int) {
-	return file_actlet_gateway_v0_gateway_proto_rawDescGZIP(), []int{28}
+	return file_actlet_gateway_v0_gateway_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *Gap) GetDropped() uint64 {
@@ -2605,10 +2668,13 @@ const file_actlet_gateway_v0_gateway_proto_rawDesc = "" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x14\n" +
 	"\x05epoch\x18\x02 \x01(\x04R\x05epoch\x125\n" +
-	"\x05state\x18\x03 \x01(\x0e2\x1f.actlet.gateway.v0.SessionStateR\x05state\"L\n" +
+	"\x05state\x18\x03 \x01(\x0e2\x1f.actlet.gateway.v0.SessionStateR\x05state\"\x8a\x01\n" +
 	"\vControlDown\x126\n" +
-	"\acommand\x18\x01 \x01(\v2\x1a.actlet.gateway.v0.CommandH\x00R\acommandB\x05\n" +
-	"\x03msg\"\xff\x01\n" +
+	"\acommand\x18\x01 \x01(\v2\x1a.actlet.gateway.v0.CommandH\x00R\acommand\x12<\n" +
+	"\theartbeat\x18\x02 \x01(\v2\x1c.actlet.gateway.v0.HeartbeatH\x00R\theartbeatB\x05\n" +
+	"\x03msg\";\n" +
+	"\tHeartbeat\x12.\n" +
+	"\x04time\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x04time\"\xff\x01\n" +
 	"\aCommand\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x121\n" +
 	"\x06origin\x18\x02 \x01(\x0e2\x19.actlet.gateway.v0.OriginR\x06origin\x12\x14\n" +
@@ -2744,7 +2810,7 @@ func file_actlet_gateway_v0_gateway_proto_rawDescGZIP() []byte {
 }
 
 var file_actlet_gateway_v0_gateway_proto_enumTypes = make([]protoimpl.EnumInfo, 8)
-var file_actlet_gateway_v0_gateway_proto_msgTypes = make([]protoimpl.MessageInfo, 31)
+var file_actlet_gateway_v0_gateway_proto_msgTypes = make([]protoimpl.MessageInfo, 32)
 var file_actlet_gateway_v0_gateway_proto_goTypes = []any{
 	(BudgetKind)(0),               // 0: actlet.gateway.v0.BudgetKind
 	(BudgetAction)(0),             // 1: actlet.gateway.v0.BudgetAction
@@ -2766,34 +2832,35 @@ var file_actlet_gateway_v0_gateway_proto_goTypes = []any{
 	(*ControlUp)(nil),             // 17: actlet.gateway.v0.ControlUp
 	(*ControlHello)(nil),          // 18: actlet.gateway.v0.ControlHello
 	(*ControlDown)(nil),           // 19: actlet.gateway.v0.ControlDown
-	(*Command)(nil),               // 20: actlet.gateway.v0.Command
-	(*Pause)(nil),                 // 21: actlet.gateway.v0.Pause
-	(*Stop)(nil),                  // 22: actlet.gateway.v0.Stop
-	(*Steer)(nil),                 // 23: actlet.gateway.v0.Steer
-	(*CommandAck)(nil),            // 24: actlet.gateway.v0.CommandAck
-	(*Status)(nil),                // 25: actlet.gateway.v0.Status
-	(*ActivityUp)(nil),            // 26: actlet.gateway.v0.ActivityUp
-	(*ActivityHello)(nil),         // 27: actlet.gateway.v0.ActivityHello
-	(*ActivityBatch)(nil),         // 28: actlet.gateway.v0.ActivityBatch
-	(*ActivityAck)(nil),           // 29: actlet.gateway.v0.ActivityAck
-	(*ActivityEvent)(nil),         // 30: actlet.gateway.v0.ActivityEvent
-	(*SessionStarted)(nil),        // 31: actlet.gateway.v0.SessionStarted
-	(*StateChange)(nil),           // 32: actlet.gateway.v0.StateChange
-	(*CommandReceived)(nil),       // 33: actlet.gateway.v0.CommandReceived
-	(*SteerNote)(nil),             // 34: actlet.gateway.v0.SteerNote
-	(*Text)(nil),                  // 35: actlet.gateway.v0.Text
-	(*Gap)(nil),                   // 36: actlet.gateway.v0.Gap
-	nil,                           // 37: actlet.gateway.v0.ModelCatalog.RolesEntry
-	nil,                           // 38: actlet.gateway.v0.ToolGrant.SettingsEntry
-	(*durationpb.Duration)(nil),   // 39: google.protobuf.Duration
-	(*timestamppb.Timestamp)(nil), // 40: google.protobuf.Timestamp
+	(*Heartbeat)(nil),             // 20: actlet.gateway.v0.Heartbeat
+	(*Command)(nil),               // 21: actlet.gateway.v0.Command
+	(*Pause)(nil),                 // 22: actlet.gateway.v0.Pause
+	(*Stop)(nil),                  // 23: actlet.gateway.v0.Stop
+	(*Steer)(nil),                 // 24: actlet.gateway.v0.Steer
+	(*CommandAck)(nil),            // 25: actlet.gateway.v0.CommandAck
+	(*Status)(nil),                // 26: actlet.gateway.v0.Status
+	(*ActivityUp)(nil),            // 27: actlet.gateway.v0.ActivityUp
+	(*ActivityHello)(nil),         // 28: actlet.gateway.v0.ActivityHello
+	(*ActivityBatch)(nil),         // 29: actlet.gateway.v0.ActivityBatch
+	(*ActivityAck)(nil),           // 30: actlet.gateway.v0.ActivityAck
+	(*ActivityEvent)(nil),         // 31: actlet.gateway.v0.ActivityEvent
+	(*SessionStarted)(nil),        // 32: actlet.gateway.v0.SessionStarted
+	(*StateChange)(nil),           // 33: actlet.gateway.v0.StateChange
+	(*CommandReceived)(nil),       // 34: actlet.gateway.v0.CommandReceived
+	(*SteerNote)(nil),             // 35: actlet.gateway.v0.SteerNote
+	(*Text)(nil),                  // 36: actlet.gateway.v0.Text
+	(*Gap)(nil),                   // 37: actlet.gateway.v0.Gap
+	nil,                           // 38: actlet.gateway.v0.ModelCatalog.RolesEntry
+	nil,                           // 39: actlet.gateway.v0.ToolGrant.SettingsEntry
+	(*durationpb.Duration)(nil),   // 40: google.protobuf.Duration
+	(*timestamppb.Timestamp)(nil), // 41: google.protobuf.Timestamp
 }
 var file_actlet_gateway_v0_gateway_proto_depIdxs = []int32{
 	10, // 0: actlet.gateway.v0.RegisterResponse.profile:type_name -> actlet.gateway.v0.Profile
 	16, // 1: actlet.gateway.v0.RegisterResponse.task:type_name -> actlet.gateway.v0.Task
 	15, // 2: actlet.gateway.v0.Profile.limits:type_name -> actlet.gateway.v0.Limits
 	5,  // 3: actlet.gateway.v0.Profile.default_pause_mode:type_name -> actlet.gateway.v0.PauseMode
-	39, // 4: actlet.gateway.v0.Profile.stop_grace:type_name -> google.protobuf.Duration
+	40, // 4: actlet.gateway.v0.Profile.stop_grace:type_name -> google.protobuf.Duration
 	3,  // 5: actlet.gateway.v0.Profile.on_disconnect:type_name -> actlet.gateway.v0.DisconnectBehavior
 	11, // 6: actlet.gateway.v0.Profile.budgets:type_name -> actlet.gateway.v0.Budget
 	12, // 7: actlet.gateway.v0.Profile.models:type_name -> actlet.gateway.v0.ModelCatalog
@@ -2802,51 +2869,53 @@ var file_actlet_gateway_v0_gateway_proto_depIdxs = []int32{
 	1,  // 10: actlet.gateway.v0.Budget.on_exhaust:type_name -> actlet.gateway.v0.BudgetAction
 	2,  // 11: actlet.gateway.v0.Budget.wait_mode:type_name -> actlet.gateway.v0.BudgetWaitMode
 	13, // 12: actlet.gateway.v0.ModelCatalog.aliases:type_name -> actlet.gateway.v0.ModelAlias
-	37, // 13: actlet.gateway.v0.ModelCatalog.roles:type_name -> actlet.gateway.v0.ModelCatalog.RolesEntry
-	38, // 14: actlet.gateway.v0.ToolGrant.settings:type_name -> actlet.gateway.v0.ToolGrant.SettingsEntry
+	38, // 13: actlet.gateway.v0.ModelCatalog.roles:type_name -> actlet.gateway.v0.ModelCatalog.RolesEntry
+	39, // 14: actlet.gateway.v0.ToolGrant.settings:type_name -> actlet.gateway.v0.ToolGrant.SettingsEntry
 	18, // 15: actlet.gateway.v0.ControlUp.hello:type_name -> actlet.gateway.v0.ControlHello
-	24, // 16: actlet.gateway.v0.ControlUp.ack:type_name -> actlet.gateway.v0.CommandAck
-	25, // 17: actlet.gateway.v0.ControlUp.status:type_name -> actlet.gateway.v0.Status
+	25, // 16: actlet.gateway.v0.ControlUp.ack:type_name -> actlet.gateway.v0.CommandAck
+	26, // 17: actlet.gateway.v0.ControlUp.status:type_name -> actlet.gateway.v0.Status
 	7,  // 18: actlet.gateway.v0.ControlHello.state:type_name -> actlet.gateway.v0.SessionState
-	20, // 19: actlet.gateway.v0.ControlDown.command:type_name -> actlet.gateway.v0.Command
-	4,  // 20: actlet.gateway.v0.Command.origin:type_name -> actlet.gateway.v0.Origin
-	21, // 21: actlet.gateway.v0.Command.pause:type_name -> actlet.gateway.v0.Pause
-	22, // 22: actlet.gateway.v0.Command.stop:type_name -> actlet.gateway.v0.Stop
-	23, // 23: actlet.gateway.v0.Command.steer:type_name -> actlet.gateway.v0.Steer
-	5,  // 24: actlet.gateway.v0.Pause.mode:type_name -> actlet.gateway.v0.PauseMode
-	39, // 25: actlet.gateway.v0.Stop.grace:type_name -> google.protobuf.Duration
-	6,  // 26: actlet.gateway.v0.CommandAck.result:type_name -> actlet.gateway.v0.CommandResult
-	7,  // 27: actlet.gateway.v0.CommandAck.state:type_name -> actlet.gateway.v0.SessionState
-	7,  // 28: actlet.gateway.v0.Status.state:type_name -> actlet.gateway.v0.SessionState
-	40, // 29: actlet.gateway.v0.Status.time:type_name -> google.protobuf.Timestamp
-	27, // 30: actlet.gateway.v0.ActivityUp.hello:type_name -> actlet.gateway.v0.ActivityHello
-	28, // 31: actlet.gateway.v0.ActivityUp.batch:type_name -> actlet.gateway.v0.ActivityBatch
-	30, // 32: actlet.gateway.v0.ActivityBatch.events:type_name -> actlet.gateway.v0.ActivityEvent
-	40, // 33: actlet.gateway.v0.ActivityEvent.time:type_name -> google.protobuf.Timestamp
-	31, // 34: actlet.gateway.v0.ActivityEvent.started:type_name -> actlet.gateway.v0.SessionStarted
-	32, // 35: actlet.gateway.v0.ActivityEvent.state:type_name -> actlet.gateway.v0.StateChange
-	33, // 36: actlet.gateway.v0.ActivityEvent.command:type_name -> actlet.gateway.v0.CommandReceived
-	34, // 37: actlet.gateway.v0.ActivityEvent.steer:type_name -> actlet.gateway.v0.SteerNote
-	35, // 38: actlet.gateway.v0.ActivityEvent.text:type_name -> actlet.gateway.v0.Text
-	36, // 39: actlet.gateway.v0.ActivityEvent.gap:type_name -> actlet.gateway.v0.Gap
-	7,  // 40: actlet.gateway.v0.StateChange.from:type_name -> actlet.gateway.v0.SessionState
-	7,  // 41: actlet.gateway.v0.StateChange.to:type_name -> actlet.gateway.v0.SessionState
-	20, // 42: actlet.gateway.v0.CommandReceived.command:type_name -> actlet.gateway.v0.Command
-	6,  // 43: actlet.gateway.v0.CommandReceived.result:type_name -> actlet.gateway.v0.CommandResult
-	4,  // 44: actlet.gateway.v0.SteerNote.origin:type_name -> actlet.gateway.v0.Origin
-	40, // 45: actlet.gateway.v0.Gap.first:type_name -> google.protobuf.Timestamp
-	40, // 46: actlet.gateway.v0.Gap.last:type_name -> google.protobuf.Timestamp
-	8,  // 47: actlet.gateway.v0.Gateway.Register:input_type -> actlet.gateway.v0.RegisterRequest
-	17, // 48: actlet.gateway.v0.Gateway.Control:input_type -> actlet.gateway.v0.ControlUp
-	26, // 49: actlet.gateway.v0.Gateway.PublishActivity:input_type -> actlet.gateway.v0.ActivityUp
-	9,  // 50: actlet.gateway.v0.Gateway.Register:output_type -> actlet.gateway.v0.RegisterResponse
-	19, // 51: actlet.gateway.v0.Gateway.Control:output_type -> actlet.gateway.v0.ControlDown
-	29, // 52: actlet.gateway.v0.Gateway.PublishActivity:output_type -> actlet.gateway.v0.ActivityAck
-	50, // [50:53] is the sub-list for method output_type
-	47, // [47:50] is the sub-list for method input_type
-	47, // [47:47] is the sub-list for extension type_name
-	47, // [47:47] is the sub-list for extension extendee
-	0,  // [0:47] is the sub-list for field type_name
+	21, // 19: actlet.gateway.v0.ControlDown.command:type_name -> actlet.gateway.v0.Command
+	20, // 20: actlet.gateway.v0.ControlDown.heartbeat:type_name -> actlet.gateway.v0.Heartbeat
+	41, // 21: actlet.gateway.v0.Heartbeat.time:type_name -> google.protobuf.Timestamp
+	4,  // 22: actlet.gateway.v0.Command.origin:type_name -> actlet.gateway.v0.Origin
+	22, // 23: actlet.gateway.v0.Command.pause:type_name -> actlet.gateway.v0.Pause
+	23, // 24: actlet.gateway.v0.Command.stop:type_name -> actlet.gateway.v0.Stop
+	24, // 25: actlet.gateway.v0.Command.steer:type_name -> actlet.gateway.v0.Steer
+	5,  // 26: actlet.gateway.v0.Pause.mode:type_name -> actlet.gateway.v0.PauseMode
+	40, // 27: actlet.gateway.v0.Stop.grace:type_name -> google.protobuf.Duration
+	6,  // 28: actlet.gateway.v0.CommandAck.result:type_name -> actlet.gateway.v0.CommandResult
+	7,  // 29: actlet.gateway.v0.CommandAck.state:type_name -> actlet.gateway.v0.SessionState
+	7,  // 30: actlet.gateway.v0.Status.state:type_name -> actlet.gateway.v0.SessionState
+	41, // 31: actlet.gateway.v0.Status.time:type_name -> google.protobuf.Timestamp
+	28, // 32: actlet.gateway.v0.ActivityUp.hello:type_name -> actlet.gateway.v0.ActivityHello
+	29, // 33: actlet.gateway.v0.ActivityUp.batch:type_name -> actlet.gateway.v0.ActivityBatch
+	31, // 34: actlet.gateway.v0.ActivityBatch.events:type_name -> actlet.gateway.v0.ActivityEvent
+	41, // 35: actlet.gateway.v0.ActivityEvent.time:type_name -> google.protobuf.Timestamp
+	32, // 36: actlet.gateway.v0.ActivityEvent.started:type_name -> actlet.gateway.v0.SessionStarted
+	33, // 37: actlet.gateway.v0.ActivityEvent.state:type_name -> actlet.gateway.v0.StateChange
+	34, // 38: actlet.gateway.v0.ActivityEvent.command:type_name -> actlet.gateway.v0.CommandReceived
+	35, // 39: actlet.gateway.v0.ActivityEvent.steer:type_name -> actlet.gateway.v0.SteerNote
+	36, // 40: actlet.gateway.v0.ActivityEvent.text:type_name -> actlet.gateway.v0.Text
+	37, // 41: actlet.gateway.v0.ActivityEvent.gap:type_name -> actlet.gateway.v0.Gap
+	7,  // 42: actlet.gateway.v0.StateChange.from:type_name -> actlet.gateway.v0.SessionState
+	7,  // 43: actlet.gateway.v0.StateChange.to:type_name -> actlet.gateway.v0.SessionState
+	21, // 44: actlet.gateway.v0.CommandReceived.command:type_name -> actlet.gateway.v0.Command
+	6,  // 45: actlet.gateway.v0.CommandReceived.result:type_name -> actlet.gateway.v0.CommandResult
+	4,  // 46: actlet.gateway.v0.SteerNote.origin:type_name -> actlet.gateway.v0.Origin
+	41, // 47: actlet.gateway.v0.Gap.first:type_name -> google.protobuf.Timestamp
+	41, // 48: actlet.gateway.v0.Gap.last:type_name -> google.protobuf.Timestamp
+	8,  // 49: actlet.gateway.v0.Gateway.Register:input_type -> actlet.gateway.v0.RegisterRequest
+	17, // 50: actlet.gateway.v0.Gateway.Control:input_type -> actlet.gateway.v0.ControlUp
+	27, // 51: actlet.gateway.v0.Gateway.PublishActivity:input_type -> actlet.gateway.v0.ActivityUp
+	9,  // 52: actlet.gateway.v0.Gateway.Register:output_type -> actlet.gateway.v0.RegisterResponse
+	19, // 53: actlet.gateway.v0.Gateway.Control:output_type -> actlet.gateway.v0.ControlDown
+	30, // 54: actlet.gateway.v0.Gateway.PublishActivity:output_type -> actlet.gateway.v0.ActivityAck
+	52, // [52:55] is the sub-list for method output_type
+	49, // [49:52] is the sub-list for method input_type
+	49, // [49:49] is the sub-list for extension type_name
+	49, // [49:49] is the sub-list for extension extendee
+	0,  // [0:49] is the sub-list for field type_name
 }
 
 func init() { file_actlet_gateway_v0_gateway_proto_init() }
@@ -2861,17 +2930,18 @@ func file_actlet_gateway_v0_gateway_proto_init() {
 	}
 	file_actlet_gateway_v0_gateway_proto_msgTypes[11].OneofWrappers = []any{
 		(*ControlDown_Command)(nil),
+		(*ControlDown_Heartbeat)(nil),
 	}
-	file_actlet_gateway_v0_gateway_proto_msgTypes[12].OneofWrappers = []any{
+	file_actlet_gateway_v0_gateway_proto_msgTypes[13].OneofWrappers = []any{
 		(*Command_Pause)(nil),
 		(*Command_Stop)(nil),
 		(*Command_Steer)(nil),
 	}
-	file_actlet_gateway_v0_gateway_proto_msgTypes[18].OneofWrappers = []any{
+	file_actlet_gateway_v0_gateway_proto_msgTypes[19].OneofWrappers = []any{
 		(*ActivityUp_Hello)(nil),
 		(*ActivityUp_Batch)(nil),
 	}
-	file_actlet_gateway_v0_gateway_proto_msgTypes[22].OneofWrappers = []any{
+	file_actlet_gateway_v0_gateway_proto_msgTypes[23].OneofWrappers = []any{
 		(*ActivityEvent_Started)(nil),
 		(*ActivityEvent_State)(nil),
 		(*ActivityEvent_Command)(nil),
@@ -2885,7 +2955,7 @@ func file_actlet_gateway_v0_gateway_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_actlet_gateway_v0_gateway_proto_rawDesc), len(file_actlet_gateway_v0_gateway_proto_rawDesc)),
 			NumEnums:      8,
-			NumMessages:   31,
+			NumMessages:   32,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

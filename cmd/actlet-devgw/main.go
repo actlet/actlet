@@ -67,6 +67,7 @@ type config struct {
 	demoInput    string
 	cmdTimeout   time.Duration
 	drainTimeout time.Duration
+	heartbeat    time.Duration
 }
 
 func main() {
@@ -102,6 +103,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	fs.DurationVar(&cfg.stopGrace, "stop-grace", 10*time.Second, "default profile's stop grace period")
 	fs.DurationVar(&cfg.cmdTimeout, "command-timeout", time.Minute, "how long a command waits for the worker's acknowledgement")
 	fs.DurationVar(&cfg.drainTimeout, "drain-timeout", 10*time.Second, "how long draining may take on SIGTERM")
+	fs.DurationVar(&cfg.heartbeat, "heartbeat", sdk.DefaultHeartbeat, "how often to send a heartbeat on idle control streams; 0 turns them off")
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return 0
@@ -183,9 +185,14 @@ func newGateway(cfg config, out io.Writer, log *slog.Logger) (*gateway, error) {
 		return nil, err
 	}
 	g := &gateway{cfg: cfg, out: out, log: log, store: store, delay: &delayStore{RecordingStore: store}, task: task}
+	heartbeat := cfg.heartbeat
+	if heartbeat == 0 {
+		heartbeat = -1 // off
+	}
 	opts := sdk.Options{
-		Store:  g.delay,
-		Logger: log,
+		Store:     g.delay,
+		Logger:    log,
+		Heartbeat: heartbeat,
 		Assign: func(_ context.Context, req *gatewayv0.RegisterRequest) (*gatewayv0.RegisterResponse, error) {
 			id := req.GetSessionId()
 			if id == "" {

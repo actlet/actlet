@@ -309,7 +309,7 @@ func (c *Client) controlOnce(ctx context.Context, h ControlHandler) (established
 			gotMu.Unlock()
 			cmd := msg.GetCommand()
 			if cmd == nil {
-				continue
+				continue // a heartbeat
 			}
 			ack, err := h.Apply(sctx, cmd)
 			if err != nil {

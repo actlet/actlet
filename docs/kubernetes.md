@@ -52,7 +52,7 @@ For this to work:
 |---|---|
 | Worker (client) | ping every 20s when idle, 10s timeout, also without active streams |
 | Gateway (`sdk.ServerOptions()`) | allow client pings every 5s or more; ping idle clients every 30s, 10s timeout |
-| Control stream | the worker reports its status every 10s |
+| Control stream | the worker reports its status every 10s; the gateway sends a heartbeat every 15s (`sdk.Options.Heartbeat`) |
 
 The connection stayed up for the whole soak with no reconnects. Keepalive pings also keep conntrack and NAT entries fresh, and let a dead peer be found within about 30s.
 
@@ -68,7 +68,7 @@ A gateway must enforce a keepalive minimum no stricter than the worker's 20s pin
 **An ingress or L7 load balancer** in front of the gateway, for workers outside the cluster:
 
 - It must support gRPC/HTTP/2 end to end.
-- Its read timeouts must allow long-lived streams. NGINX ingress, for example, defaults to `grpc_read_timeout 60s`: the control stream can be silent from the gateway's side for longer than that, and would be cut every minute. Set read and send timeouts to an hour or more.
+- Its timeouts must allow long-lived streams. NGINX ingress, for example, defaults to `grpc_read_timeout 60s`. The control stream carries traffic both ways at least every 15s (worker status, gateway heartbeats), so it stays within that. An activity stream can be quiet for longer while a task waits; the worker reconnects when one is cut, but raising the read and send timeouts to an hour or more avoids the churn.
 - Terminate TLS at the ingress, or pass it through, and run workers with `-tls`.
 
 **Workers:**

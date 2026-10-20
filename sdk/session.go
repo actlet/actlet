@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	gatewayv0 "github.com/actlet/actlet/proto/actlet/gateway/v0"
 )
@@ -217,10 +218,16 @@ func (s *Session) setStateLocked(st gatewayv0.SessionState) {
 }
 
 // sendCommands sends every pending command not yet sent on this stream, in
-// order, until ctx ends.
+// order, and heartbeats, until ctx ends.
 func (s *Session) sendCommands(ctx context.Context, conn *controlConn, stream interface {
 	Send(*gatewayv0.ControlDown) error
 }) error {
+	var heartbeat <-chan time.Time
+	if d := s.srv.opts.Heartbeat; d > 0 {
+		t := time.NewTicker(d)
+		defer t.Stop()
+		heartbeat = t.C
+	}
 	for {
 		s.mu.Lock()
 		var batch []*gatewayv0.Command
@@ -240,6 +247,11 @@ func (s *Session) sendCommands(ctx context.Context, conn *controlConn, stream in
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-s.notify:
+		case <-heartbeat:
+			hb := &gatewayv0.ControlDown{Msg: &gatewayv0.ControlDown_Heartbeat{Heartbeat: &gatewayv0.Heartbeat{Time: timestamppb.Now()}}}
+			if err := stream.Send(hb); err != nil {
+				return err
+			}
 		}
 	}
 }

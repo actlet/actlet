@@ -576,3 +576,33 @@ func TestShutdownTimesOut(t *testing.T) {
 		t.Fatalf("second Shutdown: %v", err)
 	}
 }
+
+// The server sends heartbeats on an idle control stream, and none when
+// they are turned off.
+func TestControlHeartbeat(t *testing.T) {
+	for _, tt := range []struct {
+		interval time.Duration
+		want     bool
+	}{{30 * time.Millisecond, true}, {-1, false}} {
+		h := newHarness(t, Options{Heartbeat: tt.interval})
+		id := h.register(t, "")
+		w := h.connectControl(t, id)
+		got := make(chan *gatewayv0.ControlDown, 1)
+		go func() {
+			if msg, err := w.stream.Recv(); err == nil {
+				got <- msg
+			}
+		}()
+		select {
+		case msg := <-got:
+			if !tt.want || msg.GetHeartbeat().GetTime() == nil {
+				t.Errorf("interval %v: got %v", tt.interval, msg)
+			}
+		case <-time.After(300 * time.Millisecond):
+			if tt.want {
+				t.Errorf("interval %v: no heartbeat", tt.interval)
+			}
+		}
+		w.cancel()
+	}
+}

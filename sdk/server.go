@@ -64,9 +64,19 @@ type Options struct {
 	// disconnects.
 	OnControl func(s *Session, connected bool)
 
+	// Heartbeat is how often the server sends a heartbeat on each control
+	// stream, so that proxies don't cut a stream that is idle in the
+	// gateway-to-worker direction. Zero means DefaultHeartbeat; a negative
+	// value turns heartbeats off.
+	Heartbeat time.Duration
+
 	// Logger receives diagnostics. Nil means slog.Default().
 	Logger *slog.Logger
 }
+
+// DefaultHeartbeat is the default control stream heartbeat interval: well
+// within common proxy read timeouts, such as NGINX's default of 60s.
+const DefaultHeartbeat = 15 * time.Second
 
 // StaticToken returns an Authenticate function that accepts one token.
 func StaticToken(token string) func(context.Context, string) error {
@@ -134,6 +144,9 @@ func NewServer(opts Options) (*Server, error) {
 	}
 	if opts.Logger == nil {
 		opts.Logger = slog.Default()
+	}
+	if opts.Heartbeat == 0 {
+		opts.Heartbeat = DefaultHeartbeat
 	}
 	return &Server{
 		opts:       opts,

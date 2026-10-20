@@ -189,7 +189,15 @@ message ControlHello {
 message ControlDown {
   oneof msg {
     Command command = 1;
+    Heartbeat heartbeat = 2;
   }
+}
+
+// Heartbeat keeps an idle control stream busy in the gateway-to-worker
+// direction, so that proxies with read timeouts, such as NGINX's
+// grpc_read_timeout, don't cut it. Workers ignore it.
+message Heartbeat {
+  google.protobuf.Timestamp time = 1;
 }
 
 // Command is an instruction to the worker. The worker records every command
