@@ -24,6 +24,16 @@
 //	  - match: count the words   # a phrase in the subtask
 //	    turns:
 //	      - text: 42 words.
+//	decisions:                   # answers to decide calls, by their question
+//	  - match: deploy            # a phrase in the question
+//	    decision: yes
+//	    reason: the tests pass
+//	    delay: 2s                # decide after a pause
+//	llm:                         # answers to the llm tool, by its prompt
+//	  - match: summarise
+//	    text: It's about sales.
+//	    usage: {input: 300, output: 20}
+//	    cost: 0.001              # what the call cost, in the price's currency
 //
 // The turn played is chosen by the number of model answers already in the
 // conversation, so a repeated call gets the same turn. A conversation
@@ -58,6 +68,27 @@ type Script struct {
 	Subagents []Subscript `json:"subagents,omitempty"`
 	// Price, if set, makes each call report a cost.
 	Price *Price `json:"price,omitempty"`
+	// Decisions answer decide calls; LLM answers the llm tool's calls.
+	Decisions []Decision  `json:"decisions,omitempty"`
+	LLM       []LLMAnswer `json:"llm,omitempty"`
+}
+
+// Decision answers the decide calls whose question contains Match.
+type Decision struct {
+	Match     string       `json:"match"`
+	Decision  string       `json:"decision"`
+	Reason    string       `json:"reason,omitempty"`
+	DecidedBy string       `json:"decided_by,omitempty"`
+	Delay     sdk.Duration `json:"delay,omitempty"`
+}
+
+// LLMAnswer answers the llm tool's calls whose prompt contains Match.
+type LLMAnswer struct {
+	Match string     `json:"match"`
+	Text  string     `json:"text"`
+	Usage *TurnUsage `json:"usage,omitempty"`
+	// Cost, if set, is what the call cost, in the price's currency.
+	Cost *float64 `json:"cost,omitempty"`
 }
 
 // Price is what tokens cost, per million.
@@ -97,6 +128,9 @@ type Turn struct {
 	// Usage sets the tokens the turn reports; by default they follow the
 	// conversation's length.
 	Usage *TurnUsage `json:"usage,omitempty"`
+	// Cost, if set, is what the turn cost, in the price's currency,
+	// instead of what the price makes of its tokens.
+	Cost *float64 `json:"cost,omitempty"`
 }
 
 // ToolCall is a tool the model calls.
@@ -126,8 +160,9 @@ type Call struct {
 type Model struct {
 	script Script
 
-	mu    sync.Mutex
-	calls []Call
+	mu      sync.Mutex
+	calls   []Call
+	decides []string // the intent IDs of the decide calls answered
 }
 
 // Parse reads a script in YAML or JSON. Unknown fields are errors.
@@ -158,6 +193,30 @@ func Parse(data []byte) (*Model, error) {
 	if err := check("main", s.Turns); err != nil {
 		return nil, err
 	}
+	priced := func(cost *float64, what string) error {
+		if cost != nil && s.Price == nil {
+			return fmt.Errorf("script: %s has a cost but the script has no price, for its currency", what)
+		}
+		return nil
+	}
+	for i, t := range s.Turns {
+		if err := priced(t.Cost, fmt.Sprintf("turn %d", i+1)); err != nil {
+			return nil, err
+		}
+	}
+	for i, d := range s.Decisions {
+		if d.Match == "" || d.Decision == "" {
+			return nil, fmt.Errorf("script: decision %d: match and decision are required", i+1)
+		}
+	}
+	for i, a := range s.LLM {
+		if a.Match == "" {
+			return nil, fmt.Errorf("script: llm answer %d: no match", i+1)
+		}
+		if err := priced(a.Cost, fmt.Sprintf("llm answer %d", i+1)); err != nil {
+			return nil, err
+		}
+	}
 	for i, sub := range s.Subagents {
 		if sub.Match == "" {
 			return nil, fmt.Errorf("script: subagent script %d: no match", i+1)
@@ -187,9 +246,90 @@ func (m *Model) Calls() []Call {
 
 func continuation(turn int) []byte { return []byte("scripted:" + strconv.Itoa(turn)) }
 
+// Decides returns the intent IDs of the decide calls answered so far.
+func (m *Model) Decides() []string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return append([]string(nil), m.decides...)
+}
+
+// Decide answers a decide call with the script's decision for its
+// question. Use it as sdk.Options.OnDecide.
+func (m *Model) Decide(ctx context.Context, d *sdk.DecideRequest) (*sdk.Decision, error) {
+	for _, sd := range m.script.Decisions {
+		if !strings.Contains(d.Question, sd.Match) {
+			continue
+		}
+		if delay := time.Duration(sd.Delay); delay > 0 {
+			select {
+			case <-time.After(delay):
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			}
+		}
+		m.mu.Lock()
+		m.decides = append(m.decides, d.IntentID)
+		m.mu.Unlock()
+		by := sd.DecidedBy
+		if by == "" {
+			by = "the script"
+		}
+		return &sdk.Decision{Decision: sd.Decision, Reason: sd.Reason, DecidedBy: by}, nil
+	}
+	return nil, status.Errorf(codes.FailedPrecondition, "scripted model: no decision for %q", d.Question)
+}
+
+// serveLLM answers an llm tool call with the script's answer for its
+// prompt.
+func (m *Model) serveLLM(call *sdk.InferenceCall) error {
+	req := call.Request
+	var prompt strings.Builder
+	for _, msg := range req.GetMessages() {
+		for _, p := range msg.GetParts() {
+			prompt.WriteString(p.GetText())
+		}
+	}
+	for _, a := range m.script.LLM {
+		if !strings.Contains(prompt.String(), a.Match) {
+			continue
+		}
+		m.mu.Lock()
+		m.calls = append(m.calls, Call{Intent: req.GetIntentId(), Turn: 1, Time: time.Now(), Script: "llm:" + a.Match})
+		m.mu.Unlock()
+		if err := call.Text(a.Text); err != nil {
+			return err
+		}
+		usage := &gatewayv0.Usage{InputTokens: uint64(prompt.Len()/4 + 1), OutputTokens: uint64(len(a.Text)/4 + 1)}
+		if a.Usage != nil {
+			usage.InputTokens, usage.OutputTokens = a.Usage.Input, a.Usage.Output
+		}
+		m.price(usage, a.Cost)
+		return call.Done(&gatewayv0.InferenceDone{StopReason: gatewayv0.StopReason_STOP_REASON_END_TURN, Usage: usage})
+	}
+	return status.Errorf(codes.FailedPrecondition, "scripted model: no llm answer for the prompt %q", prompt.String())
+}
+
+// price sets a call's cost: the given one, or what the price makes of its
+// tokens.
+func (m *Model) price(usage *gatewayv0.Usage, cost *float64) {
+	p := m.script.Price
+	if p == nil {
+		return
+	}
+	usage.Currency = p.Currency
+	if cost != nil {
+		usage.Cost = *cost
+		return
+	}
+	usage.Cost = (float64(usage.InputTokens)*p.Input + float64(usage.OutputTokens)*p.Output) / 1e6
+}
+
 // Serve answers a call with the script's turn for it.
 func (m *Model) Serve(ctx context.Context, call *sdk.InferenceCall) error {
 	req := call.Request
+	if req.GetPurpose() == "llm" {
+		return m.serveLLM(call)
+	}
 	n := 0
 	for _, msg := range req.GetMessages() {
 		if msg.GetRole() == gatewayv0.Role_ROLE_ASSISTANT {
@@ -285,10 +425,7 @@ func (m *Model) Serve(ctx context.Context, call *sdk.InferenceCall) error {
 	if turn.Usage != nil {
 		usage.InputTokens, usage.OutputTokens = turn.Usage.Input, turn.Usage.Output
 	}
-	if p := m.script.Price; p != nil {
-		usage.Cost = (float64(usage.InputTokens)*p.Input + float64(usage.OutputTokens)*p.Output) / 1e6
-		usage.Currency = p.Currency
-	}
+	m.price(usage, turn.Cost)
 	return call.Done(&gatewayv0.InferenceDone{
 		StopReason:   stop,
 		Usage:        usage,

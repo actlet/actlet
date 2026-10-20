@@ -2,6 +2,7 @@ package scripted
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"strings"
 	"testing"
@@ -179,5 +180,52 @@ func TestParseErrors(t *testing.T) {
 		if _, err := Parse([]byte(s)); err == nil {
 			t.Errorf("accepted %q", s)
 		}
+	}
+}
+
+// Decisions, llm answers and per-call costs.
+func TestDecisionsAndLLM(t *testing.T) {
+	m, err := Parse([]byte(`
+price: {currency: EUR, input: 1, output: 2}
+turns:
+  - text: hi
+    cost: 0.25
+decisions:
+  - match: Ship
+    decision: ship
+    reason: green
+llm:
+  - match: summarise
+    text: short
+    usage: {input: 10, output: 2}
+    cost: 0.01
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, id := gateway(t, m)
+	user := func(s string) []*gatewayv0.Message {
+		return []*gatewayv0.Message{{Role: gatewayv0.Role_ROLE_USER, Parts: []*gatewayv0.Part{{Part: &gatewayv0.Part_Text{Text: s}}}}}
+	}
+	_, _, done, err := answer(t, c, &gatewayv0.InferenceRequest{SessionId: id, Epoch: 1, IntentId: "t1", Messages: user("task")})
+	if err != nil || done.GetUsage().GetCost() != 0.25 || done.GetUsage().GetCurrency() != "EUR" {
+		t.Errorf("turn cost: %v, %v", done, err)
+	}
+	text, _, done, err := answer(t, c, &gatewayv0.InferenceRequest{SessionId: id, Epoch: 1, IntentId: "l1", Purpose: "llm", Messages: user("please summarise this")})
+	if err != nil || text != "short" || done.GetUsage().GetInputTokens() != 10 || done.GetUsage().GetCost() != 0.01 {
+		t.Errorf("llm: %q %v %v", text, done, err)
+	}
+	if _, _, _, err := answer(t, c, &gatewayv0.InferenceRequest{SessionId: id, Epoch: 1, IntentId: "l2", Purpose: "llm", Messages: user("translate")}); status.Code(err) != codes.FailedPrecondition {
+		t.Errorf("unscripted llm call: %v", err)
+	}
+	d, err := m.Decide(t.Context(), &sdk.DecideRequest{IntentID: "d1", Question: "Ship it?"})
+	if err != nil || d.Decision != "ship" || d.Reason != "green" || fmt.Sprint(m.Decides()) != "[d1]" {
+		t.Errorf("decide: %+v, %v", d, err)
+	}
+	if _, err := m.Decide(t.Context(), &sdk.DecideRequest{Question: "Lunch?"}); status.Code(err) != codes.FailedPrecondition {
+		t.Errorf("unscripted decision: %v", err)
+	}
+	if _, err := Parse([]byte("turns:\n  - text: a\n    cost: 1")); err == nil {
+		t.Error("a cost without a price was accepted")
 	}
 }

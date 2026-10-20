@@ -81,10 +81,22 @@ type Options struct {
 	// session on others. Nil makes the gateway serve no models.
 	OnInference func(ctx context.Context, call *InferenceCall) error
 	// InferenceCache is how many answered calls the server keeps to answer
-	// repeated intent IDs. Zero means DefaultInferenceCache. Calls are kept
-	// in memory: a call repeated to another replica, or after a restart,
-	// runs again unless OnInference recognises its intent ID itself.
+	// repeated intent IDs, of model calls and of bridged tool calls each.
+	// Zero means DefaultInferenceCache. Calls are kept in memory: a call
+	// repeated to another replica, or after a restart, runs again unless
+	// the hook recognises its intent ID itself.
 	InferenceCache int
+
+	// OnDecide answers the agents' decide calls: route the question to a
+	// person, a model or a decision system of your choosing. The call may
+	// take as long as deciding does; the worker waits, also across pauses
+	// and restarts, asking again with the same intent ID. An error is
+	// returned to the worker as the call's status, as for OnInference.
+	// Nil leaves decide calls to OnTool.
+	OnDecide func(ctx context.Context, d *DecideRequest) (*Decision, error)
+	// OnTool answers the agents' calls of other bridged tools. Nil makes
+	// the gateway provide none.
+	OnTool func(ctx context.Context, call *ToolCall) (*gatewayv0.ToolCallResponse, error)
 
 	// Heartbeat is how often the server sends a heartbeat on each control
 	// stream, so that proxies don't cut a stream that is idle in the
@@ -142,6 +154,10 @@ type Server struct {
 	// Model calls by intent ID, and the answered ones, oldest first.
 	inferences map[inferenceKey]*inference
 	answered   []inferenceKey
+	// Bridged tool calls by intent ID, and the answered ones, oldest
+	// first.
+	toolCalls     map[toolKey]*toolResult
+	toolsAnswered []toolKey
 	// The sessions viewers watch.
 	relays map[string]*relay
 
@@ -185,6 +201,7 @@ func NewServer(opts Options) (*Server, error) {
 		intake:     map[intakeKey]*sync.Mutex{},
 		publishing: map[string]*publishers{},
 		inferences: map[inferenceKey]*inference{},
+		toolCalls:  map[toolKey]*toolResult{},
 		relays:     map[string]*relay{},
 		drain:      make(chan struct{}),
 	}, nil

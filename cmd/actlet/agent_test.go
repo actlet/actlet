@@ -39,11 +39,14 @@ type agentGateway struct {
 	task  *gatewayv0.Task
 	// local is the profile's local attach setting.
 	local *gatewayv0.LocalAttach
-	// budgets are the profile's budgets.
+	// budgets are the profile's budgets, and tools its tool grants.
 	budgets []*gatewayv0.Budget
+	tools   []*gatewayv0.ToolGrant
 
 	mu     sync.Mutex
 	events []*gatewayv0.ActivityEvent
+	// asked are the intent IDs of the decide calls, as they come.
+	asked []string
 }
 
 func newAgentGateway(t *testing.T, script string, opts ...func(*agentGateway)) *agentGateway {
@@ -81,6 +84,12 @@ func (g *agentGateway) start() {
 		Authenticate: sdk.StaticToken("tok"),
 		Logger:       slog.New(slog.DiscardHandler),
 		OnInference:  g.model.Serve,
+		OnDecide: func(ctx context.Context, d *sdk.DecideRequest) (*sdk.Decision, error) {
+			g.mu.Lock()
+			g.asked = append(g.asked, d.IntentID)
+			g.mu.Unlock()
+			return g.model.Decide(ctx, d)
+		},
 		OnActivity: func(_ string, ev *gatewayv0.ActivityEvent) {
 			g.mu.Lock()
 			g.events = append(g.events, ev)
@@ -91,7 +100,7 @@ func (g *agentGateway) start() {
 				SessionId: req.GetSessionId(),
 				Profile: &gatewayv0.Profile{Id: "agent", Models: &gatewayv0.ModelCatalog{
 					Aliases: []*gatewayv0.ModelAlias{{Alias: "scripted"}}, Roles: map[string]string{"main": "scripted"},
-				}, Limits: &gatewayv0.Limits{MaxWorkers: 4, MaxToolConcurrency: 4}, LocalAttach: g.local, Budgets: g.budgets},
+				}, Limits: &gatewayv0.Limits{MaxWorkers: 4, MaxToolConcurrency: 4}, LocalAttach: g.local, Budgets: g.budgets, Tools: g.tools},
 				Task: g.task,
 			}, nil
 		},

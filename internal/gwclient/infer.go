@@ -113,3 +113,34 @@ func cause(ctx context.Context, err error) error {
 	}
 	return err
 }
+
+// CallTool calls a bridged tool, such as decide. Like Infer, it retries
+// transient failures with backoff, sending the same request with the same
+// intent ID, so the gateway answers the call once. A call may wait as
+// long as the gateway takes, such as for a person to decide; it ends
+// early only with ctx.
+func (c *Client) CallTool(ctx context.Context, req *gatewayv0.ToolCallRequest, reregister Reregister) (*gatewayv0.ToolCallResponse, error) {
+	b := backoff{min: c.cfg.BackoffMin, max: c.cfg.BackoffMax}
+	for attempt := 1; ; attempt++ {
+		resp, err := c.gw.CallTool(ctx, req, grpc.WaitForReady(true))
+		if err == nil {
+			return resp, nil
+		}
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+		if !retryable(err) {
+			return nil, fmt.Errorf("%s call: %w", req.GetTool(), err)
+		}
+		if status.Code(err) == codes.NotFound && reregister != nil {
+			if rerr := reregister(ctx); rerr != nil {
+				c.log.Warn("gateway: registering again failed", "err", rerr)
+			}
+		}
+		d := b.next()
+		c.log.Warn("gateway: tool call failed, retrying", "tool", req.GetTool(), "intent", req.GetIntentId(), "attempt", attempt, "err", err, "in", d.Round(time.Millisecond))
+		if err := sleep(ctx, d); err != nil {
+			return nil, err
+		}
+	}
+}

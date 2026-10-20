@@ -43,6 +43,7 @@ type model struct {
 
 	mu    sync.Mutex
 	calls []call
+	llm   []*gatewayv0.InferenceRequest // the llm tool's calls
 }
 
 type call struct {
@@ -51,6 +52,14 @@ type call struct {
 }
 
 func (m *model) infer(ctx context.Context, req *gatewayv0.InferenceRequest) (*gwclient.Inference, error) {
+	if req.GetPurpose() == "llm" {
+		m.mu.Lock()
+		m.llm = append(m.llm, req)
+		m.mu.Unlock()
+		return &gwclient.Inference{Attempts: 1,
+			Message: &gatewayv0.Message{Role: gatewayv0.Role_ROLE_ASSISTANT, Parts: []*gatewayv0.Part{{Part: &gatewayv0.Part_Text{Text: "LLM says: " + messageText(req.GetMessages()[0])}}}},
+			Done:    &gatewayv0.InferenceDone{StopReason: gatewayv0.StopReason_STOP_REASON_END_TURN, Usage: &gatewayv0.Usage{InputTokens: 100, OutputTokens: 10, Cost: 0.5, Currency: "EUR"}}}, nil
+	}
 	n := 0
 	for _, msg := range req.GetMessages() {
 		if msg.GetRole() == gatewayv0.Role_ROLE_ASSISTANT {
@@ -160,6 +169,7 @@ type sandbox struct {
 	crashBefore, crashAfter func(kind string, m proto.Message) bool
 	settings                Settings
 	budget                  Budget
+	callTool                CallToolFunc
 }
 
 func newSandbox(t *testing.T, turns ...turn) *sandbox {
@@ -237,7 +247,7 @@ func (s *sandbox) run(soft, hard context.Context, stopping <-chan struct{}) (don
 			s.events = append(s.events, ev)
 			s.mu.Unlock()
 		},
-		Infer: s.model.infer, Soft: soft, Hard: hard, Stopping: stopping, Budget: s.budget,
+		Infer: s.model.infer, Soft: soft, Hard: hard, Stopping: stopping, Budget: s.budget, CallTool: s.callTool,
 		Steers: func() []Steer {
 			s.mu.Lock()
 			defer s.mu.Unlock()

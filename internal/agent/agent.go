@@ -100,7 +100,13 @@ type Settings struct {
 	// Standard are the standard tools the profile grants, with their
 	// settings.
 	Standard []tools.Grant
+	// LLMModel is the alias the llm tool uses unless the agent chooses
+	// one of Selectable; empty with no Selectable offers no llm tool.
+	LLMModel string
 }
+
+// CallToolFunc calls a bridged tool through the gateway.
+type CallToolFunc func(ctx context.Context, req *gatewayv0.ToolCallRequest) (*gatewayv0.ToolCallResponse, error)
 
 // InferFunc makes a model call through the gateway.
 type InferFunc func(ctx context.Context, req *gatewayv0.InferenceRequest) (*gwclient.Inference, error)
@@ -179,6 +185,9 @@ type Env struct {
 	// Emit publishes an activity event. It must not block.
 	Emit  func(*gatewayv0.ActivityEvent)
 	Infer InferFunc
+	// CallTool calls the tools the gateway bridges, such as decide; nil
+	// means none.
+	CallTool CallToolFunc
 	// Soft ends when running work should stop: an interrupting pause, or
 	// a stop. Hard ends when it must end at once.
 	Soft, Hard context.Context

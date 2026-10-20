@@ -192,6 +192,9 @@ func Run(ctx context.Context, cfg Config, signals <-chan os.Signal) int {
 	infer := func(ctx context.Context, req *gatewayv0.InferenceRequest) (*gwclient.Inference, error) {
 		return client.Infer(ctx, req, reregister)
 	}
+	callTool := func(ctx context.Context, req *gatewayv0.ToolCallRequest) (*gatewayv0.ToolCallResponse, error) {
+		return client.CallTool(ctx, req, reregister)
+	}
 	commands := attach.AllowedCommands(resp.GetProfile().GetLocalAttach())
 	info := sessionInfo(cfg, folder, task, resp.GetProfile(), effective, agentSettings, commands, log)
 	// Viewers' permissions follow profile updates. Updates arrive on the
@@ -206,7 +209,7 @@ func Run(ctx context.Context, cfg Config, signals <-chan os.Signal) int {
 				as.SetCommands(c.GetLocalCommands())
 			}
 		},
-		Agent: agentSettings, Infer: infer,
+		Agent: agentSettings, Infer: infer, CallTool: callTool,
 		WorkerID: cfg.WorkerID, Version: cfg.Version, Emit: pub.Emit, Logger: log,
 	})
 	if err != nil {
@@ -438,7 +441,11 @@ func agentSettings(cfg Config, p *gatewayv0.Profile, effective *sessionpb.Config
 			Base: p.GetBasePrompt(), Instructions: p.GetInstructions(),
 			Manifests: []string{manifest, p.GetToolsManifest()},
 		},
-		Tools: cfg.Tools,
+		Tools:    cfg.Tools,
+		LLMModel: p.GetModels().GetRoles()["llm"],
+	}
+	if s.LLMModel == "" {
+		s.LLMModel = p.GetModels().GetRoles()["processing"]
 	}
 	if len(p.GetTools()) > 0 {
 		s.Tools.Grants = []tools.Grant{}

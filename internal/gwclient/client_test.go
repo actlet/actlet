@@ -30,6 +30,11 @@ type fakeGateway struct {
 	control  func(gatewayv0.Gateway_ControlServer) error
 	publish  func(gatewayv0.Gateway_PublishActivityServer) error
 	infer    func(*gatewayv0.InferenceRequest, gatewayv0.Gateway_InferServer) error
+	callTool func(context.Context, *gatewayv0.ToolCallRequest) (*gatewayv0.ToolCallResponse, error)
+}
+
+func (f *fakeGateway) CallTool(ctx context.Context, req *gatewayv0.ToolCallRequest) (*gatewayv0.ToolCallResponse, error) {
+	return f.callTool(ctx, req)
 }
 
 func (f *fakeGateway) Infer(req *gatewayv0.InferenceRequest, s gatewayv0.Gateway_InferServer) error {

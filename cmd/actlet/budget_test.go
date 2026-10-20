@@ -77,3 +77,82 @@ func TestBudgetIdleUntilRaised(t *testing.T) {
 		t.Errorf("%d budget updates reported", n)
 	}
 }
+
+const decideScript = `
+turns:
+  - tool_calls:
+      - name: decide
+        input: {question: "Ship the release?", options: [ship, wait]}
+  - expect:
+      - contains: '"decision":"ship"'
+    text: done
+decisions:
+  - match: Ship the release
+    decision: ship
+    reason: the tests pass
+    delay: 2s
+`
+
+// A decide call waiting for its answer survives a pause and a SIGKILL:
+// each new run asks again with the same intent ID, and the decision is
+// made and recorded once.
+func TestDecideAcrossPauseAndKill(t *testing.T) {
+	if testing.Short() {
+		t.Skip("spawns processes")
+	}
+	g := newAgentGateway(t, decideScript, func(g *agentGateway) {
+		g.tools = []*gatewayv0.ToolGrant{{Name: "decide"}}
+	})
+	dir := sessionDir(t, nil)
+	asking := func(n int) {
+		t.Helper()
+		deadline := time.Now().Add(30 * time.Second)
+		for {
+			g.mu.Lock()
+			asked := len(g.asked)
+			g.mu.Unlock()
+			if asked >= n {
+				return
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("decide asked %d times, want %d", asked, n)
+			}
+			time.Sleep(20 * time.Millisecond)
+		}
+	}
+
+	cmd := g.worker(dir, "")
+	asking(1)
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+	if _, err := g.srv.Sessions()[0].Pause(ctx, gatewayv0.PauseMode_PAUSE_MODE_DRAIN); err != nil {
+		t.Fatal(err)
+	}
+	if code := exitCode(t, cmd); code != session.ExitPaused {
+		t.Fatalf("pause: exit %d", code)
+	}
+
+	cmd = g.worker(dir, "")
+	asking(2)
+	_ = cmd.Process.Kill()
+	if code := exitCode(t, cmd); code != -9 {
+		t.Fatalf("kill: exit %d", code)
+	}
+
+	cmd = g.worker(dir, "")
+	if code := exitCode(t, cmd); code != session.ExitCompleted {
+		t.Fatalf("resume: exit %d", code)
+	}
+	g.mu.Lock()
+	asked := append([]string(nil), g.asked...)
+	g.mu.Unlock()
+	if len(asked) != 3 || asked[0] != asked[1] || asked[1] != asked[2] {
+		t.Errorf("decide asked with intents %v: want the same one three times", asked)
+	}
+	if got := g.model.Decides(); len(got) != 1 || got[0] != asked[0] {
+		t.Errorf("decided %v", got)
+	}
+	if n := g.eventCount(func(ev *gatewayv0.ActivityEvent) bool { return ev.GetToolFinished().GetTool() == "decide" }); n != 1 {
+		t.Errorf("%d decide results", n)
+	}
+}

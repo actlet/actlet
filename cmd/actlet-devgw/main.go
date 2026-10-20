@@ -241,6 +241,14 @@ func newGateway(cfg config, out io.Writer, log *slog.Logger) (*gateway, error) {
 			}
 			return err
 		}
+		opts.OnDecide = func(ctx context.Context, d *sdk.DecideRequest) (*sdk.Decision, error) {
+			g.printf("[%s] %s asks to decide: %s", short(d.Session.ID()), d.Worker, oneLine(d.Question, 120))
+			dec, err := model.Decide(ctx, d)
+			if err == nil {
+				g.printf("[%s] decided: %s", short(d.Session.ID()), dec.Decision)
+			}
+			return dec, err
+		}
 	}
 	g.srv, err = sdk.NewServer(opts)
 	if err != nil {

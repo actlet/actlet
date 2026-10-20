@@ -3,6 +3,7 @@ package gwclient
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -131,5 +132,31 @@ func TestInferCancelled(t *testing.T) {
 	defer cancel()
 	if _, err := c.Infer(ctx, &gatewayv0.InferenceRequest{IntentId: "i"}, nil); !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("err = %v", err)
+	}
+}
+
+// A bridged tool call is retried with the same intent ID while the
+// gateway is unavailable, and not when it refuses the call.
+func TestCallToolRetries(t *testing.T) {
+	var intents []string
+	var mu sync.Mutex
+	c := serve(t, &fakeGateway{callTool: func(_ context.Context, req *gatewayv0.ToolCallRequest) (*gatewayv0.ToolCallResponse, error) {
+		mu.Lock()
+		defer mu.Unlock()
+		intents = append(intents, req.GetIntentId())
+		switch {
+		case req.GetTool() == "missing":
+			return nil, status.Error(codes.Unimplemented, "no such tool")
+		case len(intents) < 3:
+			return nil, status.Error(codes.Unavailable, "restarting")
+		}
+		return &gatewayv0.ToolCallResponse{Output: `{"decision":"yes"}`}, nil
+	}}, Config{})
+	resp, err := c.CallTool(t.Context(), &gatewayv0.ToolCallRequest{IntentId: "i1", Tool: "decide"}, nil)
+	if err != nil || resp.GetOutput() != `{"decision":"yes"}` || fmt.Sprint(intents) != "[i1 i1 i1]" {
+		t.Fatalf("%v, %v after %v", resp, err, intents)
+	}
+	if _, err := c.CallTool(t.Context(), &gatewayv0.ToolCallRequest{IntentId: "i2", Tool: "missing"}, nil); status.Code(err) != codes.Unimplemented || len(intents) != 4 {
+		t.Errorf("refused call: %v after %d attempts", err, len(intents))
 	}
 }

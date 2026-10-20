@@ -294,6 +294,7 @@ type Params struct {
 	// Agent configures agent tasks, and Infer makes their model calls.
 	Agent    agent.Settings
 	Infer    agent.InferFunc
+	CallTool agent.CallToolFunc
 	WorkerID string
 	Version  string
 	// Emit publishes an activity event. It must not block.
@@ -803,7 +804,7 @@ func (s *Session) runAgent() Outcome {
 	}
 	done, err := agent.Run(agent.Env{
 		Settings: s.p.Agent, Folder: s.p.Folder, Task: s.p.Task, SessionID: s.p.SessionID, Epoch: s.p.Epoch,
-		Records: records, Record: s.record, Emit: s.p.Emit, Infer: s.p.Infer,
+		Records: records, Record: s.record, Emit: s.p.Emit, Infer: s.p.Infer, CallTool: s.p.CallTool,
 		Soft: s.soft, Hard: s.hard, Stopping: s.stopping, Steers: s.steerNotes, Budget: s.budget, Limits: s.limits, Logger: s.log,
 	})
 	switch {
