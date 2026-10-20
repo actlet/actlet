@@ -44,8 +44,8 @@ setup: ## Download modules and install development tools
 ##@ Development
 
 .PHONY: build
-build: ## Build a static actlet binary for this machine into bin/
-	CGO_ENABLED=0 go build -trimpath -ldflags "$(LDFLAGS)" -o $(BINARY) $(PKG)
+build: ## Build static actlet and actlet-devgw binaries for this machine into bin/
+	CGO_ENABLED=0 go build -trimpath -ldflags "$(LDFLAGS)" -o $(BIN_DIR)/ ./cmd/...
 
 .PHONY: dist
 dist: ## Cross-build static binaries into dist/ (DIST_PLATFORMS)
