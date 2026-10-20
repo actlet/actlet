@@ -17,6 +17,7 @@ import (
 	"math/rand/v2"
 	"os"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"google.golang.org/grpc"
@@ -100,7 +101,15 @@ type Client struct {
 	log *slog.Logger
 	cc  *grpc.ClientConn
 	gw  gatewayv0.GatewayClient
+
+	connected atomic.Bool // the control stream is up
 }
+
+// Connected reports whether the control stream is up.
+func (c *Client) Connected() bool { return c.connected.Load() }
+
+// Addr returns the gateway's address.
+func (c *Client) Addr() string { return c.cfg.Addr }
 
 // New returns a client for the gateway. It doesn't connect until first
 // used, and reconnects as needed.
@@ -329,6 +338,8 @@ func (c *Client) controlOnce(ctx context.Context, h ControlHandler) (established
 		}
 	}()
 	established = true // the stream opened and the hello was sent
+	c.connected.Store(true)
+	defer c.connected.Store(false)
 
 	tick := time.NewTicker(c.cfg.Heartbeat)
 	defer tick.Stop()

@@ -49,6 +49,9 @@ type Options struct {
 	SpillMax int64
 	// Logger receives warnings. Nil means slog.Default().
 	Logger *slog.Logger
+	// Observe, if set, gets every event once it is numbered, in order,
+	// such as for local viewers. It must not block or change the event.
+	Observe func(*Event)
 }
 
 // SpillPath returns the spill file of an epoch in dir.
@@ -194,6 +197,9 @@ func (p *Publisher) storeLocked(ev *Event, displayOnly bool) bool {
 	p.nextSeq++
 	close(p.wake)
 	p.wake = make(chan struct{})
+	if p.opts.Observe != nil {
+		p.opts.Observe(ev)
+	}
 	return true
 }
 

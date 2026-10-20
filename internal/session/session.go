@@ -220,6 +220,8 @@ type Params struct {
 	// MaxStopGrace caps the grace period of stop commands.
 	MaxStopGrace time.Duration
 	Task         *sessionfs.Task
+	// Info describes the run for viewers; it is published at the start.
+	Info *gatewayv0.SessionInfo
 	// Agent configures agent tasks, and Infer makes their model calls.
 	Agent    agent.Settings
 	Infer    agent.InferFunc
@@ -317,6 +319,9 @@ func Start(p Params) (*Session, error) {
 	p.Emit(&gatewayv0.ActivityEvent{Body: &gatewayv0.ActivityEvent_Started{Started: &gatewayv0.SessionStarted{
 		Epoch: p.Epoch, ProfileId: p.Config.GetProfileId(), ProfileVersion: p.Config.GetProfileVersion(), Resumed: p.Recovered != nil,
 	}}})
+	if p.Info != nil {
+		p.Emit(&gatewayv0.ActivityEvent{Body: &gatewayv0.ActivityEvent_SessionInfo{SessionInfo: p.Info}})
+	}
 	s.emitState(gatewayv0.SessionState_SESSION_STATE_UNSPECIFIED, gatewayv0.SessionState_SESSION_STATE_RUNNING, "started")
 
 	go s.run(nextStep)

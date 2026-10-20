@@ -107,6 +107,9 @@ func (f Folder) ReadTask() (*Task, error) {
 	return &t, nil
 }
 
+// TaskJSON returns task.json as it is on disk.
+func (f Folder) TaskJSON() ([]byte, error) { return os.ReadFile(f.TaskFile()) }
+
 // WriteTask writes task.json atomically.
 func (f Folder) WriteTask(t *Task) error {
 	if err := t.Validate(); err != nil {

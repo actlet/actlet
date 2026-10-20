@@ -369,7 +369,7 @@ func (w *worker) createChild(call *gatewayv0.ToolCall, in spawnInput) (child, re
 		return "", "", err
 	}
 	b.emit(child, &gatewayv0.ActivityEvent{Body: &gatewayv0.ActivityEvent_SubagentSpawned{SubagentSpawned: &gatewayv0.SubagentSpawned{
-		Parent: w.id, Task: cut(in.Task, maxEventText), Model: model,
+		Parent: w.id, Task: cut(in.Task, maxEventText), Model: model, CallId: call.GetId(),
 	}}})
 	if crashHit("spawn", w.id) {
 		return "", "", errStopped

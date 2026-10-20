@@ -18,6 +18,7 @@ import (
 
 	"github.com/actlet/actlet/internal/activity"
 	"github.com/actlet/actlet/internal/agent"
+	"github.com/actlet/actlet/internal/attach"
 	"github.com/actlet/actlet/internal/gwclient"
 	"github.com/actlet/actlet/internal/session"
 	"github.com/actlet/actlet/internal/session/sessionpb"
@@ -55,6 +56,13 @@ type Config struct {
 	// Tools overrides the programs the agent's tools use, such as the
 	// shell; see tools.Options.
 	Tools tools.Options
+
+	// NoAttach turns the local attach socket off, whatever the profile
+	// says.
+	NoAttach bool
+	// Attached is called once the attach socket is listening, with its
+	// path, such as to attach the TUI to it.
+	Attached func(socket string)
 
 	Logger *slog.Logger
 }
@@ -146,9 +154,12 @@ func Run(ctx context.Context, cfg Config, signals <-chan os.Signal) int {
 		return fail("agent settings", "err", err)
 	}
 
+	hub := attach.NewHub(attach.HubOptions{})
+	defer hub.Close()
 	pub := activity.New(activity.Options{
 		SessionID: sessionID, Epoch: epoch, Dir: folder.State(),
 		QueueLen: cfg.ActivityQueue, SpillMax: cfg.ActivitySpillMax, Logger: log,
+		Observe: hub.Publish,
 	})
 	backlogs, err := activity.OpenBacklogs(folder.State(), epoch, log)
 	if err != nil {
@@ -162,14 +173,38 @@ func Run(ctx context.Context, cfg Config, signals <-chan os.Signal) int {
 	infer := func(ctx context.Context, req *gatewayv0.InferenceRequest) (*gwclient.Inference, error) {
 		return client.Infer(ctx, req, reregister)
 	}
+	commands := attach.AllowedCommands(resp.GetProfile().GetLocalAttach())
+	info := sessionInfo(cfg, folder, task, resp.GetProfile(), effective, agentSettings, commands, log)
 	sess, err := session.Start(session.Params{
 		Folder: folder, SessionID: sessionID, Epoch: epoch, Recovered: recovered,
-		Config: effective, MaxStopGrace: cfg.MaxStopGrace, Task: task,
+		Config: effective, MaxStopGrace: cfg.MaxStopGrace, Task: task, Info: info,
 		Agent: agentSettings, Infer: infer,
 		WorkerID: cfg.WorkerID, Version: cfg.Version, Emit: pub.Emit, Logger: log,
 	})
 	if err != nil {
 		return fail("starting the session", "err", err)
+	}
+
+	// Local viewers attach over a socket in the session folder.
+	if !cfg.NoAttach && !resp.GetProfile().GetLocalAttach().GetDisabled() {
+		box := &box{sess: sess, sessionID: sessionID, epoch: epoch, cfg: cfg, folder: folder, client: client, started: time.Now()}
+		lis, err := attach.Listen(folder.State())
+		if err != nil {
+			log.Warn("local attach unavailable", "err", err)
+		} else {
+			as := attach.NewServer(hub, box, commands, log)
+			as.ServeFiles(folder.Dir)
+			srv := attach.Start(lis, as)
+			defer func() {
+				// Closing the hub ends the viewers' feeds after the last
+				// events, so the server stops gracefully.
+				hub.Close()
+				srv.Stop()
+			}()
+			if cfg.Attached != nil {
+				cfg.Attached(lis.Path)
+			}
+		}
 	}
 
 	netCtx, cancelNet := context.WithCancel(context.Background())

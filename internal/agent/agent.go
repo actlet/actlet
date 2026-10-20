@@ -194,10 +194,7 @@ func Run(env Env) (done bool, err error) {
 		b.def.MaxTurns = defaultMaxTurns
 	}
 	b.slots = make(chan struct{}, max(env.Settings.MaxWorkers, 1))
-	topts := env.Settings.Tools
-	topts.Workspace = env.Folder.Workspace()
-	topts.ReadOnly = []string{env.Folder.Inputs(), env.Folder.State(), env.Folder.TaskFile()}
-	topts.TempDir = filepath.Join(env.Folder.State(), "tmp")
+	topts := toolOptions(env.Settings, env.Folder)
 	if err := os.MkdirAll(topts.TempDir, 0o700); err != nil {
 		return false, err
 	}
@@ -258,6 +255,32 @@ func Run(env Env) (done bool, err error) {
 		return false, root.err
 	}
 	return true, nil
+}
+
+// toolOptions are the tools' options for a session folder.
+func toolOptions(s Settings, f sessionfs.Folder) tools.Options {
+	o := s.Tools
+	o.Workspace = f.Workspace()
+	o.ReadOnly = []string{f.Inputs(), f.State(), f.TaskFile()}
+	o.TempDir = filepath.Join(f.State(), "tmp")
+	return o
+}
+
+// Tools describes the tools the root worker gets with these settings,
+// and notes on how they were set up, for viewers.
+func Tools(s Settings, f sessionfs.Folder) ([]*gatewayv0.ToolInfo, []string, error) {
+	ts, err := tools.New(toolOptions(s, f))
+	if err != nil {
+		return nil, nil, err
+	}
+	var out []*gatewayv0.ToolInfo
+	for _, sp := range ts.Specs() {
+		out = append(out, &gatewayv0.ToolInfo{Name: sp.Name, Policy: sp.Policy.String(), Description: sp.Description})
+	}
+	if s.MaxSubagentDepth > 0 && s.MaxSubagents > 0 {
+		out = append(out, &gatewayv0.ToolInfo{Name: SpawnTool, Policy: "spawn", Description: "start a subagent on a subtask"})
+	}
+	return out, ts.Notes(), nil
 }
 
 // start builds the root worker's prompt and records it as the first
@@ -563,7 +586,7 @@ func (w *worker) deliverSteers() error {
 		if err := b.commit(&agentpb.SteerDelivered{WorkerId: w.id, CommandId: s.CommandID, Text: text}); err != nil {
 			return err
 		}
-		b.text(w.id, "operator note %s given to the agent", s.CommandID)
+		b.text(w.id, "the agent got the note from %s", from)
 	}
 	return nil
 }
