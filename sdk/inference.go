@@ -25,8 +25,9 @@ type InferenceCall struct {
 	// catalogue; resolve it to a provider and model of your choosing.
 	Request *gatewayv0.InferenceRequest
 
-	send func(*gatewayv0.InferenceResponse) error
-	done bool
+	send   func(*gatewayv0.InferenceResponse) error
+	done   bool
+	answer *gatewayv0.InferenceDone
 }
 
 // Text streams a piece of the model's text.
@@ -46,9 +47,17 @@ func (c *InferenceCall) Done(d *gatewayv0.InferenceDone) error {
 	if err := c.send(&gatewayv0.InferenceResponse{Msg: &gatewayv0.InferenceResponse_Done{Done: d}}); err != nil {
 		return err
 	}
-	c.done = true
+	c.done, c.answer = true, d
 	return nil
 }
+
+// Answer returns what Done sent, or nil before Done is called: why the
+// model stopped and what the call used and cost. A hook that wraps
+// another, such as a router's, reads it to account for the calls it
+// passes on. A call repeated with the same intent ID, while the server
+// keeps the first one's answer (see Options.InferenceCache), gets that
+// answer without OnInference running again, so it is accounted once.
+func (c *InferenceCall) Answer() *gatewayv0.InferenceDone { return c.answer }
 
 type inferenceKey struct {
 	session, intent string

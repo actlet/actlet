@@ -146,6 +146,8 @@ A call is never continued after an interruption. The worker discards what an int
 
 `sdk.Options.OnInference` serves calls in Go. The SDK keeps recent answers by intent ID (`InferenceCache`, 256 by default): a repeated call gets the same answer, marked `replayed`, without reaching `OnInference`, and a repeat of a call still running waits for it. The cache is in memory; a gateway with several replicas, or one that restarts, can recognise intent IDs itself. A draining gateway lets running calls finish.
 
+`InferenceCall.Answer` returns the `done` the hook sent, or nil before it is sent. A hook that wraps another, such as the [router](providers.md), reads usage and cost from it to account for each session's calls; since a repeated call doesn't reach `OnInference`, each call is accounted once.
+
 Package `sdk/scripted` is a model that plays a YAML script of turns, for testing agents without a real model; `actlet-devgw -model <script>` serves it. A script can also answer `llm` calls, by their prompt, `decide` calls, by their question, and `compaction` calls with a summary, and set what each call costs.
 
 ## Bridged tools

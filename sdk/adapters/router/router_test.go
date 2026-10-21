@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 	"testing"
 
 	"google.golang.org/grpc/codes"
@@ -110,5 +111,53 @@ decide: {provider: jev, model: jev-latest}
 	ant.FailNext(401, "authentication_error", "invalid x-api-key "+env["ANT_KEY"])
 	if _, err := ask("large", ""); err == nil || strings.Contains(err.Error(), env["ANT_KEY"]) {
 		t.Errorf("an error names the key: %v", err)
+	}
+}
+
+// A hook that wraps the router accounts each model call from its answer,
+// once: a call repeated with the same intent ID is answered again without
+// running the hook.
+func TestAccounting(t *testing.T) {
+	ant := amock.New(env["ANT_KEY"], func(_ context.Context, req *gatewayv0.InferenceRequest) (*amock.Answer, error) {
+		return &amock.Answer{Text: "hi", Usage: amock.Usage{Input: 1000, Output: 100}}, nil
+	})
+	t.Cleanup(ant.Close)
+	r, err := router.Parse([]byte(fmt.Sprintf(`
+providers:
+  claude: {type: anthropic, base_url: %q, api_key_env: ANT_KEY}
+prices:
+  claude-big: {currency: USD, input: 3, output: 15}
+routes:
+  - {alias: large, provider: claude, model: claude-big}
+`, ant.URL)), getenv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var mu sync.Mutex
+	spent := map[string]float64{} // by session
+	calls := 0
+	h := adapterstest.Serve(t, sdk.Options{OnInference: func(ctx context.Context, call *sdk.InferenceCall) error {
+		if call.Answer() != nil {
+			t.Error("an answer before the call")
+		}
+		if err := r.OnInference(ctx, call); err != nil {
+			return err
+		}
+		mu.Lock()
+		defer mu.Unlock()
+		calls++
+		spent[call.Session.ID()] += call.Answer().GetUsage().GetCost()
+		return nil
+	}})
+	for range 2 {
+		a, err := h.Infer(t.Context(), &gatewayv0.InferenceRequest{IntentId: "i1", Model: "large", Messages: []*gatewayv0.Message{adapterstest.User("hi")}})
+		if err != nil || a.Text != "hi" {
+			t.Fatalf("%+v, %v", a, err)
+		}
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if want := (1000*3 + 100*15) / 1e6; calls != 1 || spent[h.Session] != want || len(ant.Requests()) != 1 {
+		t.Errorf("%d calls accounted, %v spent, %d requests; want 1, %v for %s, 1", calls, spent, len(ant.Requests()), want, h.Session)
 	}
 }
