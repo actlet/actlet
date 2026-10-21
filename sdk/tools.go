@@ -74,6 +74,9 @@ func (s *Server) CallTool(ctx context.Context, req *gatewayv0.ToolCallRequest) (
 	case req.GetTool() == "":
 		return nil, status.Error(codes.InvalidArgument, "no tool")
 	}
+	if err := s.authorizeSession(ctx, req.GetSessionId()); err != nil {
+		return nil, err
+	}
 	sess := s.Session(req.GetSessionId())
 	if sess == nil {
 		return nil, status.Errorf(codes.NotFound, "unknown session %q: register first", req.GetSessionId())

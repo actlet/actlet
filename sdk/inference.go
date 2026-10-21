@@ -114,6 +114,9 @@ func (s *Server) Infer(req *gatewayv0.InferenceRequest, stream gatewayv0.Gateway
 	case req.GetEpoch() == 0:
 		return status.Error(codes.InvalidArgument, "epoch must be at least 1")
 	}
+	if err := s.authorizeSession(ctx, req.GetSessionId()); err != nil {
+		return err
+	}
 	sess := s.Session(req.GetSessionId())
 	if sess == nil {
 		return status.Errorf(codes.NotFound, "unknown session %q: register first", req.GetSessionId())

@@ -171,11 +171,38 @@ Some of the agent's [standard tools](agent.md#standard-tools) are implemented by
 The Go package [`sdk`](../sdk) implements the gateway side for embedding in an orchestrator:
 
 - `sdk.NewServer(sdk.Options{...})` with an `Assign` function that decides each session's profile and task, an optional `Authenticate`, and an `ActivityStore`;
+- `AuthorizeSession`, to bind each worker's token to its session ([below](#binding-tokens-to-sessions));
 - `Session.Pause`, `Stop`, `Steer` and `Send` to issue commands and wait for their acknowledgements, with queuing and resending handled;
 - `sdk.MemoryStore` and `sdk.RecordingStore` (one `.actrec` file per session, readable with `actlet-cli replay inspect` and `actlet-cli replay export`);
 - `OnInference` to answer agents' model calls, deduplicated by intent ID, and `OnDecide` and `OnTool` to answer [bridged tools](#bridged-tools), for which the SDK has [provider adapters](providers.md);
 - `Session.UpdateProfile` to change a running session's profile, which the SDK also applies when the worker registers again;
 - `Server.RegisterAttach` to serve the [attach protocol](../proto/actlet/attach/v0/attach.proto) to viewers such as `actlet-cli attach`. A viewer names its session in the `actlet-session` request metadata. Viewers are authenticated with `Authenticate`, like workers (`grpc.Method` tells their calls apart); `AuthorizeAttach` decides which sessions each may attach to, and `AttachCommands` what it may send, by default what the session's profile lets local viewers send. A viewer gets the session's earlier activity when the store is an `ActivityReader`, as both stores are, then live events; the server keeps a bounded backlog per watched session, and a slow viewer skips events rather than slowing the session's activity down. `Info` lists the viewers watching a session through this server, by the name each gives itself or, with `AttachViewerLabel`, by a label the orchestrator gives it, such as the user its token stands for; viewers attached to the box itself aren't listed there, nor are any viewers recorded.
+
+### Binding tokens to sessions
+
+`Authenticate` checks a token before the call's session is known, so on its own a valid token is good for every session whose ID its holder knows: it could open another session's control stream and receive its commands, publish into its recording, or make calls charged to it. An orchestrator that gives each box its own token, bound to the box's session, closes that with `AuthorizeSession(ctx, sessionID)`. The SDK calls it on `Register`, once `Assign` has chosen the session; when a `Control` or `PublishActivity` stream says which session it is for; and on every `Infer` and `CallTool`, before it looks for an earlier answer to the intent ID, so a cached answer never reaches another session. An error refuses the call with `PERMISSION_DENIED`: an Actlet worker's registration and model and tool calls fail on it, and its streams try again with backoff, so a rotated token can still get through. `sdk.TokenFromContext(ctx)` gives the token sent with the call, in `AuthorizeSession` and in every other hook given the call's context (`Assign`, `OnInference`, `OnDecide`, `OnTool`, `AuthorizeAttach`):
+
+```go
+sdk.Options{
+	Authenticate: func(ctx context.Context, token string) error {
+		if _, ok := boxes.Lookup(token); !ok {
+			return errors.New("unknown token")
+		}
+		return nil
+	},
+	AuthorizeSession: func(ctx context.Context, sessionID string) error {
+		token, _ := sdk.TokenFromContext(ctx)
+		if box, _ := boxes.Lookup(token); box.SessionID != sessionID {
+			return errors.New("this token is for another session")
+		}
+		return nil
+	},
+}
+```
+
+`Assign` can also check the token itself, refusing a worker that asks to resume another session. `actlet-devgw` has a single token for every worker, so it doesn't use either.
+
+### Other languages
 
 Gateways in other languages implement the same calls from the proto file. They must:
 
@@ -183,7 +210,8 @@ Gateways in other languages implement the same calls from the proto file. They m
 2. send commands with unique IDs, and resend those not yet acknowledged when a worker reconnects;
 3. answer each `PublishActivity` hello with what they hold, store events only in sequence, skip duplicates, and acknowledge only what is stored;
 4. return `NOT_FOUND` on a stream or call for a session they don't know, so the worker registers again;
-5. answer a repeated `Infer` intent ID with the earlier answer where they can, and return retryable codes only for failures worth retrying.
+5. answer a repeated `Infer` intent ID with the earlier answer where they can, and return retryable codes only for failures worth retrying;
+6. if they bind tokens to sessions, check the binding on every call and stream that names a session, before answering from anything cached.
 
 ## Trying it locally
 

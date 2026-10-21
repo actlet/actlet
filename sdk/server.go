@@ -51,6 +51,17 @@ type Options struct {
 	// apart. Nil accepts every call. See StaticToken.
 	Authenticate func(ctx context.Context, token string) error
 
+	// AuthorizeSession decides whether an authenticated worker may act
+	// for a session, so that a token given to one session's worker is no
+	// good for another's. It is called with the call's context, from
+	// which TokenFromContext gives the token: on Register once Assign has
+	// chosen the session, when a control or activity stream says which
+	// session it is for, and on every model and tool call, before an
+	// earlier answer to the same intent ID is looked up. An error refuses
+	// the call as PermissionDenied. Nil lets every authenticated worker
+	// act for every session.
+	AuthorizeSession func(ctx context.Context, sessionID string) error
+
 	// AuthorizeAttach decides whether an authenticated viewer may attach
 	// to a session; an error refuses it. Nil lets every authenticated
 	// viewer attach to every session.
@@ -297,16 +308,41 @@ func (s *Server) authenticate(ctx context.Context) error {
 	if s.opts.Authenticate == nil {
 		return nil
 	}
-	var token string
-	if md, ok := metadata.FromIncomingContext(ctx); ok {
-		if v := md.Get("authorization"); len(v) > 0 {
-			token, _ = strings.CutPrefix(v[0], "Bearer ")
-		}
-	}
+	token, _ := TokenFromContext(ctx)
 	if err := s.opts.Authenticate(ctx, token); err != nil {
 		return status.Errorf(codes.Unauthenticated, "authentication failed: %v", err)
 	}
 	return nil
+}
+
+// authorizeSession asks Options.AuthorizeSession whether the caller may
+// act for a session.
+func (s *Server) authorizeSession(ctx context.Context, sessionID string) error {
+	if s.opts.AuthorizeSession == nil {
+		return nil
+	}
+	if err := s.opts.AuthorizeSession(ctx, sessionID); err != nil {
+		return status.Errorf(codes.PermissionDenied, "session %q: %v", sessionID, err)
+	}
+	return nil
+}
+
+// TokenFromContext returns the bearer token sent with the call whose
+// context ctx is, as Authenticate is given it, and whether one was sent.
+// It works in every hook that is given the call's context, such as
+// Assign, AuthorizeSession, OnInference, OnDecide, OnTool and
+// AuthorizeAttach, so that a gateway can bind a token to a session.
+func TokenFromContext(ctx context.Context) (string, bool) {
+	md, ok := metadata.FromIncomingContext(ctx)
+	if !ok {
+		return "", false
+	}
+	v := md.Get("authorization")
+	if len(v) == 0 {
+		return "", false
+	}
+	token, _ := strings.CutPrefix(v[0], "Bearer ")
+	return token, true
 }
 
 var sessionIDPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`)
@@ -417,6 +453,9 @@ func (s *Server) Register(ctx context.Context, req *gatewayv0.RegisterRequest) (
 	if !ValidSessionID(resp.SessionId) {
 		return nil, status.Errorf(codes.Internal, "assigned invalid session ID %q", resp.SessionId)
 	}
+	if err := s.authorizeSession(ctx, resp.SessionId); err != nil {
+		return nil, err
+	}
 	if missing := MissingFeatures(resp.GetProfile().GetRequiredFeatures(), req.GetCapabilities()); len(missing) > 0 {
 		return nil, status.Errorf(codes.FailedPrecondition, "the profile requires features this worker doesn't support: %s", strings.Join(missing, ", "))
 	}
@@ -444,6 +483,9 @@ func (s *Server) Control(stream gatewayv0.Gateway_ControlServer) error {
 	hello := first.GetHello()
 	if hello == nil {
 		return status.Error(codes.InvalidArgument, "first control message must be a hello")
+	}
+	if err := s.authorizeSession(stream.Context(), hello.GetSessionId()); err != nil {
+		return err
 	}
 	sess := s.Session(hello.GetSessionId())
 	if sess == nil {
@@ -493,6 +535,9 @@ func (s *Server) PublishActivity(stream gatewayv0.Gateway_PublishActivityServer)
 		return status.Error(codes.InvalidArgument, "first activity message must be a hello")
 	}
 	sid, epoch := hello.GetSessionId(), hello.GetEpoch()
+	if err := s.authorizeSession(ctx, sid); err != nil {
+		return err
+	}
 	if s.Session(sid) == nil {
 		return status.Errorf(codes.NotFound, "unknown session %q: register first", sid)
 	}
