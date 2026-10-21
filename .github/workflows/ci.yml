@@ -43,8 +43,8 @@ jobs:
       - name: Test
         if: runner.os != 'Windows'
         run: make test
-      # Windows runs the portable tests; process-kill and flock tests are
-      # built for Unix only.
+      # Windows runs the tests without the race detector; those that need
+      # POSIX signals are built for Unix only, and say why.
       - name: Test
         if: runner.os == 'Windows'
         run: go test ./...
