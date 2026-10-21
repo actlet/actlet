@@ -174,7 +174,9 @@ func (r *programRun) result() Result {
 }
 
 func writeStream(sb *strings.Builder, name string, b *capBuffer) {
-	s := b.String()
+	// Lines end in \n on every system: Windows programs end theirs in
+	// \r\n.
+	s := strings.ReplaceAll(b.String(), "\r\n", "\n")
 	if s == "" {
 		return
 	}

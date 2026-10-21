@@ -396,6 +396,7 @@ func TestShell(t *testing.T) {
 		{"workspace", map[string]any{"command": "pwd"}, []string{"workspace"}, false},
 		{"no token", map[string]any{"command": "echo token=${ACTLET_TOKEN:-none}"}, []string{"token=none"}, false},
 		{"timeout", map[string]any{"command": "sleep 30", "timeout_seconds": 1}, []string{"timed out after 1s"}, true},
+		{"crlf", map[string]any{"command": `printf 'a\r\nb\r\n'`}, []string{"stdout:\na\nb\n"}, false},
 		{"big output", map[string]any{"command": "head -c 100000 /dev/zero | tr '\\0' x; echo; echo END"}, []string{"bytes omitted", "END"}, false},
 	}
 	for _, tt := range tests {
@@ -479,7 +480,6 @@ func TestPython(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			r := call(t, s, Python, tt.input)
-			r.Output = strings.ReplaceAll(r.Output, "\r\n", "\n") // Windows
 			if r.IsError != tt.isError {
 				t.Errorf("IsError = %v", r.IsError)
 			}
