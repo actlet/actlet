@@ -1,5 +1,8 @@
 //go:build !windows
 
+// Not on Windows: its file trees hold symbolic links, which need
+// privileges there.
+
 package attach
 
 import (

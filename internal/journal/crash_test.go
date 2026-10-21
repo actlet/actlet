@@ -1,5 +1,7 @@
 //go:build darwin || dragonfly || freebsd || linux || netbsd || openbsd
 
+// Unix only: it crashes a writer with SIGKILL, which Windows doesn't have.
+
 package journal
 
 import (

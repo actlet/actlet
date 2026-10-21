@@ -1,5 +1,8 @@
 //go:build !windows
 
+// Not on Windows: it signals process groups, which Windows doesn't have;
+// supervise_windows_test.go tests job objects there.
+
 package supervise
 
 import (

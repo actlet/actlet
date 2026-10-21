@@ -1,5 +1,8 @@
 //go:build darwin || dragonfly || freebsd || linux || netbsd || openbsd
 
+// Unix only: the end-to-end tests stop and crash actlet with signals and
+// read its wait status, which Windows doesn't have.
+
 package main
 
 import (

@@ -1,5 +1,8 @@
 //go:build !windows
 
+// Not on Windows: it crashes a box with SIGKILL, which Windows doesn't
+// have.
+
 package main
 
 import (
