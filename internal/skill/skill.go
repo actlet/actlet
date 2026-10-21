@@ -13,6 +13,7 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"slices"
 	"strings"
 
@@ -253,9 +254,20 @@ func Load(dir string) (*gatewayv0.Skill, error) {
 		if err != nil {
 			return nil, err
 		}
-		out.Files = append(out.Files, &gatewayv0.SkillFile{Path: f, Content: data, Executable: fi.Mode()&0o111 != 0})
+		out.Files = append(out.Files, &gatewayv0.SkillFile{Path: f, Content: data, Executable: executable(fi.Mode(), data, runtime.GOOS)})
 	}
 	return out, nil
+}
+
+// executable says whether a skill's file is sent as executable: by its
+// mode where files have execute bits, and on Windows, where they don't,
+// if it starts with "#!", as a script does. A skill loaded on Windows
+// then still runs its scripts in a Linux container.
+func executable(mode fs.FileMode, data []byte, goos string) bool {
+	if goos == "windows" {
+		return bytes.HasPrefix(data, []byte("#!"))
+	}
+	return mode&0o111 != 0
 }
 
 // Size is the size of a skill's files.

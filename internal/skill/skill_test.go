@@ -1,6 +1,7 @@
 package skill
 
 import (
+	"io/fs"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -157,5 +158,27 @@ func TestLoadAndWrite(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(filepath.Dir(dst), "evil")); !os.IsNotExist(err) {
 		t.Errorf("wrote outside: %v", err)
+	}
+}
+
+// A file is executable by its mode where files have execute bits, and on
+// Windows, where they don't, when it starts as a script does.
+func TestExecutable(t *testing.T) {
+	script, text := []byte("#!/bin/sh\necho hi\n"), []byte("# notes\n")
+	for _, tt := range []struct {
+		goos string
+		mode fs.FileMode
+		data []byte
+		want bool
+	}{
+		{"linux", 0o755, text, true},
+		{"linux", 0o644, script, false},
+		{"darwin", 0o700, script, true},
+		{"windows", 0o666, script, true},
+		{"windows", 0o666, text, false},
+	} {
+		if got := executable(tt.mode, tt.data, tt.goos); got != tt.want {
+			t.Errorf("%s %v %q: %v, want %v", tt.goos, tt.mode, tt.data[:2], got, tt.want)
+		}
 	}
 }

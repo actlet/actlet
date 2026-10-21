@@ -82,6 +82,10 @@ Loading is strict, so a mistake is reported rather than ignored:
 
 All problems are reported at once.
 
+### Skills in a profile
+
+`skills` sends skill folders with the profile: every file in each folder, at most 2 MiB in all, with whether it is executable, which the worker keeps when it writes the folder into the session. A file is executable by its mode where files have execute bits. On Windows, which has none, a file is sent as executable when it starts with `#!`, as a script does, so a profile loaded there still gives the container scripts it can run. See [skills](agent.md#skills) for how the agent uses them.
+
 ### Required features
 
 `required_features` names capabilities the worker announces when it registers. Today those are `control.pause`, `control.stop`, `control.steer`, `activity.v0`, `task.demo`, `task.agent`, `inference.v0`, `tools.local` and `attach.files`. A gateway built on the SDK refuses to register a worker that lacks any of them, and the worker refuses such a profile itself too. An older worker therefore never runs a profile it only half understands: it exits with code 1 and names the missing features.
