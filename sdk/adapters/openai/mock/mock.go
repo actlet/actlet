@@ -55,7 +55,9 @@ type failure struct {
 	midStream bool
 }
 
-// New starts a mock that answers with respond and wants key.
+// New starts a mock that answers with respond and wants key. An error
+// from respond is answered 400, which the worker doesn't retry; FailNext
+// gives errors it does.
 func New(key string, respond Responder) *Server {
 	s := &Server{APIKey: key, respond: respond}
 	s.Server = httptest.NewServer(http.HandlerFunc(s.serve))
@@ -135,7 +137,10 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 	}
 	a, err := s.respond(r.Context(), neutral(&req))
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "server_error", "", err.Error())
+		// A request respond refuses, such as one a script didn't expect,
+		// fails the call: as a server error, the worker would retry it
+		// for ever.
+		writeError(w, http.StatusBadRequest, "invalid_request_error", "", err.Error())
 		return
 	}
 	stream(w, a, f != nil && f.midStream)

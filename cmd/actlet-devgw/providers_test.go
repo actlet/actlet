@@ -126,7 +126,11 @@ routes:
 			if err := os.WriteFile(filepath.Join(dir, "inputs", "numbers.txt"), numbers, 0o644); err != nil {
 				t.Fatal(err)
 			}
-			code := runner.Run(context.Background(), runner.Config{
+			// A run that can't finish fails the test, with its logs, rather
+			// than hanging it.
+			ctx, cancel := context.WithTimeout(t.Context(), 2*time.Minute)
+			defer cancel()
+			code := runner.Run(ctx, runner.Config{
 				Gateway:    gwclient.Config{Addr: lis.Addr().String(), Token: "dev", BackoffMin: 10 * time.Millisecond, BackoffMax: 100 * time.Millisecond},
 				SessionDir: dir, WorkerID: "w", DefaultStopGrace: time.Second, MaxStopGrace: time.Minute,
 				SignalDeadline: time.Second, FlushTimeout: 2 * time.Second, Logger: log, NoAttach: true,

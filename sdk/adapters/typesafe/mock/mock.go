@@ -35,7 +35,9 @@ type failure struct {
 	body   string
 }
 
-// New starts a mock that answers with respond and wants key.
+// New starts a mock that answers with respond and wants key. An error
+// from respond is answered 400, which the worker doesn't retry; FailNext
+// gives errors it does.
 func New(key string, respond Responder) *Server {
 	s := &Server{APIKey: key, Model: "jev-mock-1", respond: respond}
 	s.Server = httptest.NewServer(http.HandlerFunc(s.serve))
@@ -119,7 +121,9 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 	}
 	answers, err := s.respond(&req)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		// A request respond refuses fails the call: as a server error, the
+		// worker would retry it for ever.
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 	state, _ := json.Marshal(req.State)
