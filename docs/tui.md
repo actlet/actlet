@@ -80,7 +80,7 @@ The viewer's colours come from a theme. Three are built in: `dark`, the default,
 ```sh
 actlet attach -theme light
 ACTLET_THEME=mine actlet-cli replay play run.actrec     # ~/.config/actlet/themes/mine.yaml
-actlet-cli attach -direct 127.0.0.1:7600 -theme ./ocean.yaml
+actlet-cli replay play -theme examples/themes/ocean.yaml run.actrec   # an example theme file
 ```
 
 A theme other than the built-in ones is a file. By name, it is `<name>.yaml`, `.yml` or `.json` in `$XDG_CONFIG_HOME/actlet/themes`, or `~/.config/actlet/themes` when `XDG_CONFIG_HOME` isn't set; the flag and `ACTLET_THEME` may also give a file's path. A profile only names a theme, built in or in the viewer's own themes folder, so that it can't make a viewer read files elsewhere.

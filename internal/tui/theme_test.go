@@ -346,3 +346,19 @@ func TestStatusBudgets(t *testing.T) {
 		t.Errorf("shortDuration %q", got)
 	}
 }
+
+// The example theme loads, and keeps its text readable as the built-in
+// themes do.
+func TestExampleTheme(t *testing.T) {
+	th, err := LoadTheme("../../examples/themes/ocean.yaml", "", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, fg := range []string{"text", "muted", "accent", "agent", "subagent", "operator", "ok", "error", "warning", "key", "string", "comment"} {
+		for _, bg := range []string{"background", "panel"} {
+			if r := contrast(th.Colors[fg], th.Colors[bg]); r < 4.5 {
+				t.Errorf("%s on %s is %.2f:1", fg, bg, r)
+			}
+		}
+	}
+}

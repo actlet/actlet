@@ -1,0 +1,22 @@
+# An example theme: deep blue, on top of the dark theme. Use it with
+#   actlet attach -theme examples/themes/ocean.yaml
+# or copy it to ~/.config/actlet/themes/ and use -theme ocean.
+# The format is in docs/tui.md, "Colours and themes".
+name: ocean
+base: dark
+colors:
+  background: "#0B1726"
+  panel: "#112236"
+  selection: "#1B3A5C"
+  border: "#24476B"
+  text: "#D8E6F3"
+  muted: "#8FA9C2"
+  faint: "#3A5A7A"
+  accent: "#4FD1C5"
+  agent: "#4FD1C5"
+  subagent: "#7FB2F0"
+  operator: "#F6C177"
+  hunk: "#7FB2F0"
+  key: "#7FB2F0"
+emphasis:
+  key: [bold]
