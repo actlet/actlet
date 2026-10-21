@@ -109,7 +109,7 @@ func CheckTerminal() error {
 
 // RunLive shows a running box until the viewer quits. Quitting detaches:
 // the session carries on.
-func RunLive(ctx context.Context, client attachv0.AttachClient, conn Connection, actor string) error {
+func RunLive(ctx context.Context, client attachv0.AttachClient, conn Connection, actor string, look Look) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	in, out, closeTerm, err := openTerminal()
@@ -118,6 +118,7 @@ func RunLive(ctx context.Context, client attachv0.AttachClient, conn Connection,
 	}
 	defer closeTerm()
 	m := NewLive(conn, Commands(ctx, client), actor)
+	m.SetLook(look)
 	m.SetFileReader(Files(ctx, client, conn.Dir))
 	programs.Add(1)
 	p := tea.NewProgram(m, tea.WithContext(ctx), tea.WithInput(in), tea.WithOutput(out))
@@ -153,6 +154,9 @@ type DumpOptions struct {
 	// File, if set, is opened in the file viewer, as the sidebar names it.
 	File       string
 	Separators bool
+	Look       Look
+	// Color keeps the colours, as ANSI escape sequences.
+	Color bool
 }
 
 // DumpLive renders a box's screen once, as text: what it holds now. It
@@ -164,6 +168,7 @@ func DumpLive(ctx context.Context, client attachv0.AttachClient, conn Connection
 	m.SetSize(o.Width, o.Height)
 	m.SetTab(o.Tab)
 	m.SetSeparators(o.Separators)
+	m.SetLook(o.Look)
 	m.SetFileReader(Files(ctx, client, conn.Dir))
 	msgs := make(chan tea.Msg, 64)
 	errc := make(chan error, 1)
@@ -178,6 +183,9 @@ func DumpLive(ctx context.Context, client attachv0.AttachClient, conn Connection
 	dump := func() string {
 		if o.File != "" {
 			m.Open(o.File)
+		}
+		if o.Color {
+			return m.DumpColor()
 		}
 		return m.Dump()
 	}

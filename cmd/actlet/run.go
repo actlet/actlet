@@ -201,7 +201,7 @@ func runRun(args []string, stdout, stderr io.Writer, signals <-chan os.Signal) i
 				}
 				defer func() { _ = closeClient() }()
 				conn := tui.Connection{Kind: "this process", Target: absPath(*dir), Dir: absPath(*dir)}
-				if err := tui.RunLive(context.Background(), client, conn, viewerName()); err != nil {
+				if err := tui.RunLive(context.Background(), client, conn, viewerName(), tui.ResolveLook("", os.Getenv)); err != nil {
 					log.Error("tui", "err", err)
 				}
 				if !runEnded.Load() {

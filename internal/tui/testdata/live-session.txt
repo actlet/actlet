@@ -1,32 +1,32 @@
- actlet  sum                                            Chat  Session  Task  Profile  Tools  Events 
-  state        running: started                                                                     
-  run          1                                                                                    
-  forked from  parent-7 at checkpoint 42 (turn 2)                                                   
-  elapsed      30s                                                                                  
-  viewing      local box /work/session                                                              
-  events       16                                                                                   
-  progress     60% · adding up the totals                                                           
+  ◆ actlet  sum                                        Chat  Session  Task  Profile  Tools  Events  
+   state        running: started                                                                    
+   run          1                                                                                   
+   forked from  parent-7 at checkpoint 42 (turn 2)                                                  
+   elapsed      30s                                                                                 
+   viewing      local box /work/session                                                             
+   events       16                                                                                  
+   progress     60% · adding up the totals                                                          
                                                                                                     
-Box                                                                                                 
-  folder       52.0 KiB                                                                             
-  output       10 B                                                                                 
-  memory       24.0 MiB                                                                             
-  cpu          1.5s                                                                                 
-  gateway      gw:7400 (connected)                                                                  
+ Box                                                                                                
+   folder       52.0 KiB                                                                            
+   output       10 B                                                                                
+   memory       24.0 MiB                                                                            
+   cpu          1.5s                                                                                
+   gateway      gw:7400 (connected)                                                                 
                                                                                                     
-Usage                                                                                               
-  tokens       25k in, 500 out                                                                      
-  cost         0.0820 EUR                                                                           
-  worker     model     turns  context   tokens      cost                                            
-  root       large         2       6%      26k    0.0820                                            
-  root.1     fast          2        0        0       n/a                                            
+ Usage                                                                                              
+   tokens       25k in, 500 out                                                                     
+   cost         0.0820 EUR                                                                          
+   worker     model     turns  context   tokens      cost                                           
+   root       large         2       6%      26k    0.0820                                           
+   root.1     fast          2        0        0       n/a                                           
                                                                                                     
-Budgets                                                                                             
-  money  limit 5 EUR      used 0.08 (2%)                                                            
-  disk   limit 1.0 MiB    used 900.0 KiB (88%)  past the alert                                      
+ Budgets                                                                                            
+   money  limit 5 EUR      used 0.08 (2%)                                                           
+   disk   limit 1.0 MiB    used 900.0 KiB (88%)  past the alert                                     
                                                                                                     
-Feedback                                                                                            
-  22:13:35 problem    the input has no header row                                                   
+ Feedback                                                                                           
+   22:13:35 problem    the input has no header row                                                  
 ────────────────────────────────────────────────────────────────────────────────────────────────────
  › press i to send the agent a note                                                                 
- ⠋ running · large · ctx 6% · 0.08 EUR · 30s · local box                                     ? keys 
+ ⠋ running  large │ ctx 6% │ 0.08 EUR │ 30s │ local box                                      ? keys 

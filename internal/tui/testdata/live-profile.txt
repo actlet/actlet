@@ -1,21 +1,21 @@
- actlet  sum                                            Chat  Session  Task  Profile  Tools  Events 
-Effective configuration (profile coding)                                                            
-  {                                                                                                 
-    "model": "large"                                                                                
-  }                                                                                                 
+  ◆ actlet  sum                                        Chat  Session  Task  Profile  Tools  Events  
+ Effective configuration (profile coding)                                                           
+   {                                                                                                
+     "model": "large"                                                                               
+   }                                                                                                
                                                                                                     
-Models                                                                                              
-  large  200k context                                                                               
-  fast  128k context                                                                                
-  roles: main → large, subagent → fast                                                              
-  selectable: fast                                                                                  
+ Models                                                                                             
+   large  200k context                                                                              
+   fast  128k context                                                                               
+   roles: main → large, subagent → fast                                                             
+   selectable: fast                                                                                 
                                                                                                     
-Budgets                                                                                             
-  money  limit 5 EUR      used 0.08 (2%)                                                            
-  disk   limit 1.0 MiB    used 900.0 KiB (88%)  past the alert                                      
+ Budgets                                                                                            
+   money  limit 5 EUR      used 0.08 (2%)                                                           
+   disk   limit 1.0 MiB    used 900.0 KiB (88%)  past the alert                                     
                                                                                                     
-Local viewers may                                                                                   
-  steer                                                                                             
+ Local viewers may                                                                                  
+   steer                                                                                            
                                                                                                     
                                                                                                     
                                                                                                     
@@ -29,4 +29,4 @@ Local viewers may
                                                                                                     
 ────────────────────────────────────────────────────────────────────────────────────────────────────
  › press i to send the agent a note                                                                 
- ⠋ running · large · ctx 6% · 0.08 EUR · 30s · local box                                     ? keys 
+ ⠋ running  large │ ctx 6% │ 0.08 EUR │ 30s │ local box                                      ? keys 

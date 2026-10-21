@@ -44,6 +44,10 @@ type Connection struct {
 	// Dir is the session folder of a box on this machine, to read its
 	// files from once the box has gone.
 	Dir string
+	// Attached names the transport of a viewer attached to a box that
+	// runs elsewhere, for its badge: "local socket", "box <address>" or
+	// "orchestrator <address>". It is empty for the run's own viewer.
+	Attached string
 }
 
 // Commander sends a command to the box; nil when there is none, as in a
@@ -94,6 +98,8 @@ type Model struct {
 
 	// separators draws a line between turns and tool calls.
 	separators bool
+	// st are the theme's styles.
+	st *styles
 
 	input  textinput.Model
 	typing bool
@@ -126,8 +132,22 @@ func newModel(conn Connection) *Model {
 	in.Prompt = " › "
 	in.Placeholder = "a note for the agent; Enter sends, Esc cancels"
 	in.CharLimit = 4096
-	return &Model{sess: view.New(), conn: conn, input: in, now: time.Now, width: 100, height: 30, expanded: map[string]bool{}, fileRows: map[int]string{}}
+	m := &Model{sess: view.New(), conn: conn, input: in, now: time.Now, width: 100, height: 30, expanded: map[string]bool{}, fileRows: map[int]string{}}
+	m.SetTheme(ThemeDark)
+	return m
 }
+
+// SetTheme sets the viewer's colours.
+func (m *Model) SetTheme(t Theme) {
+	m.st = newStyles(t)
+	m.input.SetStyles(m.st.inputStyles(m.input.Styles()))
+	if m.popup != nil {
+		m.popup.styled = nil
+	}
+}
+
+// Theme returns the viewer's theme.
+func (m *Model) Theme() Theme { return m.st.theme }
 
 // Session returns the view being shown.
 func (m *Model) Session() *view.Session { return m.sess }

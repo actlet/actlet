@@ -1,32 +1,32 @@
- actlet  sum                                            Chat  Session  Task  Profile  Tools  Events  
-                                                                     │ WORKERS                       
- ▌ Subagent root.1 · an earlier turn                                 │● root large 2 turns           
-   ✓ Write report.md  +1 −0                                      12ms│✓  root.1 fast 2 turns         
-     │ @@ -0,0 +1 @@                                                 │                               
-     │ +Total: 12                                                    │FILES                          
-                                                                     │workspace/report.md +1 −0      
-                                                                     │o or a click opens a file      
-                                                                     │                               
-                                                                     │                               
-                                                                     │                               
-                                                                     │                               
-                                                                     │                               
-                                                                     │                               
-                                                                     │                               
-                                                                     │                               
-                                                                     │                               
-                                                                     │                               
-                                                                     │                               
-                                                                     │                               
-                                                                     │                               
-                                                                     │                               
-                                                                     │                               
-                                                                     │                               
-                                                                     │                               
-                                                                     │                               
-                                                                     │                               
-                                                                     │                               
-                                                                     │                               
-──────────────────────────────────────────────────────────────────────────────────────────────────── 
- › press i to send the agent a note                                                                  
- ⠋ running · large · ctx 6% · 0.08 EUR · 30s · local box                                     ? keys  
+  ◆ actlet  sum                                        Chat  Session  Task  Profile  Tools  Events  
+                                                                   │ WORKERS                        
+ ▌ Subagent root.1 · an earlier turn                               │  ● root large · 2 turns        
+   ✓ Write report.md  +1 −0                                   12ms │ ▸ ✓ root.1 fast · 2 turns      
+     │ @@ -0,0 +1 @@                                               │                                
+     │ +Total: 12                                                  │ FILES                          
+                                                                   │ workspace/report.md +1 −0      
+                                                                   │ o or a click opens a file      
+                                                                   │                                
+                                                                   │                                
+                                                                   │                                
+                                                                   │                                
+                                                                   │                                
+                                                                   │                                
+                                                                   │                                
+                                                                   │                                
+                                                                   │                                
+                                                                   │                                
+                                                                   │                                
+                                                                   │                                
+                                                                   │                                
+                                                                   │                                
+                                                                   │                                
+                                                                   │                                
+                                                                   │                                
+                                                                   │                                
+                                                                   │                                
+                                                                   │                                
+                                                                   │                                
+────────────────────────────────────────────────────────────────────────────────────────────────────
+ › press i to send the agent a note                                                                 
+ ⠋ running  large │ ctx 6% │ 0.08 EUR │ 30s │ local box                                      ? keys 

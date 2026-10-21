@@ -268,12 +268,12 @@ func (r *remoteSession) localDump(t *testing.T, args ...string) string {
 
 var spinner = regexp.MustCompile(`[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]`)
 
-// screen is a dump without its status line, which names the connection
-// and the time, and with the spinner stopped.
+// screen is a dump without its header and status line, which name the
+// connection and the time, and with the spinner stopped.
 func screen(dump string) string {
 	lines := strings.Split(strings.TrimRight(dump, "\n"), "\n")
-	if len(lines) > 0 {
-		lines = lines[:len(lines)-1]
+	if len(lines) > 1 {
+		lines = lines[1 : len(lines)-1]
 	}
 	return spinner.ReplaceAllString(strings.Join(lines, "\n"), "*")
 }
@@ -320,6 +320,16 @@ func TestAttachRemote(t *testing.T) {
 			} {
 				if !strings.Contains(statusLine(dump), want) {
 					t.Errorf("status line %q, want %q", statusLine(dump), want)
+				}
+			}
+			// And its badge.
+			for dump, want := range map[string]string{
+				local: "attached · local socket",
+				gw:    "attached · orchestrator " + r.gateway,
+				box:   "attached · box " + r.port,
+			} {
+				if head, _, _ := strings.Cut(dump, "\n"); !strings.Contains(head, want) {
+					t.Errorf("header %q, want %q", head, want)
 				}
 			}
 		}

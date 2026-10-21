@@ -1,16 +1,16 @@
- actlet  sum                                            Chat  Session  Task  Profile  Tools  Events 
-Task sum (agent)                                                                                    
+  ◆ actlet  sum                                        Chat  Session  Task  Profile  Tools  Events  
+ Task sum (agent)                                                                                   
                                                                                                     
-  {                                                                                                 
-    "id": "sum",                                                                                    
-    "input": "Add up the numbers."                                                                  
-  }                                                                                                 
+   {                                                                                                
+     "id": "sum",                                                                                   
+     "input": "Add up the numbers."                                                                 
+   }                                                                                                
                                                                                                     
-Workers                                                                                             
-  root  running  2 turns  model large                                                               
-    root.1  finished  2 turns  model fast                                                           
-      task: Write the report.                                                                       
-      result: Wrote report.md.                                                                      
+ Workers                                                                                            
+   root  running  2 turns  model large                                                              
+     root.1  finished  2 turns  model fast                                                          
+       task: Write the report.                                                                      
+       result: Wrote report.md.                                                                     
                                                                                                     
                                                                                                     
                                                                                                     
@@ -29,4 +29,4 @@ Workers
                                                                                                     
 ────────────────────────────────────────────────────────────────────────────────────────────────────
  › press i to send the agent a note                                                                 
- ⠋ running · large · ctx 6% · 0.08 EUR · 30s · local box                                     ? keys 
+ ⠋ running  large │ ctx 6% │ 0.08 EUR │ 30s │ local box                                      ? keys 

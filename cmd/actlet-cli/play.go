@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"os"
 
 	"github.com/actlet/actlet/internal/tui"
 )
@@ -41,6 +42,8 @@ func runReplayPlay(args []string, stdout, stderr io.Writer) int {
 	expand := fs.Bool("expand", false, "with -dump: expand every tool call")
 	file := fs.String("file", "", "with -dump: open this file, as the sidebar shows it, in the file viewer")
 	separators := fs.Bool("separators", false, "draw lines between turns and tool calls")
+	theme := fs.String("theme", "", "the colours: dark, light, plain, a theme file's name or its path [ACTLET_THEME]")
+	color := fs.Bool("color", false, "with -dump: keep the colours, as ANSI escape sequences")
 	width := fs.Int("width", 120, "with -dump: the screen width")
 	height := fs.Int("height", 40, "with -dump: the screen height")
 	path, code, ok := parseFileArgs(fs, args, stderr)
@@ -71,12 +74,17 @@ func runReplayPlay(args []string, stdout, stderr io.Writer) int {
 	m.SetFilter(*worker, *tool)
 	m.ExpandAll(*expand)
 	m.SetSeparators(*separators)
+	m.SetLook(tui.ResolveLook(*theme, os.Getenv))
 	if *dump {
 		m.SetSize(*width, *height)
 		if *file != "" {
 			m.Open(*file)
 		}
-		fmt.Fprintln(stdout, m.Dump())
+		if *color {
+			fmt.Fprintln(stdout, m.DumpColor())
+		} else {
+			fmt.Fprintln(stdout, m.Dump())
+		}
 		return 0
 	}
 	if err := tui.CheckTerminal(); err != nil {

@@ -58,6 +58,8 @@ func runAttach(args []string, stdout, stderr io.Writer) int {
 	tab := fs.String("tab", "chat", "with -dump: the view to print: chat, session, task, profile, tools or events")
 	file := fs.String("file", "", "with -dump: open this file, as the sidebar shows it, in the file viewer")
 	separators := fs.Bool("separators", false, "draw lines between turns and tool calls")
+	theme := fs.String("theme", "", "the colours: dark, light, plain, a theme file's name or its path [ACTLET_THEME]")
+	color := fs.Bool("color", false, "with -dump: keep the colours, as ANSI escape sequences")
 	width := fs.Int("width", 120, "with -dump: the screen width")
 	height := fs.Int("height", 40, "with -dump: the screen height")
 	if err := fs.Parse(args); err != nil {
@@ -101,13 +103,15 @@ func runAttach(args []string, stdout, stderr io.Writer) int {
 		return fail(err)
 	}
 	defer func() { _ = closeClient() }()
-	conn := tui.Connection{Kind: "box " + addr}
+	conn := tui.Connection{Kind: "box " + addr, Attached: "box " + addr}
 	if *gateway != "" {
 		conn.Kind = fmt.Sprintf("orchestrator %s · session %s", addr, shortID(opts.Session))
+		conn.Attached = "orchestrator " + addr
 	}
+	look := tui.ResolveLook(*theme, os.Getenv)
 	ctx := context.Background()
 	if *dump {
-		out, err := tui.DumpLive(ctx, client, conn, tui.DumpOptions{Tab: t, Width: *width, Height: *height, File: *file, Separators: *separators})
+		out, err := tui.DumpLive(ctx, client, conn, tui.DumpOptions{Tab: t, Width: *width, Height: *height, File: *file, Separators: *separators, Look: look, Color: *color})
 		if err != nil {
 			return fail(err)
 		}
@@ -121,7 +125,7 @@ func runAttach(args []string, stdout, stderr io.Writer) int {
 	if err != nil {
 		return fail(err)
 	}
-	if err := tui.RunLive(ctx, client, conn, viewerName()); err != nil {
+	if err := tui.RunLive(ctx, client, conn, viewerName(), look); err != nil {
 		return fail(err)
 	}
 	return 0

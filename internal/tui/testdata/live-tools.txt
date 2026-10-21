@@ -1,16 +1,16 @@
- actlet  sum                                            Chat  Session  Task  Profile  Tools  Events 
-Tools (recovery policy)                                                                             
-  shell           never      Run a command.                                                         
-  write_file      reconcile  Write a file.                                                          
+  ◆ actlet  sum                                        Chat  Session  Task  Profile  Tools  Events  
+ Tools (recovery policy)                                                                            
+   shell           never      Run a command.                                                        
+   write_file      reconcile  Write a file.                                                         
                                                                                                     
-Skills (source, files)                                                                              
-  csv-report      profile  2   Write reports from CSV files.                                        
+ Skills (source, files)                                                                             
+   csv-report      profile  2   Write reports from CSV files.                                       
                                                                                                     
-Grants                                                                                              
-  shell  timeout=5m                                                                                 
+ Grants                                                                                             
+   shell  timeout=5m                                                                                
                                                                                                     
-Installed (tools manifest)                                                                          
-  jq and ripgrep are installed.                                                                     
+ Installed (tools manifest)                                                                         
+   jq and ripgrep are installed.                                                                    
                                                                                                     
                                                                                                     
                                                                                                     
@@ -29,4 +29,4 @@ Installed (tools manifest)
                                                                                                     
 ────────────────────────────────────────────────────────────────────────────────────────────────────
  › press i to send the agent a note                                                                 
- ⠋ running · large · ctx 6% · 0.08 EUR · 30s · local box                                     ? keys 
+ ⠋ running  large │ ctx 6% │ 0.08 EUR │ 30s │ local box                                      ? keys 

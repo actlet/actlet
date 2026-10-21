@@ -19,23 +19,23 @@ make demo-attach   # in a second terminal: another viewer on the same box
 ## The screen
 
 ```
- actlet  q3-sales-review                              Chat  Session  Task  Profile  Tools  Events
- ▌ Agent · turn 3 · large · 6.9k in / 610 out                            │ WORKERS
- ▌ Three regions with different stories. I'll give each region to a      │● root large 3 turns
- ▌ subagent so they can work in parallel.                                 │●  root.1 fast 1 turn
-   ⠋ Subagent root.1  Region west: summarise the west's Q3 sales…  running│
-     ┊ ▌ Subagent root.1 · turn 1 · fast · 2.1k in / 90 out              │ FILES
-     ┊ ▌ Reading the west's rows.                                         │ workspace/totals.py +9 −0
-     ┊   ✓ Grep ^west  in ../inputs/sales.csv                         24ms│
-     ┊     │ ../inputs/sales.csv:8:west,2026-07,widget,150,4500           │
- ────────────────────────────────────────────────────────────────────────────────────────────────
+  ◆ actlet  q3-sales-review                      Chat  Session  Task  Profile  Tools  Events
+ ▌ Agent · turn 3 · large · 6.9k in / 610 out                       │ WORKERS
+ ▌ Three regions with different stories. I'll give each region to a │ ▸● root large · 3 turns
+ ▌ subagent so they can work in parallel.                            │   ●  root.1 fast · 1 turn
+   ⠋ Subagent root.1  Region west: summarise the west's Q3…  running │
+     ┊ ▌ Subagent root.1 · turn 1 · fast · 2.1k in / 90 out          │ FILES
+     ┊ ▌ Reading the west's rows.                                    │ workspace/totals.py +9 −0
+     ┊   ✓ Grep ^west  in ../inputs/sales.csv                   24ms │
+     ┊     │ ../inputs/sales.csv:8:west,2026-07,widget,150,4500      │
+ ──────────────────────────────────────────────────────────────────────────────────────────
   › press i to send the agent a note
-  ⠋ running · large · ctx 3% · 0.08 EUR · 22s · local box                                  ? keys
+  ⠋ running  large │ ctx 3% │ 0.08 EUR │ 22s │ this process                           ? keys
 ```
 
-The **Chat** tab is the conversation, one model turn at a time: who speaks (the agent, a subagent, the operator, or Actlet itself, each in its own colour), what the model said, then each tool call as one block with its result. A block shows the tool, its key arguments, how it went (✓, ✗, a spinner while it runs, ? when the outcome is unknown after a crash) and how long it took, then the start of its output or its diff. A subagent is shown inside the `Subagent` call that started it, with its own turns, and its final answer under it. The sidebar lists the workers and the files changed so far, by their path in the session folder, with the lines added and removed by all their changes together; it hides when the terminal is narrow.
+The **Chat** tab is the conversation, one model turn at a time: who speaks (the agent, a subagent, the operator, or Actlet itself, each in its own colour), what the model said, then each tool call as one block with its result. A block shows the tool, its key arguments, how it went (✓, ✗, a spinner while it runs, ? when the outcome is unknown after a crash) and how long it took, then the start of its output or its diff. A subagent is shown inside the `Subagent` call that started it, with its own turns, and its final answer under it. The sidebar lists the workers and the files changed so far, by their path in the session folder, with the lines added and removed by all their changes together; it hides when the terminal is narrow. The worker shown, picked with `[` and `]`, is highlighted with a `▸`; the agent stands for the whole conversation, its subagents nested in it.
 
-The **status line** keeps to what matters at a glance: the session's state, the model, how full its context is, the cost so far, the time, and what the viewer is connected to. The rest is in the other tabs:
+The **status line** keeps to what matters at a glance: the session's state in its colour, the model, how full its context is (green, then yellow past 60%, red past 85%), the cost so far, the time, and what the viewer is connected to. The rest is in the other tabs:
 
 | Tab | Shows |
 |---|---|
@@ -65,6 +65,44 @@ Figures Actlet doesn't have show as `n/a`: cost needs a gateway that reports it 
 | `q` | quit; the session carries on |
 
 The mouse works too: click a tab, click a tool call to select it and again to expand it, and scroll with the wheel. Playing a recording adds `space` (play and pause), `←` `→` (seek), `+` `-` (speed), `f` (follow a recording that is still being written) and search: `/` takes a phrase, and `enter` moves the replay to the next event that has it anywhere, regardless of case, as the last event shown; `n` and `N` find the next and previous, wrapping around. The status line says which match of how many it is.
+
+## Colours and themes
+
+The viewer's colours come from a theme. Three are built in: `dark`, the default, `light`, and `plain`, which has no colours and shows emphasis with bold, underline and reverse video. The viewer's `-theme` flag picks one, or `ACTLET_THEME` does; `NO_COLOR` set to anything gives `plain`, unless `-theme` says otherwise.
+
+```sh
+actlet attach -theme light
+ACTLET_THEME=mine actlet-cli replay play run.actrec     # ~/.config/actlet/themes/mine.yaml
+actlet-cli attach -direct 127.0.0.1:7600 -theme ./ocean.yaml
+```
+
+A theme other than the built-in ones is a file. By name, it is `<name>.yaml`, `.yml` or `.json` in `$XDG_CONFIG_HOME/actlet/themes`, or `~/.config/actlet/themes` when `XDG_CONFIG_HOME` isn't set; the flag and `ACTLET_THEME` may also give a file's path. A theme gives only the colours it changes and takes the rest from its base, `dark` unless it names another built-in theme:
+
+```yaml
+# ~/.config/actlet/themes/mine.yaml
+base: light            # dark (the default), light or plain
+colors:
+  accent: "#d33682"    # the title, the active tab, the prompt, the shown worker
+  background: none     # the terminal's own background
+  ok: "2"              # an ANSI colour number, 0 to 255
+```
+
+Each colour is `#rrggbb`, `#rgb`, an ANSI colour number from 0 to 255, or `none` for the terminal's own:
+
+| Colour | Used for |
+|---|---|
+| `background` | the screen |
+| `panel` | the header, the sidebar, the status line and the file viewer |
+| `selection` | the selected tool call, file or worker |
+| `border` | separator lines, rules and borders |
+| `text`, `muted`, `faint` | text, less important text, hints |
+| `accent` | the title, the active tab, the prompt, headings and the worker shown |
+| `agent`, `subagent`, `operator` | the speakers' labels |
+| `ok`, `error`, `warning` | done, failed, and running or warned: tool calls, workers, the session's state, diffs |
+| `attach` | the badge of a viewer attached from elsewhere |
+| `keyword`, `string`, `number`, `comment`, `key`, `function`, `punctuation` | syntax highlighting |
+
+A file that can't be read, isn't a theme or names an unknown colour leaves the viewer on `dark`, and the status line says why. Theme files are at most 64 KiB.
 
 ## Searching a recording
 
@@ -107,13 +145,13 @@ A running box listens on a Unix socket in its session folder, `.actlet/attach.so
 
 The socket serves the attach protocol, [`proto/actlet/attach/v0`](../proto/actlet/attach/v0/attach.proto), over gRPC: `Info` describes the session and the box's figures, `Watch` streams the run's activity from a position (what the box still holds, then live events), and `Command` sends a note or, when allowed, a pause or stop. The box keeps the last few thousand events, plus the run's start, state changes and subagent starts and ends, so a late viewer still sees the run's shape; a viewer told it missed events shows that in the Session tab. Viewers elsewhere use the same protocol.
 
-`actlet attach -dump` and `actlet-cli replay play -dump` print a screen as text and exit, without a terminal: handy for scripts and bug reports. `-tab` picks the tab and `-width` and `-height` the size.
+`actlet attach -dump` and `actlet-cli replay play -dump` print a screen as text and exit, without a terminal: handy for scripts and bug reports. `-tab` picks the tab and `-width` and `-height` the size. With `-color` the screen keeps its colours, as ANSI escape sequences in 24-bit colour, in the theme `-theme` picks: `cat` it in a terminal, or turn it into an image with a tool such as `freeze` or `aha`.
 
 `actlet-cli replay view --json <file>` writes what the viewer knows at the end of a recording, or of its events as `replay export --jsonl` writes them, as JSON: the session, its workers and their turns and tool calls, changed files, budgets and the event log. It is in the form a web viewer reads, so that a viewer written in another language can check that it folds the same events into the same view.
 
 ## Attaching from elsewhere
 
-`actlet-cli attach` opens the same viewer on a session that runs elsewhere, over the network, through the attach protocol rather than a shell. The status line says what it is connected to.
+`actlet-cli attach` opens the same viewer on a session that runs elsewhere, over the network, through the attach protocol rather than a shell. A badge in the header, `⇄ attached · orchestrator <address>` or `⇄ attached · box <address>`, sets it apart from the run's own viewer, and the status line says what it is connected to. `actlet attach` shows `⇄ attached · local socket`; a recording shows `▶ replay`.
 
 **Through the orchestrator**, the usual way:
 

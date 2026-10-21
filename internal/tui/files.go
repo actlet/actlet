@@ -9,7 +9,6 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -49,6 +48,9 @@ type popup struct {
 	note   string
 	scroll int
 	diff   bool
+	// styled are its lines as drawn styledW wide, made once.
+	styled  []string
+	styledW int
 }
 
 // fileMsg is a file read from the box.
@@ -90,6 +92,7 @@ func (m *Model) showFile(msg fileMsg) {
 	if m.popup == nil || m.popup.path != msg.path {
 		return
 	}
+	m.popup.styled = nil
 	switch {
 	case msg.err != nil:
 		m.popup.lines, m.popup.note = nil, "can't read it: "+msg.err.Error()
@@ -132,60 +135,67 @@ func recordedFile(s *view.Session, p string) *popup {
 	return pp
 }
 
-// renderPopup draws the open file over the body.
-func (m *Model) renderPopup(w, h int) string {
+// renderPopup draws the open file over the body: a panel with a border,
+// centred.
+func (m *Model) renderPopup(w, h int) []string {
+	st := m.st
 	p := m.popup
 	boxW, boxH := max(w-4, 20), max(h-2, 5)
-	inner := boxH - 3
-	var body []string
-	for i, l := range p.lines {
-		num := styleFaint.Render(fmt.Sprintf("%4d ", i+1))
-		text := ansi.Truncate(strings.ReplaceAll(l, "\t", "    "), boxW-9, "…")
-		if p.diff {
-			num = ""
-			text = diffStyle(l).Render(ansi.Truncate(l, boxW-4, "…"))
-		} else {
-			text = highlight(p.path, text, i)
-		}
-		body = append(body, num+text)
+	innerW, inner := boxW-4, boxH-4 // border and padding; title, rule and foot
+	if p.styled == nil || p.styledW != innerW {
+		p.styled, p.styledW = m.popupLines(p, innerW), innerW
 	}
+	body := p.styled
 	if len(body) == 0 {
-		body = []string{styleMuted.Render(p.note)}
+		body = []string{st.muted.Render(p.note)}
 	}
 	p.scroll = max(0, min(p.scroll, len(body)-inner))
 	end := min(p.scroll+inner, len(body))
-	shown := strings.Join(body[p.scroll:end], "\n")
-	foot := styleMuted.Render(p.note)
+	foot := st.muted.Render(p.note)
 	if len(body) > inner {
-		foot += styleFaint.Render(fmt.Sprintf(" · lines %d-%d of %d", p.scroll+1, end, len(body)))
+		foot += st.faint.Render(fmt.Sprintf(" · lines %d-%d of %d", p.scroll+1, end, len(body)))
 	}
-	foot += styleFaint.Render(" · esc closes")
-	title := styleBold.Render(p.path)
-	box := lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(colFaint).Padding(0, 1).
-		Width(boxW).Height(boxH).
-		Render(title + "\n" + lipgloss.NewStyle().Height(inner).MaxHeight(inner).Render(shown) + "\n" + foot)
-	return lipgloss.Place(w, h, lipgloss.Center, lipgloss.Center, box)
+	foot += st.faint.Render(" · esc closes")
+	rows := []string{st.accent.Render(p.path), st.border.Render(strings.Repeat("─", innerW))}
+	rows = append(rows, block(body[p.scroll:end], innerW, inner, st.panelBg)...)
+	rows = append(rows, foot)
+	bar := func(l, r string) string { return st.popupBorder.Render(l + strings.Repeat("─", boxW-2) + r) }
+	side := st.popupBorder.Render("│")
+	box := []string{bar("╭", "╮")}
+	for _, r := range rows {
+		box = append(box, side+paint(" "+r, boxW-2, st.panelBg)+side)
+	}
+	box = append(box, bar("╰", "╯"))
+	top := max((h-len(box))/2, 0)
+	left := strings.Repeat(" ", max((w-boxW)/2, 0))
+	out := make([]string, top, h)
+	for _, l := range box {
+		out = append(out, left+l)
+	}
+	return out
 }
 
-func diffStyle(l string) lipgloss.Style {
-	switch {
-	case strings.HasPrefix(l, "@@"):
-		return styleFaint
-	case strings.HasPrefix(l, "+"):
-		return styleAdd
-	case strings.HasPrefix(l, "-"):
-		return styleDel
+// popupLines are the open file's lines, numbered and highlighted, w
+// cells wide.
+func (m *Model) popupLines(p *popup, w int) []string {
+	st := m.st
+	var out []string
+	for i, l := range p.lines {
+		if p.diff {
+			out = append(out, st.diffStyle(l).Render(ansi.Truncate(l, w, "…")))
+			continue
+		}
+		num := st.faint.Render(fmt.Sprintf("%4d ", i+1))
+		text := ansi.Truncate(strings.ReplaceAll(l, "\t", "    "), w-6, "…")
+		out = append(out, num+st.highlight(p.path, text, i))
 	}
-	return styleMuted
+	return out
 }
 
 var (
-	styleKeyword = lipgloss.NewStyle().Foreground(colAgent)
-	styleString  = lipgloss.NewStyle().Foreground(colOK)
-	styleComment = styleFaint
-	reString     = regexp.MustCompile(`"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'`)
-	reWord       = regexp.MustCompile(`\b[A-Za-z_]+\b`)
-	keywords     = map[string][]string{
+	reString = regexp.MustCompile(`"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'`)
+	reWord   = regexp.MustCompile(`\b[A-Za-z_]+\b`)
+	keywords = map[string][]string{
 		".py":   {"def", "class", "import", "from", "return", "for", "in", "if", "elif", "else", "while", "with", "as", "try", "except", "raise", "None", "True", "False", "and", "or", "not", "lambda", "yield", "pass"},
 		".go":   {"package", "import", "func", "return", "for", "range", "if", "else", "var", "const", "type", "struct", "interface", "go", "defer", "switch", "case", "nil", "true", "false", "map", "chan"},
 		".sh":   {"if", "then", "else", "fi", "for", "do", "done", "while", "case", "esac", "echo", "export", "function", "in"},
@@ -197,17 +207,17 @@ var (
 
 // highlight colours a line cheaply by the file's kind: comments,
 // strings, keywords, Markdown headings, a CSV header.
-func highlight(p, l string, n int) string {
+func (st *styles) highlight(p, l string, n int) string {
 	ext := strings.ToLower(path.Ext(p))
 	switch ext {
 	case ".md":
 		if strings.HasPrefix(l, "#") {
-			return styleBold.Render(l)
+			return st.bold.Render(l)
 		}
 		return l
 	case ".csv", ".tsv":
 		if n == 0 {
-			return styleBold.Render(l)
+			return st.bold.Render(l)
 		}
 		return l
 	case ".yml":
@@ -222,11 +232,11 @@ func highlight(p, l string, n int) string {
 	}
 	if comment != "" {
 		if i := strings.Index(l, comment); i >= 0 && !inString(l, i) {
-			return highlightCode(l[:i], ext) + styleComment.Render(l[i:])
+			return st.highlightCode(l[:i], ext) + st.synComment.Render(l[i:])
 		}
 	}
 	if kw := keywords[ext]; kw != nil || ext == ".json" {
-		return highlightCode(l, ext)
+		return st.highlightCode(l, ext)
 	}
 	return l
 }
@@ -240,27 +250,27 @@ func inString(l string, i int) bool {
 	return false
 }
 
-func highlightCode(l, ext string) string {
+func (st *styles) highlightCode(l, ext string) string {
 	kw := keywords[ext]
 	var b strings.Builder
 	last := 0
 	for _, loc := range reString.FindAllStringIndex(l, -1) {
-		b.WriteString(highlightWords(l[last:loc[0]], kw))
-		b.WriteString(styleString.Render(l[loc[0]:loc[1]]))
+		b.WriteString(st.highlightWords(l[last:loc[0]], kw))
+		b.WriteString(st.synString.Render(l[loc[0]:loc[1]]))
 		last = loc[1]
 	}
-	b.WriteString(highlightWords(l[last:], kw))
+	b.WriteString(st.highlightWords(l[last:], kw))
 	return b.String()
 }
 
-func highlightWords(s string, kw []string) string {
+func (st *styles) highlightWords(s string, kw []string) string {
 	if len(kw) == 0 {
 		return s
 	}
 	return reWord.ReplaceAllStringFunc(s, func(w string) string {
 		for _, k := range kw {
 			if w == k {
-				return styleKeyword.Render(w)
+				return st.synKeyword.Render(w)
 			}
 		}
 		return w
