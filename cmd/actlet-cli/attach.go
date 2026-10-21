@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/actlet/actlet/internal/attach"
+	"github.com/actlet/actlet/internal/gwclient"
 	"github.com/actlet/actlet/internal/tui"
 	"github.com/actlet/actlet/internal/view"
 	attachv0 "github.com/actlet/actlet/proto/actlet/attach/v0"
@@ -32,8 +33,8 @@ never affects the session.
             with: kubectl port-forward pod/<pod> 7600:7600
 
 The token is the one the orchestrator or the box expects; prefer
-ACTLET_ATTACH_TOKEN to -token, which other users can see in the process
-list.
+-token-file or ACTLET_ATTACH_TOKEN to -token, which other users can see in
+the process list.
 
 Flags:
 `
@@ -52,6 +53,8 @@ func runAttach(args []string, stdout, stderr io.Writer) int {
 	direct := fs.String("direct", "", "a box's attach port, host:port")
 	sessionID := fs.String("session", "", "with -gateway: the session to attach to")
 	token := fs.String("token", os.Getenv("ACTLET_ATTACH_TOKEN"), "bearer token [ACTLET_ATTACH_TOKEN]")
+	tokenFile := fs.String("token-file", os.Getenv("ACTLET_ATTACH_TOKEN_FILE"),
+		"file holding the bearer token; a trailing newline is ignored [ACTLET_ATTACH_TOKEN_FILE]")
 	useTLS := fs.Bool("tls", false, "connect with TLS")
 	caFile := fs.String("tls-ca", "", "PEM file of CA certificates to trust for TLS")
 	dump := fs.Bool("dump", false, "print the screen as text once and exit, without a terminal")
@@ -89,7 +92,16 @@ func runAttach(args []string, stdout, stderr io.Writer) int {
 			return 2
 		}
 	}
-	opts := attach.RemoteOptions{Token: *token, TLS: *useTLS, CAFile: *caFile, Session: *sessionID}
+	if *token != "" && *tokenFile != "" {
+		fmt.Fprintln(stderr, "actlet-cli attach: give a token or a token file, not both: -token or ACTLET_ATTACH_TOKEN, -token-file or ACTLET_ATTACH_TOKEN_FILE")
+		return 2
+	}
+	if *tokenFile != "" {
+		if _, err := gwclient.ReadToken(*tokenFile); err != nil {
+			return fail(err)
+		}
+	}
+	opts := attach.RemoteOptions{Token: *token, TokenFile: *tokenFile, TLS: *useTLS, CAFile: *caFile, Session: *sessionID}
 	addr := *direct
 	if *gateway != "" {
 		addr = *gateway

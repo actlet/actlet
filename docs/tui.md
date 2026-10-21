@@ -199,7 +199,7 @@ The status line reads `box <address>`. The port speaks the same protocol as the 
 Security notes:
 
 - Every remote call needs the token; one without it, or with the wrong one, is refused.
-- Pass the token in `ACTLET_ATTACH_TOKEN` rather than `-token`, which other users can see in the process list. Actlet removes every `ACTLET_` variable from the tools' environment, so the agent never sees the token, and no token is ever recorded in the activity or the journal.
+- Pass the token in a file with `-token-file` (`ACTLET_ATTACH_TOKEN_FILE`), or in `ACTLET_ATTACH_TOKEN`, rather than with `-token`, which other users can see in the process list. The file is read again for every call, and a trailing newline is ignored. Actlet removes every `ACTLET_` variable from the tools' environment, so the agent never sees the token, and no token is ever recorded in the activity or the journal.
 - `-attach-allow-remote` (`ACTLET_ATTACH_ALLOW_REMOTE=true`) lets the port listen on another address, with a warning. Anyone who can reach it and has the token can then watch the session and read its files. The connection is plaintext: keep it on a trusted network, or tunnel it.
 - Through the orchestrator, `-tls` (and `-tls-ca`) connect with TLS.
 - A remote viewer reads only `inputs/`, `workspace/` and `output/`, as a local one does, and the box answers a few file reads at a time.

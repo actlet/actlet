@@ -125,6 +125,7 @@ const attachTask = `{"schema": "v0", "id": "remote", "kind": "agent", "input": "
 type remoteSession struct {
 	gateway, port string
 	dir, data     string
+	tokenFile     string // the gateway token, which the box reads
 	box, devgw    *exec.Cmd
 	boxLog        *bytes.Buffer
 }
@@ -144,7 +145,11 @@ func startRemote(t *testing.T, withPort bool) *remoteSession {
 			t.Fatal(err)
 		}
 	}
-	r := &remoteSession{gateway: freeAddr(t), dir: filepath.Join(work, "session"), data: filepath.Join(work, "gateway"), boxLog: &bytes.Buffer{}}
+	r := &remoteSession{gateway: freeAddr(t), dir: filepath.Join(work, "session"), data: filepath.Join(work, "gateway"),
+		tokenFile: filepath.Join(work, "gateway.token"), boxLog: &bytes.Buffer{}}
+	if err := os.WriteFile(r.tokenFile, []byte(gatewayToken+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	r.devgw = exec.Command(filepath.Join(bin, "actlet-devgw"), "-listen", r.gateway, "-token", gatewayToken, "-data", r.data,
 		"-task", filepath.Join(work, "task.json"), "-profile", filepath.Join(work, "profile.yaml"), "-model", filepath.Join(work, "model.yaml"))
 	r.devgw.Stdout, r.devgw.Stderr = io.Discard, io.Discard
@@ -163,7 +168,7 @@ func startRemote(t *testing.T, withPort bool) *remoteSession {
 		args = append(args, "-attach-listen", r.port)
 	}
 	r.box = exec.Command(filepath.Join(bin, "actlet"), args...)
-	r.box.Env = append(os.Environ(), "ACTLET_GATEWAY="+r.gateway, "ACTLET_TOKEN="+gatewayToken, "ACTLET_ATTACH_TOKEN="+attachToken,
+	r.box.Env = append(os.Environ(), "ACTLET_GATEWAY="+r.gateway, "ACTLET_TOKEN_FILE="+r.tokenFile, "ACTLET_ATTACH_TOKEN="+attachToken,
 		"ACTLET_OTHER_SECRET="+otherSecret, "ACTLET_TOOLS_MANIFEST=")
 	r.box.Stdout, r.box.Stderr = r.boxLog, r.boxLog
 	if err := r.box.Start(); err != nil {
@@ -304,7 +309,7 @@ func TestAttachRemote(t *testing.T) {
 	r := startRemote(t, true)
 	r.waitForShell(t)
 
-	viaGateway := []string{"attach", "-gateway", r.gateway, "-token", gatewayToken, "-dump"}
+	viaGateway := []string{"attach", "-gateway", r.gateway, "-token-file", r.tokenFile, "-dump"}
 	direct := []string{"attach", "-direct", r.port, "-token", attachToken, "-dump"}
 	for _, tab := range []string{"chat", "events"} {
 		local := r.localDump(t, "-tab", tab)
@@ -369,6 +374,23 @@ func TestAttachRemote(t *testing.T) {
 	} {
 		if out, code := cli(t, args...); code != 1 || !strings.Contains(out, "Unauthenticated") {
 			t.Errorf("%v: exit %d:\n%s", args, code, out)
+		}
+	}
+	// A token and a token file are one too many; an empty file, none.
+	empty := filepath.Join(t.TempDir(), "empty")
+	if err := os.WriteFile(empty, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, tt := range []struct {
+		args []string
+		want string
+	}{
+		{[]string{"-token-file", empty}, "is empty"},
+		{[]string{"-token", gatewayToken, "-token-file", r.tokenFile}, "not both"},
+	} {
+		args := append([]string{"attach", "-gateway", r.gateway, "-dump"}, tt.args...)
+		if out, code := cli(t, args...); code == 0 || !strings.Contains(out, tt.want) {
+			t.Errorf("%v: exit %d, want %q:\n%s", args, code, tt.want, out)
 		}
 	}
 
@@ -485,10 +507,11 @@ func records(t *testing.T, path string) [][]byte {
 	}
 }
 
-// After a run whose box held a gateway token, an attach token and another
-// ACTLET_ setting, and whose agent printed its environment: none of them
-// is in the activity, its export, the session journal or the logs. And a
-// recording needs nothing beside it to be played: there is no index.
+// After a run whose box held a gateway token, in a file, an attach token
+// and another ACTLET_ setting, and whose agent printed its environment:
+// none of them, nor the token file's path, is in the activity, its export,
+// the session journal or the logs. And a recording needs nothing beside it
+// to be played: there is no index.
 func TestFinishedRun(t *testing.T) {
 	if testing.Short() {
 		t.Skip("builds and runs binaries")
@@ -513,7 +536,7 @@ func TestFinishedRun(t *testing.T) {
 			places[fmt.Sprintf("session journal record %d", i)] = data
 		}
 		for where, data := range places {
-			for _, secret := range []string{gatewayToken, attachToken, otherSecret} {
+			for _, secret := range []string{gatewayToken, r.tokenFile, attachToken, otherSecret} {
 				if bytes.Contains(data, []byte(secret)) {
 					t.Errorf("%s holds %s", where, secret)
 				}

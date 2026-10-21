@@ -465,6 +465,9 @@ func Dial(stateDir string) (attachv0.AttachClient, func() error, error) {
 type RemoteOptions struct {
 	// Token is sent as a bearer token with every call.
 	Token string
+	// TokenFile names a file holding the token instead, read again for
+	// every call. Set at most one of Token and TokenFile.
+	TokenFile string
 	// TLS enables TLS; CAFile optionally names a PEM file of CA
 	// certificates to trust instead of the system's.
 	TLS    bool
@@ -480,8 +483,13 @@ func DialRemote(addr string, o RemoteOptions) (attachv0.AttachClient, func() err
 		return nil, nil, err
 	}
 	opts := []grpc.DialOption{grpc.WithTransportCredentials(creds)}
-	if o.Token != "" {
+	switch {
+	case o.Token != "" && o.TokenFile != "":
+		return nil, nil, errors.New("give a token or a token file, not both")
+	case o.Token != "":
 		opts = append(opts, grpc.WithPerRPCCredentials(gwclient.Bearer(o.Token, o.TLS)))
+	case o.TokenFile != "":
+		opts = append(opts, grpc.WithPerRPCCredentials(gwclient.BearerFile(o.TokenFile, o.TLS)))
 	}
 	if o.Session != "" {
 		opts = append(opts,
