@@ -14,6 +14,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/actlet/actlet/internal/journal"
+	"github.com/actlet/actlet/internal/search"
 	gatewayv0 "github.com/actlet/actlet/proto/actlet/gateway/v0"
 )
 
@@ -25,6 +26,7 @@ Commands:
   export     Export its events
   play       Play it back in a terminal viewer
   view       Write the session's view at the end as JSON
+  search     Find events by text, kind, worker, tool or time
 
 Activity recordings (.actrec) are written by gateways, and by a worker that
 spills activity to its session folder while the gateway is unreachable.
@@ -45,6 +47,8 @@ func runReplay(args []string, stdout, stderr io.Writer) int {
 		return runReplayPlay(rest, stdout, stderr)
 	case "view":
 		return runReplayView(rest, stdout, stderr)
+	case "search":
+		return runReplaySearch(rest, stdout, stderr)
 	case "help", "-h", "-help", "--help":
 		fmt.Fprint(stdout, replayUsage)
 		return 0
@@ -72,17 +76,6 @@ func readEvents(r *journal.Reader, fn func(*gatewayv0.ActivityEvent)) error {
 			fn(ev)
 		}
 	}
-}
-
-// eventKind names an event's kind after its body's field in the
-// protocol, such as "text" or "model_turn". A body this build doesn't know,
-// from a newer worker, is "unknown".
-func eventKind(ev *gatewayv0.ActivityEvent) string {
-	m := ev.ProtoReflect()
-	if fd := m.WhichOneof(m.Descriptor().Oneofs().ByName("body")); fd != nil {
-		return string(fd.Name())
-	}
-	return "unknown"
 }
 
 type epochSummary struct {
@@ -122,7 +115,7 @@ func runReplayInspect(args []string, stdout, stderr io.Writer) int {
 	var total, dropped, gaps int64
 	endErr := readEvents(r, func(ev *gatewayv0.ActivityEvent) {
 		total++
-		kinds[eventKind(ev)]++
+		kinds[search.Kind(ev)]++
 		if w := ev.GetWorker(); w != "" {
 			workers[w]++
 		}

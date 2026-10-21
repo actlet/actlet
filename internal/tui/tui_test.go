@@ -563,3 +563,59 @@ func TestFilesAfterTheBoxEnds(t *testing.T) {
 		t.Errorf("without a folder: %v", err)
 	}
 }
+
+// In a replay, / searches the recording: the replay moves to the event
+// that matches, wrapping around, and n and N find the next and previous.
+func TestReplaySearchKeys(t *testing.T) {
+	p, err := OpenPlayer(recording(t, run()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer p.Close()
+	p.Seek(p.Len())
+	m := NewReplay(p)
+	m.SetConnection(Connection{Kind: "recording", Target: "run.actrec"})
+	m.SetSize(100, 32)
+	press := func(keys ...string) {
+		for _, k := range keys {
+			switch k {
+			case "enter":
+				m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+			default:
+				for _, r := range k {
+					m.Update(tea.KeyPressMsg{Code: r, Text: string(r)})
+				}
+			}
+		}
+	}
+	press("/", "report.md")
+	golden(t, "replay-search-input", m.Dump())
+	press("enter")
+	golden(t, "replay-search-found", m.Dump())
+	first := p.Pos()
+	if !strings.Contains(m.notice, `"report.md": match 1 of`) || first == p.Len() {
+		t.Fatalf("after enter: %q at %d of %d", m.notice, first, p.Len())
+	}
+	press("n")
+	if !strings.Contains(m.notice, "match 2 of") || p.Pos() <= first {
+		t.Errorf("after n: %q at %d", m.notice, p.Pos())
+	}
+	press("N")
+	if !strings.Contains(m.notice, "match 1 of") || p.Pos() != first {
+		t.Errorf("after N: %q at %d", m.notice, p.Pos())
+	}
+	press("N")
+	if strings.Contains(m.notice, "match 1 of") {
+		t.Errorf("N from the first match didn't wrap: %q", m.notice)
+	}
+	press("/", "enter") // the last query again, as / offers it
+	press("/")
+	m.Update(tea.KeyPressMsg{Code: tea.KeyBackspace})
+	for range 20 {
+		m.Update(tea.KeyPressMsg{Code: tea.KeyBackspace})
+	}
+	press("no such thing", "enter")
+	if !strings.Contains(m.notice, "no event matches") {
+		t.Errorf("a search without matches: %q", m.notice)
+	}
+}

@@ -6,12 +6,14 @@ package tui
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/actlet/actlet/internal/search"
 	"github.com/actlet/actlet/internal/view"
 	attachv0 "github.com/actlet/actlet/proto/actlet/attach/v0"
 	gatewayv0 "github.com/actlet/actlet/proto/actlet/gateway/v0"
@@ -97,6 +99,11 @@ type Model struct {
 	typing bool
 	help   bool
 	notice string
+
+	// searching is typing a search of the recording; query is the last
+	// one, which n and N find again.
+	searching bool
+	query     string
 }
 
 // NewLive returns a viewer of a running box.
@@ -279,12 +286,21 @@ func (m *Model) key(k tea.KeyPressMsg) tea.Cmd {
 		case "esc":
 			m.typing = false
 			m.input.Blur()
+			m.endSearchInput()
 			return nil
 		case "enter":
 			note := strings.TrimSpace(m.input.Value())
 			m.input.Reset()
 			m.typing = false
 			m.input.Blur()
+			if m.searching {
+				m.endSearchInput()
+				if note != "" {
+					m.query = note
+					m.find(1)
+				}
+				return nil
+			}
 			if note == "" {
 				return nil
 			}
@@ -403,6 +419,17 @@ func (m *Model) key(k tea.KeyPressMsg) tea.Cmd {
 	}
 	if p := m.player; p != nil {
 		switch key {
+		case "/":
+			m.searching, m.typing = true, true
+			m.input.Prompt = " / "
+			m.input.Placeholder = "search the recording; Enter finds, Esc cancels"
+			m.input.SetValue(m.query)
+			m.input.CursorEnd()
+			return m.input.Focus()
+		case "n":
+			m.find(1)
+		case "N":
+			m.find(-1)
 		case "space":
 			p.Toggle(m.now())
 		case "+", "=":
@@ -425,6 +452,53 @@ func (m *Model) key(k tea.KeyPressMsg) tea.Cmd {
 		}
 	}
 	return nil
+}
+
+// endSearchInput puts the input back to taking notes.
+func (m *Model) endSearchInput() {
+	if m.searching {
+		m.searching = false
+		m.input.Prompt = " › "
+		m.input.Placeholder = "a note for the agent; Enter sends, Esc cancels"
+	}
+}
+
+// find moves the replay to the next or previous event matching the
+// query, as the last event shown, wrapping around the recording.
+func (m *Model) find(step int) {
+	p := m.player
+	if p == nil || m.query == "" {
+		return
+	}
+	f := &search.Filter{Text: m.query}
+	evs := p.Events()
+	var hits []int
+	for i, ev := range evs {
+		if f.Match(ev) {
+			hits = append(hits, i)
+		}
+	}
+	if len(hits) == 0 {
+		m.notice = fmt.Sprintf("no event matches %q", m.query)
+		return
+	}
+	cur := p.Pos() - 1 // the last event shown
+	var k int
+	if step > 0 {
+		k = sort.SearchInts(hits, cur+1)
+		if k == len(hits) {
+			k = 0
+		}
+	} else {
+		k = sort.SearchInts(hits, cur) - 1
+		if k < 0 {
+			k = len(hits) - 1
+		}
+	}
+	p.Seek(hits[k] + 1)
+	m.sess = p.View()
+	m.scroll, m.selected = 0, ""
+	m.notice = fmt.Sprintf("%q: match %d of %d, event %s", m.query, k+1, len(hits), evs[hits[k]].GetId())
 }
 
 // selectBlock moves the selection to the previous or next tool call

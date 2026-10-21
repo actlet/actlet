@@ -1,0 +1,32 @@
+ actlet  sum                                            Chat  Session  Task  Profile  Tools  Events  
+ · run 1 started                                                     │ WORKERS                       
+                                                                     │● root large 1 turn            
+ ▌ Agent · turn 1 · large · 12k in / 400 out · 22:13:24              │●  root.1 fast 0 turns         
+ ▌ I'll hand the file to a subagent.                                 │                               
+   ⠋ Subagent root.1  Write the report.                       running│FILES                          
+     ┊                                                               │none changed                   
+     ┊ ▌ Subagent root.1 · an earlier turn                           │                               
+     ┊   ⠋ Write report.md                                    running│                               
+                                                                     │                               
+                                                                     │                               
+                                                                     │                               
+                                                                     │                               
+                                                                     │                               
+                                                                     │                               
+                                                                     │                               
+                                                                     │                               
+                                                                     │                               
+                                                                     │                               
+                                                                     │                               
+                                                                     │                               
+                                                                     │                               
+                                                                     │                               
+                                                                     │                               
+                                                                     │                               
+                                                                     │                               
+                                                                     │                               
+                                                                     │                               
+                                                                     │                               
+──────────────────────────────────────────────────────────────────────────────────────────────────── 
+ a recording · space play/pause · ←/→ seek · +/- speed · / search                                    
+ ⠋ running · large · ctx 6% · 0.04 EUR · 5.0s · replay paused 1x 37% · "report.md": match 1 of 5, e… 

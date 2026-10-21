@@ -645,12 +645,12 @@ func (m *Model) renderInput(w int) string {
 	if m.help {
 		keys := "i note · ↑/↓ select · enter expand · e all · o files · s subagents · d lines · [ ] worker · t tool · tab views · P pause · X stop · q detach"
 		if m.player != nil {
-			keys = "space play · ←/→ seek · +/- speed · f follow · ↑/↓ select · enter expand · e all · o files · d lines · [ ] worker · t tool · tab views · q quit"
+			keys = "space play · ←/→ seek · +/- speed · f follow · / search · n/N next/previous · ↑/↓ select · enter expand · e all · o files · d lines · [ ] worker · t tool · tab views · q quit"
 		}
 		return styleMuted.Render(ansi.Truncate(" "+keys, w, "…"))
 	}
 	if m.player != nil {
-		return styleFaint.Render(" a recording · space play/pause · ←/→ seek · +/- speed")
+		return styleFaint.Render(" a recording · space play/pause · ←/→ seek · +/- speed · / search")
 	}
 	return styleMuted.Render(" › ") + styleFaint.Render("press i to send the agent a note")
 }

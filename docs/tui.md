@@ -64,7 +64,30 @@ Figures Actlet doesn't have show as `n/a`: cost needs a gateway that reports it 
 | `?` | show the keys |
 | `q` | quit; the session carries on |
 
-The mouse works too: click a tab, click a tool call to select it and again to expand it, and scroll with the wheel. Playing a recording adds `space` (play and pause), `←` `→` (seek), `+` `-` (speed) and `f` (follow a recording that is still being written).
+The mouse works too: click a tab, click a tool call to select it and again to expand it, and scroll with the wheel. Playing a recording adds `space` (play and pause), `←` `→` (seek), `+` `-` (speed), `f` (follow a recording that is still being written) and search: `/` takes a phrase, and `enter` moves the replay to the next event that has it anywhere, regardless of case, as the last event shown; `n` and `N` find the next and previous, wrapping around. The status line says which match of how many it is.
+
+## Searching a recording
+
+`actlet-cli replay search` finds events in a recording, or in its export as JSON Lines, without loading it whole:
+
+```sh
+actlet-cli replay search run.actrec gadget                  # a phrase, anywhere in an event, any case
+actlet-cli replay search run.actrec --regex 'exit code [1-9]'
+actlet-cli replay search run.actrec --kind tool_started,tool_finished --tool shell
+actlet-cli replay search run.actrec --worker root.1 --since 2m --until 5m
+actlet-cli replay search run.actrec --kind steer --json      # the events themselves, a line each
+```
+
+| Flag | Matches |
+|---|---|
+| `--kind` | events of these kinds, by their field in the protocol: `model_turn`, `tool_started`, `tool_finished`, `file_change`, `steer`, `compaction` and the rest |
+| `--worker` | one worker's events, such as `root.1` |
+| `--tool` | the start and end of one tool's calls |
+| `--since`, `--until` | events in a time range: RFC 3339 times, or durations after the recording's first event |
+| `--regex` | the text as a regular expression |
+| `--limit` | at most this many matches |
+
+A phrase or expression is matched against every string in an event: model text, tool inputs and outputs, diffs, notes and its worker. Each match prints as the Events tab shows it, with the event's ID and time, or with `--json` as the event itself. It exits 0 if something matched, 1 if nothing did and 2 on an error, as `grep` does.
 
 ## Notes, and what a viewer may do
 

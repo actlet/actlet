@@ -28,5 +28,5 @@
                                                                                                     
                                                                                                     
 ────────────────────────────────────────────────────────────────────────────────────────────────────
- a recording · space play/pause · ←/→ seek · +/- speed                                              
+ a recording · space play/pause · ←/→ seek · +/- speed · / search                                   
  ⠋ running · large · ctx 6% · 0.08 EUR · 15s · replay at the end 1x 100%                     ? keys 
