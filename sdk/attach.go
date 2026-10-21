@@ -115,7 +115,7 @@ func (a *attachService) Sessions(ctx context.Context, _ *attachv0.SessionsReques
 
 // Info implements the attach Info call. The box's own figures, such as
 // its memory, aren't known here.
-func (a *attachService) Info(ctx context.Context, _ *attachv0.InfoRequest) (*attachv0.InfoResponse, error) {
+func (a *attachService) Info(ctx context.Context, req *attachv0.InfoRequest) (*attachv0.InfoResponse, error) {
 	sess, err := a.session(ctx)
 	if err != nil {
 		return nil, err
@@ -126,8 +126,19 @@ func (a *attachService) Info(ctx context.Context, _ *attachv0.InfoRequest) (*att
 	sess.mu.Unlock()
 	return &attachv0.InfoResponse{
 		SessionId: sess.ID(), Epoch: sess.Epoch(), WorkerId: sess.WorkerID(), ActletVersion: version, State: st,
-		Commands: a.commands(ctx, sess), Tui: tui,
+		Commands: a.commands(ctx, sess), Tui: tui, Viewers: a.srv.viewers(sess.ID(), req.GetViewerId()),
 	}, nil
+}
+
+// viewers lists the viewers watching a session through this server.
+func (s *Server) viewers(sessionID, you string) []*attachv0.Viewer {
+	s.mu.Lock()
+	r := s.relays[sessionID]
+	s.mu.Unlock()
+	if r == nil {
+		return nil
+	}
+	return r.viewers.List(you)
 }
 
 // Command implements the attach Command call: the command is sent to the
@@ -185,6 +196,13 @@ func (a *attachService) Watch(req *attachv0.WatchRequest, stream attachv0.Attach
 		return status.Error(codes.ResourceExhausted, err.Error())
 	}
 	defer sub.Close()
+	label := req.GetViewer()
+	if f := a.srv.opts.AttachViewerLabel; f != nil {
+		if l := f(ctx); l != "" {
+			label = l
+		}
+	}
+	defer r.viewers.Add(attach.ViewerOrchestrator, attach.ViewerLabel(label, "viewer"), req.GetViewerId())()
 	for {
 		select {
 		case m, ok := <-sub.C():
@@ -206,6 +224,7 @@ func (a *attachService) Watch(req *attachv0.WatchRequest, stream attachv0.Attach
 // store holds, then what arrives.
 type relay struct {
 	hub      *attach.Hub
+	viewers  *attach.Viewers
 	ready    chan struct{}
 	watchers int // guarded by Server.mu
 
@@ -223,7 +242,7 @@ func (s *Server) watch(ctx context.Context, sessionID string) (*relay, func(), e
 	s.mu.Lock()
 	r := s.relays[sessionID]
 	if r == nil {
-		r = &relay{hub: attach.NewHub(attach.HubOptions{}), ready: make(chan struct{}), priming: true, primed: map[uint64]uint64{}}
+		r = &relay{hub: attach.NewHub(attach.HubOptions{}), viewers: attach.NewViewers(), ready: make(chan struct{}), priming: true, primed: map[uint64]uint64{}}
 		s.relays[sessionID] = r
 		go s.prime(r, sessionID)
 	}

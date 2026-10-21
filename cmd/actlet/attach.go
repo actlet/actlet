@@ -36,6 +36,7 @@ func runAttach(args []string, stdout, stderr io.Writer) int {
 	file := fs.String("file", "", "with -dump: open this file, as the sidebar shows it, in the file viewer")
 	var separators tui.BoolFlag
 	fs.Var(&separators, "separators", "draw lines between turns and tool calls; on unless the profile says otherwise [ACTLET_TUI_SEPARATORS]")
+	name := fs.String("name", "actlet attach", "how this viewer is named to the session's other viewers")
 	theme := fs.String("theme", "", "the colours: dark, light, plain, a theme file's name or its path [ACTLET_THEME]")
 	color := fs.Bool("color", false, "with -dump: keep the colours, as ANSI escape sequences")
 	width := fs.Int("width", 120, "with -dump: the screen width")
@@ -58,7 +59,7 @@ func runAttach(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	defer func() { _ = closeClient() }()
-	conn := tui.Connection{Kind: "local box", Target: absPath(*dir), Dir: absPath(*dir), Attached: "local socket"}
+	conn := tui.Connection{Kind: "local box", Target: absPath(*dir), Dir: absPath(*dir), Attached: "local socket", Viewer: *name}
 	look := tui.ResolveLook(*theme, separators.Value(), os.Getenv)
 	if *dump {
 		out, err := tui.DumpLive(context.Background(), client, conn, tui.DumpOptions{

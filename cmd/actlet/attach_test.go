@@ -181,7 +181,7 @@ func TestViewerHelper(t *testing.T) {
 		os.Exit(1)
 	}
 	defer func() { _ = closeClient() }()
-	_ = tui.Feed(context.Background(), client, func(tea.Msg) { time.Sleep(time.Second) })
+	_ = tui.Feed(context.Background(), client, "test", func(tea.Msg) { time.Sleep(time.Second) })
 	os.Exit(0)
 }
 

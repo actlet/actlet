@@ -82,6 +82,7 @@ type Server struct {
 	hub       *Hub
 	box       Box
 	commands  *commandSet
+	viewers   *Viewers // shared by the socket's and the port's servers
 	log       *slog.Logger
 	dir       string // the session folder, for ReadFile
 	sessionID string
@@ -94,7 +95,8 @@ func NewServer(sessionID string, hub *Hub, box Box, commands []string, log *slog
 	if log == nil {
 		log = slog.Default()
 	}
-	return &Server{hub: hub, box: box, commands: &commandSet{list: commands}, log: log, sessionID: sessionID, origin: gatewayv0.Origin_ORIGIN_LOCAL}
+	return &Server{hub: hub, box: box, commands: &commandSet{list: commands}, viewers: NewViewers(), log: log, sessionID: sessionID,
+		origin: gatewayv0.Origin_ORIGIN_LOCAL}
 }
 
 // commandSet is the commands viewers may send, which a profile update may
@@ -138,12 +140,13 @@ func (s *Server) checkSession(ctx context.Context) error {
 }
 
 // Info implements the Info call.
-func (s *Server) Info(ctx context.Context, _ *attachv0.InfoRequest) (*attachv0.InfoResponse, error) {
+func (s *Server) Info(ctx context.Context, req *attachv0.InfoRequest) (*attachv0.InfoResponse, error) {
 	if err := s.checkSession(ctx); err != nil {
 		return nil, err
 	}
 	resp := s.box.Info()
 	resp.Commands = s.commands.get()
+	resp.Viewers = s.viewers.List(req.GetViewerId())
 	return resp, nil
 }
 
@@ -165,6 +168,11 @@ func (s *Server) Watch(req *attachv0.WatchRequest, stream attachv0.Attach_WatchS
 		return status.Error(codes.ResourceExhausted, err.Error())
 	}
 	defer sub.Close()
+	kind := ViewerLocal
+	if s.origin == gatewayv0.Origin_ORIGIN_REMOTE {
+		kind = ViewerDirect
+	}
+	defer s.viewers.Add(kind, ViewerLabel(req.GetViewer(), "viewer"), req.GetViewerId())()
 	for {
 		select {
 		case m, ok := <-sub.C():

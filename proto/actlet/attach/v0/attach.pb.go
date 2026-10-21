@@ -199,7 +199,9 @@ func (x *SessionSummary) GetConnected() bool {
 }
 
 type InfoRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The ID the viewer gave its Watch, to find itself among the viewers.
+	ViewerId      string `protobuf:"bytes,1,opt,name=viewer_id,json=viewerId,proto3" json:"viewer_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -234,6 +236,13 @@ func (*InfoRequest) Descriptor() ([]byte, []int) {
 	return file_actlet_attach_v0_attach_proto_rawDescGZIP(), []int{3}
 }
 
+func (x *InfoRequest) GetViewerId() string {
+	if x != nil {
+		return x.ViewerId
+	}
+	return ""
+}
+
 type InfoResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	SessionId     string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
@@ -244,6 +253,9 @@ type InfoResponse struct {
 	// Commands this viewer may send: "steer", "pause", "stop".
 	Commands []string `protobuf:"bytes,6,rep,name=commands,proto3" json:"commands,omitempty"`
 	Stats    *Stats   `protobuf:"bytes,7,opt,name=stats,proto3" json:"stats,omitempty"`
+	// The viewers watching the session now, through what answers: a box's
+	// own, or an orchestrator's. Nothing records them.
+	Viewers []*Viewer `protobuf:"bytes,8,rep,name=viewers,proto3" json:"viewers,omitempty"`
 	// The profile's defaults for viewers.
 	Tui           *v0.ViewerSettings `protobuf:"bytes,9,opt,name=tui,proto3" json:"tui,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -325,6 +337,13 @@ func (x *InfoResponse) GetCommands() []string {
 func (x *InfoResponse) GetStats() *Stats {
 	if x != nil {
 		return x.Stats
+	}
+	return nil
+}
+
+func (x *InfoResponse) GetViewers() []*Viewer {
+	if x != nil {
+		return x.Viewers
 	}
 	return nil
 }
@@ -438,7 +457,14 @@ type WatchRequest struct {
 	// Send events after this sequence number of the current run; 0 sends
 	// everything the box still holds, or, from an orchestrator, every run's
 	// events it still holds.
-	AfterSeq      uint64 `protobuf:"varint,1,opt,name=after_seq,json=afterSeq,proto3" json:"after_seq,omitempty"`
+	AfterSeq uint64 `protobuf:"varint,1,opt,name=after_seq,json=afterSeq,proto3" json:"after_seq,omitempty"`
+	// How the viewer names itself to other viewers, such as "actlet-cli".
+	// It is untrusted: escape sequences are removed and it is cut to 64
+	// characters.
+	Viewer string `protobuf:"bytes,2,opt,name=viewer,proto3" json:"viewer,omitempty"`
+	// A random ID the viewer makes up, and sends in InfoRequest too, to
+	// find itself among the viewers.
+	ViewerId      string `protobuf:"bytes,3,opt,name=viewer_id,json=viewerId,proto3" json:"viewer_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -480,6 +506,94 @@ func (x *WatchRequest) GetAfterSeq() uint64 {
 	return 0
 }
 
+func (x *WatchRequest) GetViewer() string {
+	if x != nil {
+		return x.Viewer
+	}
+	return ""
+}
+
+func (x *WatchRequest) GetViewerId() string {
+	if x != nil {
+		return x.ViewerId
+	}
+	return ""
+}
+
+// Viewer is a viewer watching the session: an open Watch.
+type Viewer struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// "local" (the session folder's socket), "direct" (a box's attach
+	// port) or "orchestrator" (an orchestrator's attach service).
+	Kind string `protobuf:"bytes,1,opt,name=kind,proto3" json:"kind,omitempty"`
+	// The viewer's name for itself, or the label the orchestrator gives
+	// it.
+	Label string                 `protobuf:"bytes,2,opt,name=label,proto3" json:"label,omitempty"`
+	Since *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=since,proto3" json:"since,omitempty"`
+	// The viewer that asked, by its viewer_id.
+	You           bool `protobuf:"varint,4,opt,name=you,proto3" json:"you,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Viewer) Reset() {
+	*x = Viewer{}
+	mi := &file_actlet_attach_v0_attach_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Viewer) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Viewer) ProtoMessage() {}
+
+func (x *Viewer) ProtoReflect() protoreflect.Message {
+	mi := &file_actlet_attach_v0_attach_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Viewer.ProtoReflect.Descriptor instead.
+func (*Viewer) Descriptor() ([]byte, []int) {
+	return file_actlet_attach_v0_attach_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *Viewer) GetKind() string {
+	if x != nil {
+		return x.Kind
+	}
+	return ""
+}
+
+func (x *Viewer) GetLabel() string {
+	if x != nil {
+		return x.Label
+	}
+	return ""
+}
+
+func (x *Viewer) GetSince() *timestamppb.Timestamp {
+	if x != nil {
+		return x.Since
+	}
+	return nil
+}
+
+func (x *Viewer) GetYou() bool {
+	if x != nil {
+		return x.You
+	}
+	return false
+}
+
 type WatchResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Types that are valid to be assigned to Msg:
@@ -493,7 +607,7 @@ type WatchResponse struct {
 
 func (x *WatchResponse) Reset() {
 	*x = WatchResponse{}
-	mi := &file_actlet_attach_v0_attach_proto_msgTypes[7]
+	mi := &file_actlet_attach_v0_attach_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -505,7 +619,7 @@ func (x *WatchResponse) String() string {
 func (*WatchResponse) ProtoMessage() {}
 
 func (x *WatchResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_actlet_attach_v0_attach_proto_msgTypes[7]
+	mi := &file_actlet_attach_v0_attach_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -518,7 +632,7 @@ func (x *WatchResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WatchResponse.ProtoReflect.Descriptor instead.
 func (*WatchResponse) Descriptor() ([]byte, []int) {
-	return file_actlet_attach_v0_attach_proto_rawDescGZIP(), []int{7}
+	return file_actlet_attach_v0_attach_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *WatchResponse) GetMsg() isWatchResponse_Msg {
@@ -574,7 +688,7 @@ type Skipped struct {
 
 func (x *Skipped) Reset() {
 	*x = Skipped{}
-	mi := &file_actlet_attach_v0_attach_proto_msgTypes[8]
+	mi := &file_actlet_attach_v0_attach_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -586,7 +700,7 @@ func (x *Skipped) String() string {
 func (*Skipped) ProtoMessage() {}
 
 func (x *Skipped) ProtoReflect() protoreflect.Message {
-	mi := &file_actlet_attach_v0_attach_proto_msgTypes[8]
+	mi := &file_actlet_attach_v0_attach_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -599,7 +713,7 @@ func (x *Skipped) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Skipped.ProtoReflect.Descriptor instead.
 func (*Skipped) Descriptor() ([]byte, []int) {
-	return file_actlet_attach_v0_attach_proto_rawDescGZIP(), []int{8}
+	return file_actlet_attach_v0_attach_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *Skipped) GetCount() uint64 {
@@ -632,7 +746,7 @@ type CommandRequest struct {
 
 func (x *CommandRequest) Reset() {
 	*x = CommandRequest{}
-	mi := &file_actlet_attach_v0_attach_proto_msgTypes[9]
+	mi := &file_actlet_attach_v0_attach_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -644,7 +758,7 @@ func (x *CommandRequest) String() string {
 func (*CommandRequest) ProtoMessage() {}
 
 func (x *CommandRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_actlet_attach_v0_attach_proto_msgTypes[9]
+	mi := &file_actlet_attach_v0_attach_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -657,7 +771,7 @@ func (x *CommandRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CommandRequest.ProtoReflect.Descriptor instead.
 func (*CommandRequest) Descriptor() ([]byte, []int) {
-	return file_actlet_attach_v0_attach_proto_rawDescGZIP(), []int{9}
+	return file_actlet_attach_v0_attach_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *CommandRequest) GetActor() string {
@@ -734,7 +848,7 @@ type ReadFileRequest struct {
 
 func (x *ReadFileRequest) Reset() {
 	*x = ReadFileRequest{}
-	mi := &file_actlet_attach_v0_attach_proto_msgTypes[10]
+	mi := &file_actlet_attach_v0_attach_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -746,7 +860,7 @@ func (x *ReadFileRequest) String() string {
 func (*ReadFileRequest) ProtoMessage() {}
 
 func (x *ReadFileRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_actlet_attach_v0_attach_proto_msgTypes[10]
+	mi := &file_actlet_attach_v0_attach_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -759,7 +873,7 @@ func (x *ReadFileRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReadFileRequest.ProtoReflect.Descriptor instead.
 func (*ReadFileRequest) Descriptor() ([]byte, []int) {
-	return file_actlet_attach_v0_attach_proto_rawDescGZIP(), []int{10}
+	return file_actlet_attach_v0_attach_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *ReadFileRequest) GetPath() string {
@@ -786,7 +900,7 @@ type ReadFileResponse struct {
 
 func (x *ReadFileResponse) Reset() {
 	*x = ReadFileResponse{}
-	mi := &file_actlet_attach_v0_attach_proto_msgTypes[11]
+	mi := &file_actlet_attach_v0_attach_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -798,7 +912,7 @@ func (x *ReadFileResponse) String() string {
 func (*ReadFileResponse) ProtoMessage() {}
 
 func (x *ReadFileResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_actlet_attach_v0_attach_proto_msgTypes[11]
+	mi := &file_actlet_attach_v0_attach_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -811,7 +925,7 @@ func (x *ReadFileResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReadFileResponse.ProtoReflect.Descriptor instead.
 func (*ReadFileResponse) Descriptor() ([]byte, []int) {
-	return file_actlet_attach_v0_attach_proto_rawDescGZIP(), []int{11}
+	return file_actlet_attach_v0_attach_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *ReadFileResponse) GetPath() string {
@@ -863,8 +977,9 @@ const file_actlet_attach_v0_attach_proto_rawDesc = "" +
 	"\tworker_id\x18\x02 \x01(\tR\bworkerId\x12\x14\n" +
 	"\x05epoch\x18\x03 \x01(\x04R\x05epoch\x125\n" +
 	"\x05state\x18\x04 \x01(\x0e2\x1f.actlet.gateway.v0.SessionStateR\x05state\x12\x1c\n" +
-	"\tconnected\x18\x05 \x01(\bR\tconnected\"\r\n" +
-	"\vInfoRequest\"\xbe\x02\n" +
+	"\tconnected\x18\x05 \x01(\bR\tconnected\"*\n" +
+	"\vInfoRequest\x12\x1b\n" +
+	"\tviewer_id\x18\x01 \x01(\tR\bviewerId\"\xf2\x02\n" +
 	"\fInfoResponse\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x14\n" +
@@ -873,7 +988,8 @@ const file_actlet_attach_v0_attach_proto_rawDesc = "" +
 	"\x0eactlet_version\x18\x04 \x01(\tR\ractletVersion\x125\n" +
 	"\x05state\x18\x05 \x01(\x0e2\x1f.actlet.gateway.v0.SessionStateR\x05state\x12\x1a\n" +
 	"\bcommands\x18\x06 \x03(\tR\bcommands\x12-\n" +
-	"\x05stats\x18\a \x01(\v2\x17.actlet.attach.v0.StatsR\x05stats\x123\n" +
+	"\x05stats\x18\a \x01(\v2\x17.actlet.attach.v0.StatsR\x05stats\x122\n" +
+	"\aviewers\x18\b \x03(\v2\x18.actlet.attach.v0.ViewerR\aviewers\x123\n" +
 	"\x03tui\x18\t \x01(\v2!.actlet.gateway.v0.ViewerSettingsR\x03tui\"\x9a\x02\n" +
 	"\x05Stats\x124\n" +
 	"\astarted\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\astarted\x12!\n" +
@@ -882,9 +998,16 @@ const file_actlet_attach_v0_attach_proto_rawDesc = "" +
 	"\fmemory_bytes\x18\x04 \x01(\x04R\vmemoryBytes\x12+\n" +
 	"\x03cpu\x18\x05 \x01(\v2\x19.google.protobuf.DurationR\x03cpu\x12\x18\n" +
 	"\agateway\x18\x06 \x01(\tR\agateway\x12+\n" +
-	"\x11gateway_connected\x18\a \x01(\bR\x10gatewayConnected\"+\n" +
+	"\x11gateway_connected\x18\a \x01(\bR\x10gatewayConnected\"`\n" +
 	"\fWatchRequest\x12\x1b\n" +
-	"\tafter_seq\x18\x01 \x01(\x04R\bafterSeq\"\x87\x01\n" +
+	"\tafter_seq\x18\x01 \x01(\x04R\bafterSeq\x12\x16\n" +
+	"\x06viewer\x18\x02 \x01(\tR\x06viewer\x12\x1b\n" +
+	"\tviewer_id\x18\x03 \x01(\tR\bviewerId\"v\n" +
+	"\x06Viewer\x12\x12\n" +
+	"\x04kind\x18\x01 \x01(\tR\x04kind\x12\x14\n" +
+	"\x05label\x18\x02 \x01(\tR\x05label\x120\n" +
+	"\x05since\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\x05since\x12\x10\n" +
+	"\x03you\x18\x04 \x01(\bR\x03you\"\x87\x01\n" +
 	"\rWatchResponse\x128\n" +
 	"\x05event\x18\x01 \x01(\v2 .actlet.gateway.v0.ActivityEventH\x00R\x05event\x125\n" +
 	"\askipped\x18\x02 \x01(\v2\x19.actlet.attach.v0.SkippedH\x00R\askippedB\x05\n" +
@@ -926,7 +1049,7 @@ func file_actlet_attach_v0_attach_proto_rawDescGZIP() []byte {
 	return file_actlet_attach_v0_attach_proto_rawDescData
 }
 
-var file_actlet_attach_v0_attach_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
+var file_actlet_attach_v0_attach_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
 var file_actlet_attach_v0_attach_proto_goTypes = []any{
 	(*SessionsRequest)(nil),       // 0: actlet.attach.v0.SessionsRequest
 	(*SessionsResponse)(nil),      // 1: actlet.attach.v0.SessionsResponse
@@ -935,49 +1058,52 @@ var file_actlet_attach_v0_attach_proto_goTypes = []any{
 	(*InfoResponse)(nil),          // 4: actlet.attach.v0.InfoResponse
 	(*Stats)(nil),                 // 5: actlet.attach.v0.Stats
 	(*WatchRequest)(nil),          // 6: actlet.attach.v0.WatchRequest
-	(*WatchResponse)(nil),         // 7: actlet.attach.v0.WatchResponse
-	(*Skipped)(nil),               // 8: actlet.attach.v0.Skipped
-	(*CommandRequest)(nil),        // 9: actlet.attach.v0.CommandRequest
-	(*ReadFileRequest)(nil),       // 10: actlet.attach.v0.ReadFileRequest
-	(*ReadFileResponse)(nil),      // 11: actlet.attach.v0.ReadFileResponse
-	(v0.SessionState)(0),          // 12: actlet.gateway.v0.SessionState
-	(*v0.ViewerSettings)(nil),     // 13: actlet.gateway.v0.ViewerSettings
-	(*timestamppb.Timestamp)(nil), // 14: google.protobuf.Timestamp
-	(*durationpb.Duration)(nil),   // 15: google.protobuf.Duration
-	(*v0.ActivityEvent)(nil),      // 16: actlet.gateway.v0.ActivityEvent
-	(*v0.Steer)(nil),              // 17: actlet.gateway.v0.Steer
-	(*v0.Pause)(nil),              // 18: actlet.gateway.v0.Pause
-	(*v0.Stop)(nil),               // 19: actlet.gateway.v0.Stop
-	(*v0.CommandAck)(nil),         // 20: actlet.gateway.v0.CommandAck
+	(*Viewer)(nil),                // 7: actlet.attach.v0.Viewer
+	(*WatchResponse)(nil),         // 8: actlet.attach.v0.WatchResponse
+	(*Skipped)(nil),               // 9: actlet.attach.v0.Skipped
+	(*CommandRequest)(nil),        // 10: actlet.attach.v0.CommandRequest
+	(*ReadFileRequest)(nil),       // 11: actlet.attach.v0.ReadFileRequest
+	(*ReadFileResponse)(nil),      // 12: actlet.attach.v0.ReadFileResponse
+	(v0.SessionState)(0),          // 13: actlet.gateway.v0.SessionState
+	(*v0.ViewerSettings)(nil),     // 14: actlet.gateway.v0.ViewerSettings
+	(*timestamppb.Timestamp)(nil), // 15: google.protobuf.Timestamp
+	(*durationpb.Duration)(nil),   // 16: google.protobuf.Duration
+	(*v0.ActivityEvent)(nil),      // 17: actlet.gateway.v0.ActivityEvent
+	(*v0.Steer)(nil),              // 18: actlet.gateway.v0.Steer
+	(*v0.Pause)(nil),              // 19: actlet.gateway.v0.Pause
+	(*v0.Stop)(nil),               // 20: actlet.gateway.v0.Stop
+	(*v0.CommandAck)(nil),         // 21: actlet.gateway.v0.CommandAck
 }
 var file_actlet_attach_v0_attach_proto_depIdxs = []int32{
 	2,  // 0: actlet.attach.v0.SessionsResponse.sessions:type_name -> actlet.attach.v0.SessionSummary
-	12, // 1: actlet.attach.v0.SessionSummary.state:type_name -> actlet.gateway.v0.SessionState
-	12, // 2: actlet.attach.v0.InfoResponse.state:type_name -> actlet.gateway.v0.SessionState
+	13, // 1: actlet.attach.v0.SessionSummary.state:type_name -> actlet.gateway.v0.SessionState
+	13, // 2: actlet.attach.v0.InfoResponse.state:type_name -> actlet.gateway.v0.SessionState
 	5,  // 3: actlet.attach.v0.InfoResponse.stats:type_name -> actlet.attach.v0.Stats
-	13, // 4: actlet.attach.v0.InfoResponse.tui:type_name -> actlet.gateway.v0.ViewerSettings
-	14, // 5: actlet.attach.v0.Stats.started:type_name -> google.protobuf.Timestamp
-	15, // 6: actlet.attach.v0.Stats.cpu:type_name -> google.protobuf.Duration
-	16, // 7: actlet.attach.v0.WatchResponse.event:type_name -> actlet.gateway.v0.ActivityEvent
-	8,  // 8: actlet.attach.v0.WatchResponse.skipped:type_name -> actlet.attach.v0.Skipped
-	17, // 9: actlet.attach.v0.CommandRequest.steer:type_name -> actlet.gateway.v0.Steer
-	18, // 10: actlet.attach.v0.CommandRequest.pause:type_name -> actlet.gateway.v0.Pause
-	19, // 11: actlet.attach.v0.CommandRequest.stop:type_name -> actlet.gateway.v0.Stop
-	3,  // 12: actlet.attach.v0.Attach.Info:input_type -> actlet.attach.v0.InfoRequest
-	6,  // 13: actlet.attach.v0.Attach.Watch:input_type -> actlet.attach.v0.WatchRequest
-	9,  // 14: actlet.attach.v0.Attach.Command:input_type -> actlet.attach.v0.CommandRequest
-	10, // 15: actlet.attach.v0.Attach.ReadFile:input_type -> actlet.attach.v0.ReadFileRequest
-	0,  // 16: actlet.attach.v0.Attach.Sessions:input_type -> actlet.attach.v0.SessionsRequest
-	4,  // 17: actlet.attach.v0.Attach.Info:output_type -> actlet.attach.v0.InfoResponse
-	7,  // 18: actlet.attach.v0.Attach.Watch:output_type -> actlet.attach.v0.WatchResponse
-	20, // 19: actlet.attach.v0.Attach.Command:output_type -> actlet.gateway.v0.CommandAck
-	11, // 20: actlet.attach.v0.Attach.ReadFile:output_type -> actlet.attach.v0.ReadFileResponse
-	1,  // 21: actlet.attach.v0.Attach.Sessions:output_type -> actlet.attach.v0.SessionsResponse
-	17, // [17:22] is the sub-list for method output_type
-	12, // [12:17] is the sub-list for method input_type
-	12, // [12:12] is the sub-list for extension type_name
-	12, // [12:12] is the sub-list for extension extendee
-	0,  // [0:12] is the sub-list for field type_name
+	7,  // 4: actlet.attach.v0.InfoResponse.viewers:type_name -> actlet.attach.v0.Viewer
+	14, // 5: actlet.attach.v0.InfoResponse.tui:type_name -> actlet.gateway.v0.ViewerSettings
+	15, // 6: actlet.attach.v0.Stats.started:type_name -> google.protobuf.Timestamp
+	16, // 7: actlet.attach.v0.Stats.cpu:type_name -> google.protobuf.Duration
+	15, // 8: actlet.attach.v0.Viewer.since:type_name -> google.protobuf.Timestamp
+	17, // 9: actlet.attach.v0.WatchResponse.event:type_name -> actlet.gateway.v0.ActivityEvent
+	9,  // 10: actlet.attach.v0.WatchResponse.skipped:type_name -> actlet.attach.v0.Skipped
+	18, // 11: actlet.attach.v0.CommandRequest.steer:type_name -> actlet.gateway.v0.Steer
+	19, // 12: actlet.attach.v0.CommandRequest.pause:type_name -> actlet.gateway.v0.Pause
+	20, // 13: actlet.attach.v0.CommandRequest.stop:type_name -> actlet.gateway.v0.Stop
+	3,  // 14: actlet.attach.v0.Attach.Info:input_type -> actlet.attach.v0.InfoRequest
+	6,  // 15: actlet.attach.v0.Attach.Watch:input_type -> actlet.attach.v0.WatchRequest
+	10, // 16: actlet.attach.v0.Attach.Command:input_type -> actlet.attach.v0.CommandRequest
+	11, // 17: actlet.attach.v0.Attach.ReadFile:input_type -> actlet.attach.v0.ReadFileRequest
+	0,  // 18: actlet.attach.v0.Attach.Sessions:input_type -> actlet.attach.v0.SessionsRequest
+	4,  // 19: actlet.attach.v0.Attach.Info:output_type -> actlet.attach.v0.InfoResponse
+	8,  // 20: actlet.attach.v0.Attach.Watch:output_type -> actlet.attach.v0.WatchResponse
+	21, // 21: actlet.attach.v0.Attach.Command:output_type -> actlet.gateway.v0.CommandAck
+	12, // 22: actlet.attach.v0.Attach.ReadFile:output_type -> actlet.attach.v0.ReadFileResponse
+	1,  // 23: actlet.attach.v0.Attach.Sessions:output_type -> actlet.attach.v0.SessionsResponse
+	19, // [19:24] is the sub-list for method output_type
+	14, // [14:19] is the sub-list for method input_type
+	14, // [14:14] is the sub-list for extension type_name
+	14, // [14:14] is the sub-list for extension extendee
+	0,  // [0:14] is the sub-list for field type_name
 }
 
 func init() { file_actlet_attach_v0_attach_proto_init() }
@@ -985,11 +1111,11 @@ func file_actlet_attach_v0_attach_proto_init() {
 	if File_actlet_attach_v0_attach_proto != nil {
 		return
 	}
-	file_actlet_attach_v0_attach_proto_msgTypes[7].OneofWrappers = []any{
+	file_actlet_attach_v0_attach_proto_msgTypes[8].OneofWrappers = []any{
 		(*WatchResponse_Event)(nil),
 		(*WatchResponse_Skipped)(nil),
 	}
-	file_actlet_attach_v0_attach_proto_msgTypes[9].OneofWrappers = []any{
+	file_actlet_attach_v0_attach_proto_msgTypes[10].OneofWrappers = []any{
 		(*CommandRequest_Steer)(nil),
 		(*CommandRequest_Pause)(nil),
 		(*CommandRequest_Stop)(nil),
@@ -1000,7 +1126,7 @@ func file_actlet_attach_v0_attach_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_actlet_attach_v0_attach_proto_rawDesc), len(file_actlet_attach_v0_attach_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   12,
+			NumMessages:   13,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

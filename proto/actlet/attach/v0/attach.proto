@@ -64,7 +64,10 @@ message SessionSummary {
   bool connected = 5;
 }
 
-message InfoRequest {}
+message InfoRequest {
+  // The ID the viewer gave its Watch, to find itself among the viewers.
+  string viewer_id = 1;
+}
 
 message InfoResponse {
   string session_id = 1;
@@ -75,6 +78,9 @@ message InfoResponse {
   // Commands this viewer may send: "steer", "pause", "stop".
   repeated string commands = 6;
   Stats stats = 7;
+  // The viewers watching the session now, through what answers: a box's
+  // own, or an orchestrator's. Nothing records them.
+  repeated Viewer viewers = 8;
   // The profile's defaults for viewers.
   actlet.gateway.v0.ViewerSettings tui = 9;
 }
@@ -99,6 +105,26 @@ message WatchRequest {
   // everything the box still holds, or, from an orchestrator, every run's
   // events it still holds.
   uint64 after_seq = 1;
+  // How the viewer names itself to other viewers, such as "actlet-cli".
+  // It is untrusted: escape sequences are removed and it is cut to 64
+  // characters.
+  string viewer = 2;
+  // A random ID the viewer makes up, and sends in InfoRequest too, to
+  // find itself among the viewers.
+  string viewer_id = 3;
+}
+
+// Viewer is a viewer watching the session: an open Watch.
+message Viewer {
+  // "local" (the session folder's socket), "direct" (a box's attach
+  // port) or "orchestrator" (an orchestrator's attach service).
+  string kind = 1;
+  // The viewer's name for itself, or the label the orchestrator gives
+  // it.
+  string label = 2;
+  google.protobuf.Timestamp since = 3;
+  // The viewer that asked, by its viewer_id.
+  bool you = 4;
 }
 
 message WatchResponse {

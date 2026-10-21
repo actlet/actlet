@@ -2,6 +2,8 @@ package tui
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"io"
 	"sync/atomic"
@@ -15,17 +17,24 @@ import (
 
 // Feed connects a live viewer to a box: it streams the activity and
 // refreshes the box's figures, sending them to send, until ctx ends or
-// the stream does.
-func Feed(ctx context.Context, client attachv0.AttachClient, send func(tea.Msg)) error {
-	info, err := client.Info(ctx, &attachv0.InfoRequest{})
+// the stream does. The viewer names itself name to other viewers.
+func Feed(ctx context.Context, client attachv0.AttachClient, name string, send func(tea.Msg)) error {
+	var b [8]byte
+	_, _ = rand.Read(b[:])
+	id := hex.EncodeToString(b[:])
+	stream, err := client.Watch(ctx, &attachv0.WatchRequest{Viewer: name, ViewerId: id})
+	if err != nil {
+		return err
+	}
+	infoReq := &attachv0.InfoRequest{ViewerId: id}
+	info, err := client.Info(ctx, infoReq)
 	if err != nil {
 		return err
 	}
 	send(InfoMsg{Info: info})
-	stream, err := client.Watch(ctx, &attachv0.WatchRequest{})
-	if err != nil {
-		return err
-	}
+	// Refresh the figures every two seconds, and once the box has begun
+	// to answer the Watch, which lists this viewer among the viewers.
+	watching := make(chan struct{}, 1)
 	go func() {
 		t := time.NewTicker(2 * time.Second)
 		defer t.Stop()
@@ -34,9 +43,10 @@ func Feed(ctx context.Context, client attachv0.AttachClient, send func(tea.Msg))
 			case <-ctx.Done():
 				return
 			case <-t.C:
-				if info, err := client.Info(ctx, &attachv0.InfoRequest{}); err == nil {
-					send(InfoMsg{Info: info})
-				}
+			case <-watching:
+			}
+			if info, err := client.Info(ctx, infoReq); err == nil {
+				send(InfoMsg{Info: info})
 			}
 		}
 	}()
@@ -44,12 +54,15 @@ func Feed(ctx context.Context, client attachv0.AttachClient, send func(tea.Msg))
 	msgs := make(chan *attachv0.WatchResponse, 256)
 	errc := make(chan error, 1)
 	go func() {
-		for {
+		for first := true; ; first = false {
 			m, err := stream.Recv()
 			if err != nil {
 				errc <- err
 				close(msgs)
 				return
+			}
+			if first {
+				watching <- struct{}{}
 			}
 			msgs <- m
 		}
@@ -122,7 +135,7 @@ func RunLive(ctx context.Context, client attachv0.AttachClient, conn Connection,
 	m.SetFileReader(Files(ctx, client, conn.Dir))
 	programs.Add(1)
 	p := tea.NewProgram(m, tea.WithContext(ctx), tea.WithInput(in), tea.WithOutput(out))
-	go func() { _ = Feed(ctx, client, p.Send) }()
+	go func() { _ = Feed(ctx, client, conn.Viewer, p.Send) }()
 	_, err = p.Run()
 	if errors.Is(err, tea.ErrProgramKilled) || errors.Is(err, context.Canceled) {
 		return nil
@@ -171,7 +184,7 @@ func DumpLive(ctx context.Context, client attachv0.AttachClient, conn Connection
 	msgs := make(chan tea.Msg, 64)
 	errc := make(chan error, 1)
 	go func() {
-		errc <- Feed(ctx, client, func(msg tea.Msg) {
+		errc <- Feed(ctx, client, conn.Viewer, func(msg tea.Msg) {
 			select {
 			case msgs <- msg:
 			case <-ctx.Done():

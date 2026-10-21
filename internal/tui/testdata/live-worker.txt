@@ -7,10 +7,10 @@
                                                                    │ workspace/report.md +1 −0      
                                                                    │ o or a click opens a file      
                                                                    │                                
-                                                                   │                                
-                                                                   │                                
-                                                                   │                                
-                                                                   │                                
+                                                                   │ VIEWERS                        
+                                                                   │ ⇄ gateway gw:7400 ●            
+                                                                   │ ◉ actlet attach      you · 25s 
+                                                                   │ ○ ops bot          direct · 2s 
                                                                    │                                
                                                                    │                                
                                                                    │                                

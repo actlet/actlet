@@ -59,6 +59,7 @@ func runAttach(args []string, stdout, stderr io.Writer) int {
 	file := fs.String("file", "", "with -dump: open this file, as the sidebar shows it, in the file viewer")
 	var separators tui.BoolFlag
 	fs.Var(&separators, "separators", "draw lines between turns and tool calls; on unless the profile says otherwise [ACTLET_TUI_SEPARATORS]")
+	name := fs.String("name", "actlet-cli", "how this viewer is named to the session's other viewers")
 	theme := fs.String("theme", "", "the colours: dark, light, plain, a theme file's name or its path [ACTLET_THEME]")
 	color := fs.Bool("color", false, "with -dump: keep the colours, as ANSI escape sequences")
 	width := fs.Int("width", 120, "with -dump: the screen width")
@@ -104,7 +105,7 @@ func runAttach(args []string, stdout, stderr io.Writer) int {
 		return fail(err)
 	}
 	defer func() { _ = closeClient() }()
-	conn := tui.Connection{Kind: "box " + addr, Attached: "box " + addr}
+	conn := tui.Connection{Kind: "box " + addr, Attached: "box " + addr, Viewer: *name}
 	if *gateway != "" {
 		conn.Kind = fmt.Sprintf("orchestrator %s · session %s", addr, shortID(opts.Session))
 		conn.Attached = "orchestrator " + addr

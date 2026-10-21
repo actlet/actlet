@@ -48,6 +48,9 @@ type Connection struct {
 	// runs elsewhere, for its badge: "local socket", "box <address>" or
 	// "orchestrator <address>". It is empty for the run's own viewer.
 	Attached string
+	// Viewer is how the viewer names itself to the session's other
+	// viewers.
+	Viewer string
 }
 
 // Commander sends a command to the box; nil when there is none, as in a

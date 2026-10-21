@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -465,5 +466,124 @@ func TestPort(t *testing.T) {
 	defer box.mu.Unlock()
 	if len(box.commands) != 1 || box.commands[0].GetOrigin() != gatewayv0.Origin_ORIGIN_REMOTE || box.commands[0].GetActor() != "remote viewer" {
 		t.Errorf("commands %v", box.commands)
+	}
+}
+
+// The box lists who watches it, over the socket and the port alike: at
+// most as many as the hub lets in, named as they say, cleaned, and only
+// while they watch.
+func TestViewers(t *testing.T) {
+	hub := NewHub(HubOptions{})
+	hub.Publish(textEvent(1))
+	box := &fakeBox{}
+	dir := t.TempDir()
+	lis, err := Listen(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := NewServer("s1", hub, box, nil, nil)
+	sock := Start(lis, srv)
+	t.Cleanup(sock.Stop)
+	portLis, err := ListenPort("127.0.0.1:0", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	port := StartPort(portLis, srv.Remote(), "sesame")
+	t.Cleanup(port.Stop)
+	local, closeLocal, err := Dial(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = closeLocal() })
+	remote, closeRemote, err := DialRemote(portLis.Addr().String(), RemoteOptions{Token: "sesame"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = closeRemote() })
+
+	// watch opens a Watch and waits until the box answers it.
+	watch := func(c attachv0.AttachClient, name, id string) (context.CancelFunc, error) {
+		ctx, cancel := context.WithCancel(t.Context())
+		stream, err := c.Watch(ctx, &attachv0.WatchRequest{Viewer: name, ViewerId: id})
+		if err == nil {
+			_, err = stream.Recv()
+		}
+		return cancel, err
+	}
+	var cancels []context.CancelFunc
+	for i := range DefaultMaxClients - 1 {
+		name := fmt.Sprintf("viewer %d", i)
+		switch i {
+		case 1:
+			name = "evil\x1b]0;title\x07 \x1b[31mred\nnext line"
+		case 2:
+			name = strings.Repeat("long", 40)
+		case 3:
+			name = ""
+		}
+		cancel, err := watch(local, name, fmt.Sprint("id", i))
+		if err != nil {
+			t.Fatal(err)
+		}
+		cancels = append(cancels, cancel)
+	}
+	if _, err := watch(remote, "ops", "port"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := watch(local, "one too many", "x"); status.Code(err) != codes.ResourceExhausted {
+		t.Errorf("a ninth viewer: %v", err)
+	}
+
+	info, err := local.Info(t.Context(), &attachv0.InfoRequest{ViewerId: "id0"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	vs := info.GetViewers()
+	if len(vs) != DefaultMaxClients {
+		t.Fatalf("%d viewers listed: %v", len(vs), vs)
+	}
+	var labels, kinds, yous []string
+	for _, v := range vs {
+		labels = append(labels, v.GetLabel())
+		kinds = append(kinds, v.GetKind())
+		if v.GetYou() {
+			yous = append(yous, v.GetLabel())
+		}
+		if v.GetSince() == nil {
+			t.Errorf("%q has no time", v.GetLabel())
+		}
+	}
+	for _, want := range []string{"evil red next line", strings.Repeat("long", 16), "viewer", "ops"} {
+		if !slices.Contains(labels, want) {
+			t.Errorf("no %q among %q", want, labels)
+		}
+	}
+	if !slices.Contains(kinds, ViewerLocal) || !slices.Contains(kinds, ViewerDirect) {
+		t.Errorf("kinds %v", kinds)
+	}
+	if len(yous) != 1 || yous[0] != "viewer 0" {
+		t.Errorf("you: %v", yous)
+	}
+
+	// A viewer that stops watching drops off the list.
+	cancels[0]()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		info, err := local.Info(t.Context(), &attachv0.InfoRequest{ViewerId: "id0"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if n := len(info.GetViewers()); n == DefaultMaxClients-1 {
+			for _, v := range info.GetViewers() {
+				if v.GetYou() || v.GetLabel() == "viewer 0" {
+					t.Errorf("the closed viewer is still listed: %v", v)
+				}
+			}
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("still %d viewers", len(info.GetViewers()))
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 }

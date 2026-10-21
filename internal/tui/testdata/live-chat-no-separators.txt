@@ -7,10 +7,10 @@
      ┊                                                             │ workspace/report.md +1 −0      
      ┊ ▌ Subagent root.1 · an earlier turn                         │ o or a click opens a file      
      ┊   ✓ Write report.md  +1 −0                             12ms │                                
-     ┊     │ @@ -0,0 +1 @@                                         │                                
-     ┊     │ +Total: 12                                            │                                
-     │ ↳ Wrote report.md.                                          │                                
-                                                                   │                                
+     ┊     │ @@ -0,0 +1 @@                                         │ VIEWERS                        
+     ┊     │ +Total: 12                                            │ ⇄ gateway gw:7400 ●            
+     │ ↳ Wrote report.md.                                          │ ◉ actlet attach      you · 25s 
+                                                                   │ ○ ops bot          direct · 2s 
  ▌ Operator · alice · 22:13:29                                     │                                
  ▌ use metric units                                                │                                
                                                                    │                                

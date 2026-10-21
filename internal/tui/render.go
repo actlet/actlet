@@ -581,7 +581,63 @@ func (m *Model) sidebarLines(w int) []string {
 	if len(files) > 0 {
 		out = append(out, st.faint.Render("o or a click opens a file"))
 	}
+	if m.player == nil && m.info != nil {
+		out = append(out, "")
+		head("Viewers")
+		out = append(out, m.viewerLines(w)...)
+	}
 	return out
+}
+
+// viewerLines are the sidebar's viewers: what connects the session to its
+// orchestrator, then who watches it.
+func (m *Model) viewerLines(w int) []string {
+	st := m.st
+	var out []string
+	row := func(s string) { out = append(out, ansi.Truncate(s, w, "…")) }
+	switch gs := m.info.GetStats(); {
+	case gs != nil && gs.GetGateway() != "":
+		state := st.ok.Render("●")
+		if !gs.GetGatewayConnected() {
+			state = st.err.Render("○ not connected")
+		}
+		row(st.accent.Render("⇄") + " " + st.text.Render("gateway ") + st.muted.Render(view.Sanitize(gs.GetGateway())) + " " + state)
+	case strings.HasPrefix(m.conn.Attached, "orchestrator "):
+		row(st.accent.Render("⇄") + " " + st.text.Render("orchestrator ") + st.muted.Render(strings.TrimPrefix(m.conn.Attached, "orchestrator ")))
+	}
+	for _, v := range m.info.GetViewers() {
+		// This viewer says "you" in place of its kind, which its badge
+		// names.
+		icon, ls, label, kind := st.muted.Render("○"), st.text, view.Sanitize(v.GetLabel()), view.Sanitize(v.GetKind())
+		if v.GetYou() {
+			icon, ls, kind = st.accent.Render("◉"), st.accent, "you"
+		}
+		right := " " + kind
+		if t := v.GetSince(); t != nil {
+			right += " · " + age(m.now().Sub(t.AsTime()))
+		}
+		avail := max(w-2-ansi.StringWidth(right), 4)
+		label = ansi.Truncate(label, avail, "…")
+		gap := strings.Repeat(" ", max(avail-ansi.StringWidth(label), 0))
+		row(icon + " " + ls.Render(label) + gap + st.muted.Render(right))
+	}
+	if len(m.info.GetViewers()) == 0 {
+		row(st.faint.Render("none listed"))
+	}
+	return out
+}
+
+// age says briefly how long ago something was.
+func age(d time.Duration) string {
+	switch {
+	case d < time.Minute:
+		return fmt.Sprintf("%ds", max(int(d.Seconds()), 0))
+	case d < time.Hour:
+		return fmt.Sprintf("%dm", int(d.Minutes()))
+	case d < 24*time.Hour:
+		return fmt.Sprintf("%dh", int(d.Hours()))
+	}
+	return fmt.Sprintf("%dd", int(d.Hours()/24))
 }
 
 // renderStatus is the one status line: what is happening, the model, how

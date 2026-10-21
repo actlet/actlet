@@ -402,3 +402,57 @@ func TestUpdateProfile(t *testing.T) {
 		t.Errorf("Assign's profile was changed: %v", assigned)
 	}
 }
+
+// The orchestrator lists the viewers watching a session through it, by
+// the label it gives them or else the name they give themselves, cleaned.
+func TestAttachViewers(t *testing.T) {
+	for _, tt := range []struct {
+		name  string
+		label func(context.Context) string
+		want  string
+	}{
+		{"own name", nil, "bob red"},
+		{"orchestrator's label", func(context.Context) string { return "alice@example" }, "alice@example"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			h := newHarness(t, Options{AttachViewerLabel: tt.label})
+			h.registerWith(t, "s1")
+			ctx, cancel := context.WithCancel(viewing(t.Context(), "s1"))
+			stream, err := h.attach.Watch(ctx, &attachv0.WatchRequest{Viewer: "bob \x1b[31mred", ViewerId: "v1"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			go func() {
+				for {
+					if _, err := stream.Recv(); err != nil {
+						return
+					}
+				}
+			}()
+			list := func() []*attachv0.Viewer {
+				info, err := h.attach.Info(viewing(t.Context(), "s1"), &attachv0.InfoRequest{ViewerId: "v1"})
+				if err != nil {
+					t.Fatal(err)
+				}
+				return info.GetViewers()
+			}
+			waitFor := func(n int) []*attachv0.Viewer {
+				deadline := time.Now().Add(5 * time.Second)
+				for {
+					if vs := list(); len(vs) == n || time.Now().After(deadline) {
+						return vs
+					}
+					time.Sleep(10 * time.Millisecond)
+				}
+			}
+			vs := waitFor(1)
+			if len(vs) != 1 || vs[0].GetKind() != "orchestrator" || vs[0].GetLabel() != tt.want || !vs[0].GetYou() {
+				t.Fatalf("viewers %v", vs)
+			}
+			cancel()
+			if vs := waitFor(0); len(vs) != 0 {
+				t.Errorf("a closed Watch is still listed: %v", vs)
+			}
+		})
+	}
+}

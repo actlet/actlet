@@ -268,12 +268,20 @@ func (r *remoteSession) localDump(t *testing.T, args ...string) string {
 
 var spinner = regexp.MustCompile(`[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]`)
 
-// screen is a dump without its header and status line, which name the
-// connection and the time, and with the spinner stopped.
+// screen is a dump without its header, status line and the sidebar's
+// viewers, which name the connection, the time and who watches, and
+// with the spinner stopped.
 func screen(dump string) string {
 	lines := strings.Split(strings.TrimRight(dump, "\n"), "\n")
 	if len(lines) > 1 {
 		lines = lines[1 : len(lines)-1]
+	}
+	viewers := false
+	for i, l := range lines {
+		viewers = viewers || strings.Contains(l, "│ VIEWERS")
+		if j := strings.LastIndex(l, "│"); viewers && j >= 0 {
+			lines[i] = l[:j]
+		}
 	}
 	return spinner.ReplaceAllString(strings.Join(lines, "\n"), "*")
 }
@@ -320,6 +328,12 @@ func TestAttachRemote(t *testing.T) {
 			} {
 				if !strings.Contains(statusLine(dump), want) {
 					t.Errorf("status line %q, want %q", statusLine(dump), want)
+				}
+			}
+			// Each lists itself among the viewers.
+			for dump, want := range map[string]string{local: "◉ actlet attach", gw: "◉ actlet-cli", box: "◉ actlet-cli"} {
+				if !strings.Contains(dump, want) || !strings.Contains(dump, "you ·") {
+					t.Errorf("no %q among the viewers:\n%s", want, dump)
 				}
 			}
 			// And its badge.

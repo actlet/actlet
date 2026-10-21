@@ -144,7 +144,11 @@ func liveModel() *Model {
 	m.SetSize(100, 32)
 	m.Update(InfoMsg{Info: &attachv0.InfoResponse{SessionId: "sess-1234abcd", Epoch: 1, State: gatewayv0.SessionState_SESSION_STATE_RUNNING,
 		Stats: &attachv0.Stats{Started: timestamppb.New(epoch0), FolderBytes: 52 << 10, OutputBytes: 10, MemoryBytes: 24 << 20,
-			Cpu: durationpb.New(1500 * time.Millisecond), Gateway: "gw:7400", GatewayConnected: true}}})
+			Cpu: durationpb.New(1500 * time.Millisecond), Gateway: "gw:7400", GatewayConnected: true},
+		Viewers: []*attachv0.Viewer{
+			{Kind: "local", Label: "actlet attach", Since: timestamppb.New(epoch0.Add(5 * time.Second)), You: true},
+			{Kind: "direct", Label: "ops \x1b[31mbot", Since: timestamppb.New(epoch0.Add(28 * time.Second))},
+		}}})
 	m.Update(watch(run()))
 	return m
 }

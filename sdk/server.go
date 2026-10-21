@@ -59,6 +59,10 @@ type Options struct {
 	// "steer", "pause" and "stop". Nil allows what the session's profile
 	// lets local viewers send: steer notes, unless it says otherwise.
 	AttachCommands func(ctx context.Context, s *Session) []string
+	// AttachViewerLabel names a viewer to the session's other viewers,
+	// such as by the user its token authenticates. Without it, or when it
+	// returns "", viewers are listed by the name they give themselves.
+	AttachViewerLabel func(ctx context.Context) string
 
 	// Store keeps the activity workers publish and tells the server what
 	// it already has. Nil means a MemoryStore.
