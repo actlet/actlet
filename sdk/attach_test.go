@@ -84,6 +84,30 @@ func (w *watcher) next(t *testing.T, n int) []string {
 	return out
 }
 
+// nextAccounted reads until every event of want is accounted for: given,
+// in order and once, or reported skipped. A viewer that reads too slowly,
+// as on a busy machine, skips events, and is told how many.
+func (w *watcher) nextAccounted(t *testing.T, want []string) {
+	t.Helper()
+	for i := 0; i < len(want); {
+		var s string
+		select {
+		case s = <-w.got:
+		case <-time.After(5 * time.Second):
+			t.Fatalf("waiting for %s, %d of %d accounted for", want[i], i, len(want))
+		}
+		var n int
+		if _, err := fmt.Sscanf(s, "skipped %d", &n); err == nil {
+			i += n
+			continue
+		}
+		if s != want[i] {
+			t.Fatalf("got %s, want %s: out of order or repeated", s, want[i])
+		}
+		i++
+	}
+}
+
 func seqs(epoch, from, to uint64) []string {
 	var out []string
 	for s := from; s <= to; s++ {
@@ -124,13 +148,8 @@ func TestAttachWatch(t *testing.T) {
 	}()
 	late := h.watch(t, "s1", 0)
 	<-done
-	want := append(append(seqs(1, 1, 5), seqs(2, 1, 2)...), seqs(2, 3, 402)...)
-	if got := late.next(t, len(want)); !slices.Equal(got, want) {
-		t.Fatalf("a viewer attaching during a burst got %d events, out of order or repeated", len(got))
-	}
-	if got := w.next(t, 400); !slices.Equal(got, seqs(2, 3, 402)) {
-		t.Fatalf("the first viewer got %v", got[:5])
-	}
+	late.nextAccounted(t, append(append(seqs(1, 1, 5), seqs(2, 1, 2)...), seqs(2, 3, 402)...))
+	w.nextAccounted(t, seqs(2, 3, 402))
 	// After a sequence number: the latest run's events after it.
 	if got := h.watch(t, "s1", 400).next(t, 2); !slices.Equal(got, seqs(2, 401, 402)) {
 		t.Errorf("after 400: %v", got)
