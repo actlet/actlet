@@ -33,6 +33,7 @@ type Session struct {
 	version      string
 	capabilities []string
 	localAttach  *gatewayv0.LocalAttach
+	tui          *gatewayv0.ViewerSettings
 	lineage      *gatewayv0.Lineage
 	epoch        uint64
 	state        gatewayv0.SessionState
@@ -275,6 +276,7 @@ func (s *Session) registered(req *gatewayv0.RegisterRequest, profile *gatewayv0.
 	s.version = req.GetActletVersion()
 	s.capabilities = req.GetCapabilities()
 	s.localAttach = profile.GetLocalAttach()
+	s.tui = profile.GetTui()
 	s.epoch = req.GetEpoch()
 	if req.GetLineage() != nil {
 		s.lineage = req.GetLineage()

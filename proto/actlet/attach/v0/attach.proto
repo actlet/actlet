@@ -75,6 +75,8 @@ message InfoResponse {
   // Commands this viewer may send: "steer", "pause", "stop".
   repeated string commands = 6;
   Stats stats = 7;
+  // The profile's defaults for viewers.
+  actlet.gateway.v0.ViewerSettings tui = 9;
 }
 
 // Stats are the box's figures now.

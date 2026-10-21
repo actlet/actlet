@@ -62,6 +62,9 @@ compaction:                     # when the context nears the model's window; on 
   keep_turns: 4                 # recent model turns kept as they are; 0 or missing: 4
 local_attach:                   # what a viewer attached to the box, or by default through the orchestrator, may do
   commands: [steer]             # steer, pause and stop; [none] allows nothing
+tui:                            # how terminal viewers show the session, unless they choose otherwise
+  separators: false             # lines between turns and tool calls; on unless false
+  theme: light                  # dark, light, plain, or a theme file's name in the viewer's themes folder
 ```
 
 The same document as JSON has the same field names. Durations are strings such as `"30s"` in both formats.
@@ -75,6 +78,7 @@ Loading is strict, so a mistake is reported rather than ignored:
 - At most one budget of each kind. A `money` budget needs a three-letter `currency`, and the other kinds must not have one.
 - `wait_mode` is required with `on_exhaust: wait` and not allowed with `kill`.
 - Every role must point to a defined alias. Aliases and tool names are unique.
+- `tui.theme` is a name, of letters, digits, `-` and `_`, never a path.
 
 All problems are reported at once.
 

@@ -98,6 +98,10 @@ type Model struct {
 
 	// separators draws a line between turns and tool calls.
 	separators bool
+	// look is what the viewer's flags and environment chose; the
+	// profile's settings, applied once, fill in the rest.
+	look           Look
+	profileApplied bool
 	// st are the theme's styles.
 	st *styles
 
@@ -133,7 +137,7 @@ func newModel(conn Connection) *Model {
 	in.Placeholder = "a note for the agent; Enter sends, Esc cancels"
 	in.CharLimit = 4096
 	m := &Model{sess: view.New(), conn: conn, input: in, now: time.Now, width: 100, height: 30, expanded: map[string]bool{}, fileRows: map[int]string{}}
-	m.SetTheme(ThemeDark)
+	m.SetLook(Look{Theme: ThemeDark})
 	return m
 }
 
@@ -215,6 +219,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.Apply(msg)
 	case InfoMsg:
 		m.info = msg.Info
+		m.applyProfile(msg.Info.GetTui())
 		if id := msg.Info.GetSessionId(); id != "" {
 			m.sess.ID = id
 		}

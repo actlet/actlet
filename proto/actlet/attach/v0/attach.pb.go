@@ -242,8 +242,10 @@ type InfoResponse struct {
 	ActletVersion string                 `protobuf:"bytes,4,opt,name=actlet_version,json=actletVersion,proto3" json:"actlet_version,omitempty"`
 	State         v0.SessionState        `protobuf:"varint,5,opt,name=state,proto3,enum=actlet.gateway.v0.SessionState" json:"state,omitempty"`
 	// Commands this viewer may send: "steer", "pause", "stop".
-	Commands      []string `protobuf:"bytes,6,rep,name=commands,proto3" json:"commands,omitempty"`
-	Stats         *Stats   `protobuf:"bytes,7,opt,name=stats,proto3" json:"stats,omitempty"`
+	Commands []string `protobuf:"bytes,6,rep,name=commands,proto3" json:"commands,omitempty"`
+	Stats    *Stats   `protobuf:"bytes,7,opt,name=stats,proto3" json:"stats,omitempty"`
+	// The profile's defaults for viewers.
+	Tui           *v0.ViewerSettings `protobuf:"bytes,9,opt,name=tui,proto3" json:"tui,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -323,6 +325,13 @@ func (x *InfoResponse) GetCommands() []string {
 func (x *InfoResponse) GetStats() *Stats {
 	if x != nil {
 		return x.Stats
+	}
+	return nil
+}
+
+func (x *InfoResponse) GetTui() *v0.ViewerSettings {
+	if x != nil {
+		return x.Tui
 	}
 	return nil
 }
@@ -855,7 +864,7 @@ const file_actlet_attach_v0_attach_proto_rawDesc = "" +
 	"\x05epoch\x18\x03 \x01(\x04R\x05epoch\x125\n" +
 	"\x05state\x18\x04 \x01(\x0e2\x1f.actlet.gateway.v0.SessionStateR\x05state\x12\x1c\n" +
 	"\tconnected\x18\x05 \x01(\bR\tconnected\"\r\n" +
-	"\vInfoRequest\"\x89\x02\n" +
+	"\vInfoRequest\"\xbe\x02\n" +
 	"\fInfoResponse\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x14\n" +
@@ -864,7 +873,8 @@ const file_actlet_attach_v0_attach_proto_rawDesc = "" +
 	"\x0eactlet_version\x18\x04 \x01(\tR\ractletVersion\x125\n" +
 	"\x05state\x18\x05 \x01(\x0e2\x1f.actlet.gateway.v0.SessionStateR\x05state\x12\x1a\n" +
 	"\bcommands\x18\x06 \x03(\tR\bcommands\x12-\n" +
-	"\x05stats\x18\a \x01(\v2\x17.actlet.attach.v0.StatsR\x05stats\"\x9a\x02\n" +
+	"\x05stats\x18\a \x01(\v2\x17.actlet.attach.v0.StatsR\x05stats\x123\n" +
+	"\x03tui\x18\t \x01(\v2!.actlet.gateway.v0.ViewerSettingsR\x03tui\"\x9a\x02\n" +
 	"\x05Stats\x124\n" +
 	"\astarted\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\astarted\x12!\n" +
 	"\ffolder_bytes\x18\x02 \x01(\x03R\vfolderBytes\x12!\n" +
@@ -931,41 +941,43 @@ var file_actlet_attach_v0_attach_proto_goTypes = []any{
 	(*ReadFileRequest)(nil),       // 10: actlet.attach.v0.ReadFileRequest
 	(*ReadFileResponse)(nil),      // 11: actlet.attach.v0.ReadFileResponse
 	(v0.SessionState)(0),          // 12: actlet.gateway.v0.SessionState
-	(*timestamppb.Timestamp)(nil), // 13: google.protobuf.Timestamp
-	(*durationpb.Duration)(nil),   // 14: google.protobuf.Duration
-	(*v0.ActivityEvent)(nil),      // 15: actlet.gateway.v0.ActivityEvent
-	(*v0.Steer)(nil),              // 16: actlet.gateway.v0.Steer
-	(*v0.Pause)(nil),              // 17: actlet.gateway.v0.Pause
-	(*v0.Stop)(nil),               // 18: actlet.gateway.v0.Stop
-	(*v0.CommandAck)(nil),         // 19: actlet.gateway.v0.CommandAck
+	(*v0.ViewerSettings)(nil),     // 13: actlet.gateway.v0.ViewerSettings
+	(*timestamppb.Timestamp)(nil), // 14: google.protobuf.Timestamp
+	(*durationpb.Duration)(nil),   // 15: google.protobuf.Duration
+	(*v0.ActivityEvent)(nil),      // 16: actlet.gateway.v0.ActivityEvent
+	(*v0.Steer)(nil),              // 17: actlet.gateway.v0.Steer
+	(*v0.Pause)(nil),              // 18: actlet.gateway.v0.Pause
+	(*v0.Stop)(nil),               // 19: actlet.gateway.v0.Stop
+	(*v0.CommandAck)(nil),         // 20: actlet.gateway.v0.CommandAck
 }
 var file_actlet_attach_v0_attach_proto_depIdxs = []int32{
 	2,  // 0: actlet.attach.v0.SessionsResponse.sessions:type_name -> actlet.attach.v0.SessionSummary
 	12, // 1: actlet.attach.v0.SessionSummary.state:type_name -> actlet.gateway.v0.SessionState
 	12, // 2: actlet.attach.v0.InfoResponse.state:type_name -> actlet.gateway.v0.SessionState
 	5,  // 3: actlet.attach.v0.InfoResponse.stats:type_name -> actlet.attach.v0.Stats
-	13, // 4: actlet.attach.v0.Stats.started:type_name -> google.protobuf.Timestamp
-	14, // 5: actlet.attach.v0.Stats.cpu:type_name -> google.protobuf.Duration
-	15, // 6: actlet.attach.v0.WatchResponse.event:type_name -> actlet.gateway.v0.ActivityEvent
-	8,  // 7: actlet.attach.v0.WatchResponse.skipped:type_name -> actlet.attach.v0.Skipped
-	16, // 8: actlet.attach.v0.CommandRequest.steer:type_name -> actlet.gateway.v0.Steer
-	17, // 9: actlet.attach.v0.CommandRequest.pause:type_name -> actlet.gateway.v0.Pause
-	18, // 10: actlet.attach.v0.CommandRequest.stop:type_name -> actlet.gateway.v0.Stop
-	3,  // 11: actlet.attach.v0.Attach.Info:input_type -> actlet.attach.v0.InfoRequest
-	6,  // 12: actlet.attach.v0.Attach.Watch:input_type -> actlet.attach.v0.WatchRequest
-	9,  // 13: actlet.attach.v0.Attach.Command:input_type -> actlet.attach.v0.CommandRequest
-	10, // 14: actlet.attach.v0.Attach.ReadFile:input_type -> actlet.attach.v0.ReadFileRequest
-	0,  // 15: actlet.attach.v0.Attach.Sessions:input_type -> actlet.attach.v0.SessionsRequest
-	4,  // 16: actlet.attach.v0.Attach.Info:output_type -> actlet.attach.v0.InfoResponse
-	7,  // 17: actlet.attach.v0.Attach.Watch:output_type -> actlet.attach.v0.WatchResponse
-	19, // 18: actlet.attach.v0.Attach.Command:output_type -> actlet.gateway.v0.CommandAck
-	11, // 19: actlet.attach.v0.Attach.ReadFile:output_type -> actlet.attach.v0.ReadFileResponse
-	1,  // 20: actlet.attach.v0.Attach.Sessions:output_type -> actlet.attach.v0.SessionsResponse
-	16, // [16:21] is the sub-list for method output_type
-	11, // [11:16] is the sub-list for method input_type
-	11, // [11:11] is the sub-list for extension type_name
-	11, // [11:11] is the sub-list for extension extendee
-	0,  // [0:11] is the sub-list for field type_name
+	13, // 4: actlet.attach.v0.InfoResponse.tui:type_name -> actlet.gateway.v0.ViewerSettings
+	14, // 5: actlet.attach.v0.Stats.started:type_name -> google.protobuf.Timestamp
+	15, // 6: actlet.attach.v0.Stats.cpu:type_name -> google.protobuf.Duration
+	16, // 7: actlet.attach.v0.WatchResponse.event:type_name -> actlet.gateway.v0.ActivityEvent
+	8,  // 8: actlet.attach.v0.WatchResponse.skipped:type_name -> actlet.attach.v0.Skipped
+	17, // 9: actlet.attach.v0.CommandRequest.steer:type_name -> actlet.gateway.v0.Steer
+	18, // 10: actlet.attach.v0.CommandRequest.pause:type_name -> actlet.gateway.v0.Pause
+	19, // 11: actlet.attach.v0.CommandRequest.stop:type_name -> actlet.gateway.v0.Stop
+	3,  // 12: actlet.attach.v0.Attach.Info:input_type -> actlet.attach.v0.InfoRequest
+	6,  // 13: actlet.attach.v0.Attach.Watch:input_type -> actlet.attach.v0.WatchRequest
+	9,  // 14: actlet.attach.v0.Attach.Command:input_type -> actlet.attach.v0.CommandRequest
+	10, // 15: actlet.attach.v0.Attach.ReadFile:input_type -> actlet.attach.v0.ReadFileRequest
+	0,  // 16: actlet.attach.v0.Attach.Sessions:input_type -> actlet.attach.v0.SessionsRequest
+	4,  // 17: actlet.attach.v0.Attach.Info:output_type -> actlet.attach.v0.InfoResponse
+	7,  // 18: actlet.attach.v0.Attach.Watch:output_type -> actlet.attach.v0.WatchResponse
+	20, // 19: actlet.attach.v0.Attach.Command:output_type -> actlet.gateway.v0.CommandAck
+	11, // 20: actlet.attach.v0.Attach.ReadFile:output_type -> actlet.attach.v0.ReadFileResponse
+	1,  // 21: actlet.attach.v0.Attach.Sessions:output_type -> actlet.attach.v0.SessionsResponse
+	17, // [17:22] is the sub-list for method output_type
+	12, // [12:17] is the sub-list for method input_type
+	12, // [12:12] is the sub-list for extension type_name
+	12, // [12:12] is the sub-list for extension extendee
+	0,  // [0:12] is the sub-list for field type_name
 }
 
 func init() { file_actlet_attach_v0_attach_proto_init() }

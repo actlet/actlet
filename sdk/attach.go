@@ -122,11 +122,11 @@ func (a *attachService) Info(ctx context.Context, _ *attachv0.InfoRequest) (*att
 	}
 	st, _ := sess.State()
 	sess.mu.Lock()
-	version := sess.version
+	version, tui := sess.version, sess.tui
 	sess.mu.Unlock()
 	return &attachv0.InfoResponse{
 		SessionId: sess.ID(), Epoch: sess.Epoch(), WorkerId: sess.WorkerID(), ActletVersion: version, State: st,
-		Commands: a.commands(ctx, sess),
+		Commands: a.commands(ctx, sess), Tui: tui,
 	}, nil
 }
 

@@ -41,7 +41,8 @@ func runReplayPlay(args []string, stdout, stderr io.Writer) int {
 	tab := fs.String("tab", "chat", "the view to show: chat, session, task, profile, tools or events")
 	expand := fs.Bool("expand", false, "with -dump: expand every tool call")
 	file := fs.String("file", "", "with -dump: open this file, as the sidebar shows it, in the file viewer")
-	separators := fs.Bool("separators", false, "draw lines between turns and tool calls")
+	var separators tui.BoolFlag
+	fs.Var(&separators, "separators", "draw lines between turns and tool calls; on by default [ACTLET_TUI_SEPARATORS]")
 	theme := fs.String("theme", "", "the colours: dark, light, plain, a theme file's name or its path [ACTLET_THEME]")
 	color := fs.Bool("color", false, "with -dump: keep the colours, as ANSI escape sequences")
 	width := fs.Int("width", 120, "with -dump: the screen width")
@@ -73,8 +74,7 @@ func runReplayPlay(args []string, stdout, stderr io.Writer) int {
 	m.SetTab(t)
 	m.SetFilter(*worker, *tool)
 	m.ExpandAll(*expand)
-	m.SetSeparators(*separators)
-	m.SetLook(tui.ResolveLook(*theme, os.Getenv))
+	m.SetLook(tui.ResolveLook(*theme, separators.Value(), os.Getenv))
 	if *dump {
 		m.SetSize(*width, *height)
 		if *file != "" {

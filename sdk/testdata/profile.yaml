@@ -47,3 +47,6 @@ compaction:
   keep_turns: 3
 skills:
   - dir: skills/csv-report
+tui:
+  separators: false
+  theme: light

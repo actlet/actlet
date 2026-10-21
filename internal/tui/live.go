@@ -152,9 +152,8 @@ type DumpOptions struct {
 	Tab           int
 	Width, Height int
 	// File, if set, is opened in the file viewer, as the sidebar names it.
-	File       string
-	Separators bool
-	Look       Look
+	File string
+	Look Look
 	// Color keeps the colours, as ANSI escape sequences.
 	Color bool
 }
@@ -167,7 +166,6 @@ func DumpLive(ctx context.Context, client attachv0.AttachClient, conn Connection
 	m := NewLive(conn, nil, "")
 	m.SetSize(o.Width, o.Height)
 	m.SetTab(o.Tab)
-	m.SetSeparators(o.Separators)
 	m.SetLook(o.Look)
 	m.SetFileReader(Files(ctx, client, conn.Dir))
 	msgs := make(chan tea.Msg, 64)

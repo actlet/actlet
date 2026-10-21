@@ -64,6 +64,9 @@ func TestLoadProfileYAMLAndJSONAgree(t *testing.T) {
 	if c := pb.GetCompaction(); c.GetThresholdPercent() != 75 || c.GetModel() != "fast" || c.GetKeepTurns() != 3 {
 		t.Errorf("compaction %v", c)
 	}
+	if v := pb.GetTui(); v == nil || v.Separators == nil || v.GetSeparators() || v.GetTheme() != "light" {
+		t.Errorf("tui %v", v)
+	}
 	if pb.GetInstructions() != "Write the report in British English.\n" || pb.GetToolsManifest() == "" || pb.GetCheckpointEveryTurns() != 2 {
 		t.Errorf("agent fields %q %q %d", pb.GetInstructions(), pb.GetToolsManifest(), pb.GetCheckpointEveryTurns())
 	}
@@ -138,6 +141,8 @@ func TestProfileValidation(t *testing.T) {
 		"unknown compaction strategy":   func(p *Profile) { p.Compaction = &Compaction{Strategy: "truncate"} },
 		"compaction threshold over 100": func(p *Profile) { p.Compaction = &Compaction{ThresholdPercent: 101} },
 		"skill without dir":             func(p *Profile) { p.Skills = []SkillSource{{}} },
+		"theme path":                    func(p *Profile) { p.TUI = &TUI{Theme: "../themes/mine"} },
+		"theme file":                    func(p *Profile) { p.TUI = &TUI{Theme: "mine.yaml"} },
 		"compaction by unknown alias": func(p *Profile) {
 			p.Models = &Models{Aliases: []ModelAlias{{Alias: "a"}}}
 			p.Compaction = &Compaction{Model: "b"}

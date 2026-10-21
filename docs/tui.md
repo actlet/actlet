@@ -57,6 +57,7 @@ Figures Actlet doesn't have show as `n/a`: cost needs a gateway that reports it 
 | `s` | collapse or show subagents' turns |
 | `[` `]` | show one worker at a time |
 | `t` | show one tool's calls at a time |
+| `d` | hide or show the lines between turns and tool calls |
 | `tab`, `1`–`6` | switch tabs |
 | `pgup` `pgdn`, `end` | scroll, and back to following the end |
 | `i` | type a note for the agent; `enter` sends it |
@@ -66,9 +67,13 @@ Figures Actlet doesn't have show as `n/a`: cost needs a gateway that reports it 
 
 The mouse works too: click a tab, click a tool call to select it and again to expand it, and scroll with the wheel. Playing a recording adds `space` (play and pause), `←` `→` (seek), `+` `-` (speed), `f` (follow a recording that is still being written) and search: `/` takes a phrase, and `enter` moves the replay to the next event that has it anywhere, regardless of case, as the last event shown; `n` and `N` find the next and previous, wrapping around. The status line says which match of how many it is.
 
+## Separators
+
+Lines between turns, notes and tool calls are on. The profile can hide them for its sessions' viewers (`tui.separators: false`, see [profiles](profiles.md)), and a viewer can choose for itself, over the profile: `ACTLET_TUI_SEPARATORS=false`, or the `-separators=false` flag, which wins over both. `d` hides or shows them as you watch.
+
 ## Colours and themes
 
-The viewer's colours come from a theme. Three are built in: `dark`, the default, `light`, and `plain`, which has no colours and shows emphasis with bold, underline and reverse video. The viewer's `-theme` flag picks one, or `ACTLET_THEME` does; `NO_COLOR` set to anything gives `plain`, unless `-theme` says otherwise.
+The viewer's colours come from a theme. Three are built in: `dark`, the default, `light`, and `plain`, which has no colours and shows emphasis with bold, underline and reverse video. The viewer's `-theme` flag picks one, or `ACTLET_THEME` does; `NO_COLOR` set to anything gives `plain`, unless `-theme` says otherwise. When the viewer chooses none, the profile's `tui.theme` applies, when the viewer attaches to a box; a recording played back has no profile to take it from.
 
 ```sh
 actlet attach -theme light
@@ -76,7 +81,7 @@ ACTLET_THEME=mine actlet-cli replay play run.actrec     # ~/.config/actlet/theme
 actlet-cli attach -direct 127.0.0.1:7600 -theme ./ocean.yaml
 ```
 
-A theme other than the built-in ones is a file. By name, it is `<name>.yaml`, `.yml` or `.json` in `$XDG_CONFIG_HOME/actlet/themes`, or `~/.config/actlet/themes` when `XDG_CONFIG_HOME` isn't set; the flag and `ACTLET_THEME` may also give a file's path. A theme gives only the colours it changes and takes the rest from its base, `dark` unless it names another built-in theme:
+A theme other than the built-in ones is a file. By name, it is `<name>.yaml`, `.yml` or `.json` in `$XDG_CONFIG_HOME/actlet/themes`, or `~/.config/actlet/themes` when `XDG_CONFIG_HOME` isn't set; the flag and `ACTLET_THEME` may also give a file's path. A profile only names a theme, built in or in the viewer's own themes folder, so that it can't make a viewer read files elsewhere. A theme gives only the colours it changes and takes the rest from its base, `dark` unless it names another built-in theme:
 
 ```yaml
 # ~/.config/actlet/themes/mine.yaml

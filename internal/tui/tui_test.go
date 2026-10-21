@@ -515,10 +515,14 @@ func TestFileViewer(t *testing.T) {
 	}
 }
 
+// Separators are on by default; d hides them.
 func TestSeparators(t *testing.T) {
 	m := liveModel()
-	m.SetSeparators(true)
-	golden(t, "live-chat-separators", m.Dump())
+	if !strings.Contains(m.Dump(), "─────") {
+		t.Error("no separators by default")
+	}
+	m.key(tea.KeyPressMsg{Code: 'd', Text: "d"})
+	golden(t, "live-chat-no-separators", m.Dump())
 }
 
 func TestTruncateLeft(t *testing.T) {

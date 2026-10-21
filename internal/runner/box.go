@@ -85,13 +85,14 @@ type box struct {
 	folder    sessionfs.Folder
 	client    *gwclient.Client
 	started   time.Time
+	tui       *gatewayv0.ViewerSettings // the profile's defaults for viewers
 }
 
 func (b *box) Info() *attachv0.InfoResponse {
 	var mem runtime.MemStats
 	runtime.ReadMemStats(&mem)
 	return &attachv0.InfoResponse{
-		SessionId: b.sessionID, Epoch: b.epoch, WorkerId: b.cfg.WorkerID, ActletVersion: b.cfg.Version, State: b.sess.State(),
+		SessionId: b.sessionID, Epoch: b.epoch, WorkerId: b.cfg.WorkerID, ActletVersion: b.cfg.Version, State: b.sess.State(), Tui: b.tui,
 		Stats: &attachv0.Stats{
 			Started:          timestamppb.New(b.started),
 			FolderBytes:      sessionfs.DirSize(b.folder.Dir),

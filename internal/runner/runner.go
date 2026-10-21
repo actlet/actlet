@@ -250,7 +250,7 @@ func Run(ctx context.Context, cfg Config, signals <-chan os.Signal) int {
 	// ones, if the deployment opens it, to the attach port. Closing the
 	// hub ends the viewers' feeds after the last events, so the servers
 	// stop gracefully.
-	as = attach.NewServer(sessionID, hub, &box{sess: sess, sessionID: sessionID, epoch: epoch, cfg: cfg, folder: folder, client: client, started: time.Now()}, commands, log)
+	as = attach.NewServer(sessionID, hub, &box{sess: sess, sessionID: sessionID, epoch: epoch, cfg: cfg, folder: folder, client: client, started: time.Now(), tui: resp.GetProfile().GetTui()}, commands, log)
 	as.ServeFiles(folder.Dir)
 	if !cfg.NoAttach && !resp.GetProfile().GetLocalAttach().GetDisabled() {
 		lis, err := attach.Listen(folder.State())

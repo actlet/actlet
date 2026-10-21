@@ -205,7 +205,8 @@ func TestAttachRefused(t *testing.T) {
 // A viewer's commands reach the worker with origin remote, if allowed.
 func TestAttachCommands(t *testing.T) {
 	h := newHarness(t, Options{Assign: func(context.Context, *gatewayv0.RegisterRequest) (*gatewayv0.RegisterResponse, error) {
-		return &gatewayv0.RegisterResponse{Profile: &gatewayv0.Profile{Id: "p", LocalAttach: &gatewayv0.LocalAttach{Commands: []string{"steer", "pause"}}}}, nil
+		return &gatewayv0.RegisterResponse{Profile: &gatewayv0.Profile{Id: "p", LocalAttach: &gatewayv0.LocalAttach{Commands: []string{"steer", "pause"}},
+			Tui: &gatewayv0.ViewerSettings{Theme: "light"}}}, nil
 	}})
 	h.registerWith(t, "s1")
 	w := h.connectControl(t, "s1")
@@ -234,6 +235,9 @@ func TestAttachCommands(t *testing.T) {
 	info, _ := h.attach.Info(ctx, &attachv0.InfoRequest{})
 	if fmt.Sprint(info.GetCommands()) != "[steer pause]" {
 		t.Errorf("commands %v", info.GetCommands())
+	}
+	if info.GetTui().GetTheme() != "light" {
+		t.Errorf("the profile's viewer settings: %v", info.GetTui())
 	}
 }
 

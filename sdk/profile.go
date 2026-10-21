@@ -63,6 +63,8 @@ type Profile struct {
 	// Skills are skill folders sent with the profile, besides those in
 	// the worker's image.
 	Skills []SkillSource `json:"skills,omitempty"`
+	// TUI is how terminal viewers show the session by default.
+	TUI *TUI `json:"tui,omitempty"`
 
 	// base is the profile file's directory, against which skill folders
 	// are found.
@@ -105,6 +107,19 @@ type LocalAttach struct {
 	// Disabled turns local attach off.
 	Disabled bool `json:"disabled,omitempty"`
 }
+
+// TUI is how terminal viewers show the session by default. A viewer's own
+// flags and environment override it.
+type TUI struct {
+	// Separators draws lines between turns and tool calls; unset means on.
+	Separators *bool `json:"separators,omitempty"`
+	// Theme names a theme: "dark", "light", "plain", or a theme file in
+	// the viewer's themes folder. It is a name, never a path.
+	Theme string `json:"theme,omitempty"`
+}
+
+// reThemeName is a theme's name in a profile.
+var reThemeName = regexp.MustCompile(`^[A-Za-z0-9_-]{1,64}$`)
 
 // Limits caps concurrency. Zero means the worker's deployment ceiling.
 type Limits struct {
@@ -280,6 +295,9 @@ func (p *Profile) Validate() error {
 			}
 		}
 	}
+	if t := p.TUI; t != nil && t.Theme != "" && !reThemeName.MatchString(t.Theme) {
+		bad("tui.theme %q: name a theme, in letters, digits, - and _, not a path", t.Theme)
+	}
 	if c := p.Compaction; c != nil {
 		switch c.Strategy {
 		case "", "summarize", "off":
@@ -348,6 +366,9 @@ func (p *Profile) Proto() (*gatewayv0.Profile, error) {
 	}
 	if la := p.LocalAttach; la != nil {
 		out.LocalAttach = &gatewayv0.LocalAttach{Commands: la.Commands, Disabled: la.Disabled}
+	}
+	if t := p.TUI; t != nil {
+		out.Tui = &gatewayv0.ViewerSettings{Separators: t.Separators, Theme: t.Theme}
 	}
 	size := 0
 	for _, src := range p.Skills {

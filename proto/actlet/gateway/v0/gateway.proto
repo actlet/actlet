@@ -131,6 +131,18 @@ message Profile {
   // Skills for the agent, besides those in the image. A skill of the same
   // name replaces the image's.
   repeated Skill skills = 17;
+  // How viewers of the box show the session by default. A viewer's own
+  // flags and environment override it.
+  ViewerSettings tui = 18;
+}
+
+// ViewerSettings are a profile's defaults for terminal viewers.
+message ViewerSettings {
+  // Lines between turns and tool calls; unset means on.
+  optional bool separators = 1;
+  // A theme's name: a built-in one ("dark", "light", "plain") or a theme
+  // file's in the viewer's themes folder. Never a path.
+  string theme = 2;
 }
 
 // Skill is a Claude-style skill folder: SKILL.md, whose front matter
