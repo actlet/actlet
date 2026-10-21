@@ -1,4 +1,4 @@
-//go:build dockertest
+//go:build dockertest && !windows
 
 package journal
 

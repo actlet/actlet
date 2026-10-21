@@ -1,6 +1,7 @@
 package supervise
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -174,7 +175,7 @@ func TestInit(t *testing.T) {
 		t.Fatal(err)
 	}
 	err = cmd.Wait()
-	if ee, ok := err.(*exec.ExitError); !ok || ee.ExitCode() != 7 {
+	if ee := (*exec.ExitError)(nil); !errors.As(err, &ee) || ee.ExitCode() != 7 {
 		t.Fatalf("init exited with %v, want 7", err)
 	}
 }

@@ -151,7 +151,9 @@ check: ## Check formatting, vet, lint, go.mod tidiness and known vulnerabilities
 		if [ -n "$$unformatted" ]; then echo "gofmt needed for:"; echo "$$unformatted"; exit 1; fi
 	go vet ./...
 	GOOS=windows go vet ./...  # keep the code portable to platforms without flock
-	$(GOLANGCI_LINT) run
+	@# Lint as every platform CI tests on, whichever this machine is: each
+	@# lints its own build-tagged files.
+	for os in linux darwin windows; do GOOS=$$os $(GOLANGCI_LINT) run || exit 1; done
 	go mod tidy -diff
 	@$(MAKE) --no-print-directory vulncheck
 
