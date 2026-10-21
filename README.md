@@ -1,21 +1,56 @@
 # Actlet
 
-Actlet is a small agent runtime, written in Go, that runs inside an isolated container or sandbox. Each container runs one session, which an orchestrator controls. A session can fan out into concurrent subworkers. Actlet connects out to the orchestrator for its execution profile, models and remote tools, and does the actual work locally. It keeps a local journal so that a paused, stopped or crashed session can pick up where it left off. It also publishes a structured stream of what it is doing, so people can watch a session live or replay it later. A debugging TUI can attach inside the container, but normal runs are fully headless.
+**Drop in a task. Pick up deliverables.**
+
+Actlet is a small agent runtime, written in Go, that runs inside an isolated container or sandbox. Give it a task and a folder of inputs; it works the task with a model and local tools, and leaves its deliverables in `output/`. An orchestrator you run controls it: Actlet connects out for its profile, models and remote tools, and does the work locally. It journals everything, so a paused, stopped or crashed session picks up where it left off, and it streams what it does, so you can watch a session live or replay it later. Normal runs are headless; a terminal viewer attaches when you want to look.
+
+![The terminal viewer, watching an agent and its subagents at work](docs/images/tui-chat.svg)
 
 Actlet is deliberately not a web app, a model-provider gateway, a sandbox manager or an orchestration platform. Those concerns live outside it.
 
+## Quick start
+
+```sh
+make demo-tui
+```
+
+This builds Actlet and runs a scripted demo of about two minutes, with no real model, in the terminal viewer: an agent hands three regions of a sales review to subagents, runs shell commands and Python (one script fails and is fixed), edits a report, and gets an operator's note and a budget alert half-way. In a second terminal, `make demo-attach` attaches another viewer to the same box. Press `?` for the keys and `q` to quit; quitting detaches, and the session carries on. Requirements: Go 1.27.3 or newer and GNU Make.
+
+## Features
+
+- **One session per container.** `actlet run` connects to the orchestrator's gateway, registers its session and runs its task. The orchestrator pauses, stops and steers it ([gateway protocol](docs/gateway-protocol.md)).
+- **An agent with tools.** [The agent](docs/agent.md) calls models through the gateway and works with local tools (files, search, shell, Python) and standard ones (progress reports, feedback, decisions, side calls to other models). Tool calls and subagents run in parallel, and operators can steer it with notes. [Skills](docs/agent.md#skills) and [context compaction](docs/agent.md#context-compaction) come built in.
+- **Budgets.** [Budgets](docs/profiles.md#budgets) limit a session's time, cost, tokens and disk space, and the orchestrator can change limits and budgets while it runs.
+- **Crash-safe.** A local [journal](docs/journal-format.md) records every call, so recovery never repeats a side effect. Nothing a tool starts outlives the run. A session can be [forked](docs/fork.md) from any of its checkpoints.
+- **Watch it, live or later.** A [terminal viewer](docs/tui.md) shows a session as it runs: in its own terminal, attached on the same machine, or from anywhere through the orchestrator. It replays recordings too, and searches them. Themes, syntax highlighting, and a list of who else is watching.
+- **An orchestrator SDK.** [`sdk/`](sdk) is a Go library for writing the orchestrator's side, with [adapters](docs/providers.md) for Anthropic, OpenAI and compatible endpoints, nexos.ai, and typesafe.ai. `actlet-devgw` is a development gateway built on it.
+- **Small and static.** CGO-free binaries for Linux, macOS and Windows, on amd64 and arm64, and a distroless container image. See what it [costs](docs/performance.md).
+
+| | |
+|---|---|
+| ![An attached viewer, with the list of who else is watching](docs/images/tui-attached.svg) | ![The keys, in the help panel](docs/images/tui-keys.svg) |
+| ![The profile tab, its configuration highlighted](docs/images/tui-profile.svg) | ![The light theme](docs/images/tui-light.svg) |
+
+The screenshots are drawn from the demo's recording by `make screenshots`.
+
+## Documentation
+
+| Read | For |
+|---|---|
+| [Watching a session](docs/tui.md) | the terminal viewer: attaching, replays, search, themes |
+| [The agent](docs/agent.md) | how the agent works, its tools, skills, compaction and recovery |
+| [Profiles](docs/profiles.md) | configuring a session: models, tools, budgets, limits |
+| [Gateway protocol](docs/gateway-protocol.md) | what an orchestrator implements, and the SDK that does it |
+| [Model providers](docs/providers.md) | routing model calls to Anthropic, OpenAI and others |
+| [Forking](docs/fork.md) | starting a new session from another's checkpoint |
+| [Journal format](docs/journal-format.md) | the crash-recoverable record each session keeps |
+| [Kubernetes](docs/kubernetes.md) | running sessions as pods |
+| [Security](docs/security.md) | the threat model: what Actlet trusts and how each surface is defended |
+| [Performance](docs/performance.md) | what Actlet costs, measured |
+
 ## Status
 
-Early development. What works today:
-
-- `actlet run` connects to a gateway, registers its session, and runs its task. It takes pause, stop and steer commands, streams activity, and recovers from its journal. See the [gateway protocol](docs/gateway-protocol.md).
-- [The agent](docs/agent.md) runs `agent` tasks: it calls the model through the gateway and works with local tools (files, search, shell, Python) and standard ones (progress reports, feedback, decisions, side calls to other models), runs tool calls and subagents in parallel, and takes operators' steer notes. [Budgets](docs/profiles.md#budgets) limit a session's time, cost, tokens and disk space, and the orchestrator can change limits and budgets while it runs. It journals every call, so that recovery never repeats a side effect. A built-in `demo` task needs no model.
-- `actlet-devgw` is a development gateway to run it against, built on the orchestrator SDK in [`sdk/`](sdk). It can answer model calls from a script, or with real providers through the SDK's [adapters](docs/providers.md) for Anthropic, OpenAI and compatible endpoints, nexos.ai, and typesafe.ai for decisions.
-- A terminal viewer [shows a session](docs/tui.md) as it runs (`actlet attach`, or `actlet run -tui`), from anywhere through the orchestrator or the box's optional attach port (`actlet-cli attach`), or from a recording (`actlet-cli replay play`).
-- `actlet-cli` holds the tools for journals and recordings, attaches to running sessions, and [forks a session](docs/fork.md) from one of its checkpoints; it never runs a session.
-- The session journal is the crash-recoverable record each session keeps ([format and guarantees](docs/journal-format.md)). `actlet-cli journal inspect|export` reads journals and `actlet-cli replay inspect|export|view` reads activity recordings.
-
-All protocols and formats are experimental (v0); [compatibility fixtures](test/compat) capture them. The [threat model](docs/security.md) says what Actlet trusts and how each surface is defended, and [performance](docs/performance.md) what it costs.
+Version 0, in early development. Every protocol and format is experimental and may change incompatibly before 1.0; [compatibility fixtures](test/compat) capture each version, so that a change is visible. `actlet-cli` holds the tools for journals and recordings (`journal inspect|export`, `replay inspect|export|view|search|play`), attaches to sessions and forks them; it never runs a session.
 
 ## Running a session
 
@@ -36,22 +71,6 @@ workspace/    the working directory
 output/       deliverables
 .actlet/      the journal, a status marker and the activity spill
 ```
-
-## Try the TUI
-
-The demo runs a scripted session of about two minutes, with no real model: an agent hands three regions of a sales review to subagents, runs shell commands and Python (one script fails and is fixed), edits a report, and gets an operator's note and a budget alert half-way. Every part of the viewer has something to show.
-
-```sh
-make demo-tui      # run the demo with the viewer in the foreground
-```
-
-In a second terminal, while it runs:
-
-```sh
-make demo-attach   # attach another viewer to the same box
-```
-
-Select a tool call with `↑` `↓` (or click it) and press `enter` to expand it; switch tabs with `tab` or a click; press `i` to send the agent a note, `?` for the keys and `q` to quit. Quitting detaches: in `make demo-tui` the session carries on until it ends or you press Ctrl-C, which pauses it. `make demo-attach` on its own starts a demo in the background and stops it when you quit. Replay the demo afterwards with the command it prints. See [watching a session](docs/tui.md).
 
 ## Building and testing
 
