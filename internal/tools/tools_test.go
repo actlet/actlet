@@ -378,6 +378,7 @@ func TestGlobAndGrep(t *testing.T) {
 
 func TestShell(t *testing.T) {
 	t.Setenv("ACTLET_TOKEN", "secret-token")
+	t.Setenv("ACTLET_TOKEN_FILE", "/run/secrets/token")
 	s, root := session(t, Options{})
 	if !s.Has(Shell) {
 		t.Skip("no shell")
@@ -394,7 +395,7 @@ func TestShell(t *testing.T) {
 		{"ok", map[string]any{"command": "echo out; echo err >&2"}, []string{"exit code 0\n", "stdout:\nout\n", "stderr:\nerr\n"}, false},
 		{"exit code", map[string]any{"command": "exit 3"}, []string{"exit code 3"}, true},
 		{"workspace", map[string]any{"command": "pwd"}, []string{"workspace"}, false},
-		{"no token", map[string]any{"command": "echo token=${ACTLET_TOKEN:-none}"}, []string{"token=none"}, false},
+		{"no token", map[string]any{"command": "echo token=${ACTLET_TOKEN:-none} file=${ACTLET_TOKEN_FILE:-none}"}, []string{"token=none file=none"}, false},
 		{"timeout", map[string]any{"command": "sleep 30", "timeout_seconds": 1}, []string{"timed out after 1s"}, true},
 		{"crlf", map[string]any{"command": `printf 'a\r\nb\r\n'`}, []string{"stdout:\na\nb\n"}, false},
 		{"big output", map[string]any{"command": "head -c 100000 /dev/zero | tr '\\0' x; echo; echo END"}, []string{"bytes omitted", "END"}, false},

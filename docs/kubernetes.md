@@ -74,6 +74,7 @@ A gateway must enforce a keepalive minimum no stricter than the worker's 20s pin
 
 **Workers:**
 
+- Give each worker its gateway token in a file, such as a mounted Secret or a projected service account token, with `-token-file` (`ACTLET_TOKEN_FILE`) rather than in `ACTLET_TOKEN`. The worker reads it again for every call, so a rotated token is picked up without a restart. Mount it outside the session folder.
 - Keep the session folder on a PersistentVolumeClaim so a paused session can resume in a new Pod.
 - Set `terminationGracePeriodSeconds` above the worker's `-signal-deadline` (default 8s), so a Pod deletion pauses cleanly (exit code 3).
 - Use `restartPolicy: Never` or a Job, and let the orchestrator decide when to resume.

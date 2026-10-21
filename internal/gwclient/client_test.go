@@ -7,6 +7,8 @@ import (
 	"io"
 	"log/slog"
 	"net"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
@@ -67,7 +69,9 @@ func serve(t *testing.T, f *fakeGateway, cfg Config) *Client {
 	if cfg.BackoffMin == 0 {
 		cfg.BackoffMin, cfg.BackoffMax = 5*time.Millisecond, 20*time.Millisecond
 	}
-	cfg.Logger = slog.New(slog.DiscardHandler)
+	if cfg.Logger == nil {
+		cfg.Logger = slog.New(slog.DiscardHandler)
+	}
 	c, err := New(cfg)
 	if err != nil {
 		t.Fatal(err)
@@ -129,6 +133,118 @@ func TestRegisterGivesUpWhenCancelled(t *testing.T) {
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("err = %v, want the context's", err)
 	}
+}
+
+// A token file is read again for every call: a rotated token is used from
+// the next call on, and a missing or empty file is retried, as a gateway
+// that is down is, and logged without the token.
+func TestTokenFile(t *testing.T) {
+	const old, rotated = "tok-6b1f0e", "tok-9a2c47"
+	path := filepath.Join(t.TempDir(), "token")
+	var accept atomic.Value
+	accept.Store(old)
+	var logs lockedBuffer
+	c := serve(t, &fakeGateway{register: func(ctx context.Context, _ *gatewayv0.RegisterRequest) (*gatewayv0.RegisterResponse, error) {
+		md, _ := metadata.FromIncomingContext(ctx)
+		if got := md.Get("authorization"); len(got) != 1 || got[0] != "Bearer "+accept.Load().(string) {
+			return nil, status.Error(codes.Unauthenticated, "bad token")
+		}
+		return &gatewayv0.RegisterResponse{SessionId: "s1"}, nil
+	}}, Config{TokenFile: path, Logger: slog.New(slog.NewTextHandler(&logs, nil))})
+	register := func() error {
+		_, err := c.Register(ctxT(t, 10*time.Second), &gatewayv0.RegisterRequest{})
+		return err
+	}
+	write := func(token string) {
+		t.Helper()
+		if err := os.WriteFile(path, []byte(token), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	waitLog := func(want string) {
+		t.Helper()
+		deadline := time.Now().Add(5 * time.Second)
+		for !strings.Contains(logs.String(), want) {
+			if time.Now().After(deadline) {
+				t.Fatalf("no %q in the log:\n%s", want, logs.String())
+			}
+			time.Sleep(5 * time.Millisecond)
+		}
+	}
+
+	// Missing, then empty: retried until the token is there.
+	done := make(chan error, 1)
+	go func() { done <- register() }()
+	waitLog("token file: open ") // the path is quoted in the log
+	write("\n")
+	waitLog(" is empty")
+	write(old + "\n")
+	if err := <-done; err != nil {
+		t.Fatalf("Register: %v", err)
+	}
+
+	// Rotated: the gateway takes only the new token, which the file
+	// then holds.
+	accept.Store(rotated)
+	if err := register(); status.Code(errors.Unwrap(err)) != codes.Unauthenticated {
+		t.Fatalf("Register with the old token: %v", err)
+	}
+	write(rotated + "\r\n")
+	if err := register(); err != nil {
+		t.Fatalf("Register after the rotation: %v", err)
+	}
+	for _, token := range []string{old, rotated} {
+		if strings.Contains(logs.String(), token) {
+			t.Errorf("the log holds %s:\n%s", token, logs.String())
+		}
+	}
+}
+
+func TestReadToken(t *testing.T) {
+	dir := t.TempDir()
+	for _, tt := range []struct {
+		name, content, want, err string
+	}{
+		{"plain", "abc", "abc", ""},
+		{"newline", "abc\n", "abc", ""},
+		{"crlf", "abc\r\n", "abc", ""},
+		{"empty", "", "", "is empty"},
+		{"only a newline", "\n", "", "is empty"},
+		{"too big", strings.Repeat("x", maxToken+1), "", "larger than"},
+	} {
+		path := filepath.Join(dir, tt.name)
+		if err := os.WriteFile(path, []byte(tt.content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		got, err := ReadToken(path)
+		if got != tt.want || (err == nil) != (tt.err == "") || (err != nil && !strings.Contains(err.Error(), tt.err)) {
+			t.Errorf("%s: %q, %v; want %q, %q", tt.name, got, err, tt.want, tt.err)
+		}
+	}
+	if _, err := ReadToken(filepath.Join(dir, "missing")); err == nil {
+		t.Error("a missing file read")
+	}
+	if _, err := New(Config{Addr: "127.0.0.1:1", Token: "a", TokenFile: "b"}); err == nil {
+		t.Error("New took a token and a token file")
+	}
+}
+
+// lockedBuffer is a buffer safe for concurrent writes and reads.
+type lockedBuffer struct {
+	mu sync.Mutex
+	b  strings.Builder
+}
+
+func (l *lockedBuffer) Write(p []byte) (int, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.b.Write(p)
+}
+
+func (l *lockedBuffer) String() string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.b.String()
 }
 
 func TestBackoffBounds(t *testing.T) {

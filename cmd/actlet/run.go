@@ -11,6 +11,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -32,6 +33,12 @@ and run the task until it completes, or until it is paused or stopped.
 Starting it again on the same folder resumes a paused session.
 
 Every flag can also be set with the environment variable in brackets.
+
+Prefer -token-file to ACTLET_TOKEN or -token: the environment and the
+command line leak into process listings and crash reports, and a file
+can be rotated. The file is read again for every call to the gateway, so
+a new token is used from the next call or reconnection on. Keep it out
+of the session folder.
 
 Exit codes:
   0  the task completed
@@ -64,6 +71,8 @@ func runRun(args []string, stdout, stderr io.Writer, signals <-chan os.Signal) i
 		dir       = fs.String("session", envDefault("ACTLET_SESSION", "."), "session folder [ACTLET_SESSION]")
 		addr      = fs.String("gateway", envDefault("ACTLET_GATEWAY", ""), "gateway address, host:port (required) [ACTLET_GATEWAY]")
 		token     = fs.String("token", envDefault("ACTLET_TOKEN", ""), "bearer token for the gateway [ACTLET_TOKEN]")
+		tokenFile = fs.String("token-file", envDefault("ACTLET_TOKEN_FILE", ""),
+			"file holding the bearer token for the gateway, read again for every call; a trailing newline is ignored [ACTLET_TOKEN_FILE]")
 		useTLS    = fs.Bool("tls", envDefault("ACTLET_TLS", "") == "true", "connect with TLS [ACTLET_TLS=true]")
 		caFile    = fs.String("tls-ca", envDefault("ACTLET_TLS_CA", ""), "PEM file of CA certificates to trust for TLS [ACTLET_TLS_CA]")
 		workerID  = fs.String("worker-id", envDefault("ACTLET_WORKER_ID", hostname), "worker identity [ACTLET_WORKER_ID]")
@@ -125,6 +134,14 @@ func runRun(args []string, stdout, stderr io.Writer, signals <-chan os.Signal) i
 		fmt.Fprintln(stderr, "actlet run: a gateway address is required: -gateway or ACTLET_GATEWAY")
 		return session.ExitUsage
 	}
+	if *token != "" && *tokenFile != "" {
+		fmt.Fprintln(stderr, "actlet run: give a token or a token file, not both: -token or ACTLET_TOKEN, -token-file or ACTLET_TOKEN_FILE")
+		return session.ExitUsage
+	}
+	if *tokenFile != "" && within(absPath(*tokenFile), absPath(*dir)) {
+		fmt.Fprintln(stderr, "actlet run: -token-file must not be inside the session folder; keep the token elsewhere")
+		return session.ExitUsage
+	}
 	attachToken := os.Getenv("ACTLET_ATTACH_TOKEN")
 	if *attachOn != "" && attachToken == "" {
 		fmt.Fprintln(stderr, "actlet run: -attach-listen needs a token in ACTLET_ATTACH_TOKEN")
@@ -160,7 +177,7 @@ func runRun(args []string, stdout, stderr io.Writer, signals <-chan os.Signal) i
 	}
 
 	cfg := runner.Config{
-		Gateway:            gwclient.Config{Addr: *addr, Token: *token, TLS: *useTLS, CAFile: *caFile},
+		Gateway:            gwclient.Config{Addr: *addr, Token: *token, TokenFile: *tokenFile, TLS: *useTLS, CAFile: *caFile},
 		SessionDir:         *dir,
 		WorkerID:           *workerID,
 		Version:            buildinfo.Version,
@@ -226,6 +243,12 @@ func runRun(args []string, stdout, stderr io.Writer, signals <-chan os.Signal) i
 		<-viewerDone // the viewer says the run ended; q quits it
 	}
 	return code
+}
+
+// within reports whether path is dir or inside it.
+func within(path, dir string) bool {
+	rel, err := filepath.Rel(dir, path)
+	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
 func newLogger(w io.Writer, level, format string) (*slog.Logger, error) {

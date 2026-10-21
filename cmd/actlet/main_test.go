@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -23,6 +24,8 @@ func TestRun(t *testing.T) {
 		{name: "version bad flag", args: []string{"version", "-x"}, wantCode: 2, wantStderr: "flag provided but not defined"},
 		{name: "version extra arg", args: []string{"version", "extra"}, wantCode: 2, wantStderr: `unexpected argument "extra"`},
 		{name: "help lists exit codes", args: []string{"help"}, wantCode: 0, wantStdout: "3  the session paused"},
+		{name: "token and token file", args: []string{"run", "-gateway", "g:1", "-token", "t", "-token-file", "t.txt"}, wantCode: 2, wantStderr: "not both"},
+		{name: "token file in the session", args: []string{"run", "-gateway", "g:1", "-session", "s", "-token-file", "s/.actlet/token"}, wantCode: 2, wantStderr: "must not be inside the session folder"},
 		{name: "journal moved", args: []string{"journal", "inspect", "x"}, wantCode: 2, wantStderr: "moved to actlet-cli"},
 	}
 	for _, tt := range tests {
@@ -39,5 +42,22 @@ func TestRun(t *testing.T) {
 				t.Errorf("stderr = %q, want it to contain %q", stderr.String(), tt.wantStderr)
 			}
 		})
+	}
+}
+
+func TestWithin(t *testing.T) {
+	dir := filepath.Join("a", "s")
+	for path, want := range map[string]bool{
+		dir:                                 true,
+		filepath.Join(dir, "token"):         true,
+		filepath.Join(dir, "..", "s", "x"):  true,
+		filepath.Join("a", "s2", "token"):   false,
+		filepath.Join("a", "token"):         false,
+		filepath.Join("a", "..token", "x"):  false,
+		filepath.Join(dir, "..", "..", "x"): false,
+	} {
+		if got := within(path, dir); got != want {
+			t.Errorf("within(%q, %q) = %v", path, dir, got)
+		}
 	}
 }

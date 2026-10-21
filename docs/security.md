@@ -16,7 +16,7 @@ Actlet is not a sandbox. Isolation, from the network, the host and other tenants
 
 ## Assets
 
-- **Credentials**: the gateway token (`ACTLET_TOKEN`), the attach port token (`ACTLET_ATTACH_TOKEN`), and in the orchestrator the providers' API keys.
+- **Credentials**: the gateway token (`-token-file`, or `ACTLET_TOKEN`), the attach port token (`ACTLET_ATTACH_TOKEN`), and in the orchestrator the providers' API keys.
 - **The session's state**: the journal in `.actlet/`, which decides what recovery does and so what runs again.
 - **The session's files**: inputs, workspace and deliverables.
 - **The orchestrator's budgets**: model calls cost money.
@@ -33,6 +33,8 @@ The worker connects out over gRPC, with a bearer token, and with TLS when `-tls`
 - every queue, buffer and read has a limit.
 
 The token is never written to the journal, the recordings, the activity or the logs. Tools run without the `ACTLET_*` variables, so the agent can't read it from its environment.
+
+Prefer a token file (`-token-file` or `ACTLET_TOKEN_FILE`) to `ACTLET_TOKEN` or `-token`. The environment and the command line leak into process listings, child processes and crash reports; a file doesn't, and it can be rotated, as Kubernetes projected service account tokens are. The worker reads the file again for every call to the gateway, so a new token is used from the next call or reconnection on. A trailing newline is ignored. An empty or unreadable file fails the call, which is retried with the usual backoff, and the log names the file, not its contents. Giving both a token and a token file is a usage error, and so is a token file inside the session folder. The agent's tools run as the worker's user, so they can still read the file if they look for it; a token bound to its own session ([finding 5](#findings)) limits what it is good for.
 
 On the gateway side (the SDK), every call is authenticated with `Options.Authenticate`; `StaticToken` compares in constant time. Activity is stored only in sequence: no gaps, no duplicates, nothing from another epoch. Model calls are deduplicated per session and intent ID. Fuzzing: `FuzzWorkerMessages` sends garbled messages on every call, and the gateway must not crash, must keep serving, and must keep each session's activity in order.
 

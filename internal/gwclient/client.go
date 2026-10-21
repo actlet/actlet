@@ -16,6 +16,7 @@ import (
 	"log/slog"
 	"math/rand/v2"
 	"os"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -42,6 +43,12 @@ type Config struct {
 	Addr string
 	// Token is sent as a bearer token with every call.
 	Token string
+	// TokenFile names a file holding the token instead, read again for
+	// every call, so that a rotated token is used from the next call or
+	// reconnection on. A trailing newline is ignored. An empty or
+	// unreadable file fails the call as unavailable, to be retried. Set
+	// at most one of Token and TokenFile.
+	TokenFile string
 	// TLS enables TLS; CAFile optionally names a PEM file of CA
 	// certificates to trust instead of the system's.
 	TLS    bool
@@ -118,6 +125,9 @@ func New(cfg Config) (*Client, error) {
 	if cfg.Addr == "" {
 		return nil, errors.New("gateway address is required")
 	}
+	if cfg.Token != "" && cfg.TokenFile != "" {
+		return nil, errors.New("give a token or a token file, not both")
+	}
 	creds, err := Credentials(cfg.TLS, cfg.CAFile)
 	if err != nil {
 		return nil, err
@@ -140,8 +150,11 @@ func New(cfg Config) (*Client, error) {
 		// A registration's profile can carry skills of a few MiB.
 		grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(maxReceive)),
 	}
-	if cfg.Token != "" {
+	switch {
+	case cfg.Token != "":
 		opts = append(opts, grpc.WithPerRPCCredentials(bearer{token: cfg.Token, tls: cfg.TLS}))
+	case cfg.TokenFile != "":
+		opts = append(opts, grpc.WithPerRPCCredentials(BearerFile(cfg.TokenFile, cfg.TLS)))
 	}
 	cc, err := grpc.NewClient(cfg.Addr, opts...)
 	if err != nil {
@@ -192,6 +205,54 @@ func (b bearer) GetRequestMetadata(context.Context, ...string) (map[string]strin
 }
 
 func (b bearer) RequireTransportSecurity() bool { return b.tls }
+
+// BearerFile returns per-call credentials that send the token in a file
+// with every call, reading the file again each time, so that a rotated
+// token is picked up. A trailing newline is ignored. An empty or
+// unreadable file fails the call as unavailable, so that it is retried.
+func BearerFile(path string, requireTLS bool) credentials.PerRPCCredentials {
+	return bearerFile{path: path, tls: requireTLS}
+}
+
+type bearerFile struct {
+	path string
+	tls  bool
+}
+
+// maxToken bounds a token file.
+const maxToken = 64 << 10
+
+func (b bearerFile) GetRequestMetadata(context.Context, ...string) (map[string]string, error) {
+	token, err := ReadToken(b.path)
+	if err != nil {
+		return nil, status.Error(codes.Unavailable, err.Error())
+	}
+	return map[string]string{"authorization": "Bearer " + token}, nil
+}
+
+func (b bearerFile) RequireTransportSecurity() bool { return b.tls }
+
+// ReadToken reads a token from a file, without its trailing newline. An
+// empty file is an error. Errors name the file, never its contents.
+func ReadToken(path string) (string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", fmt.Errorf("token file: %w", err)
+	}
+	defer func() { _ = f.Close() }()
+	data, err := io.ReadAll(io.LimitReader(f, maxToken+1))
+	if err != nil {
+		return "", fmt.Errorf("token file %s: %w", path, err)
+	}
+	if len(data) > maxToken {
+		return "", fmt.Errorf("token file %s is larger than %d bytes", path, maxToken)
+	}
+	token := strings.TrimRight(string(data), "\r\n")
+	if token == "" {
+		return "", fmt.Errorf("token file %s is empty", path)
+	}
+	return token, nil
+}
 
 // backoff is exponential with full jitter.
 type backoff struct {
