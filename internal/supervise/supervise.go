@@ -8,7 +8,9 @@
 // descendants that leave their group and session, as daemons do, are
 // adopted by it rather than by the system's init; KillAll then kills
 // every descendant, and a reaper collects the adopted ones as they exit.
-// Elsewhere such daemons can escape.
+// On Windows, which has no process groups, each program runs in a job
+// object of its own, which its descendants can't leave. On macOS daemons
+// can escape.
 package supervise
 
 import (
@@ -33,9 +35,11 @@ var (
 func Start(cmd *exec.Cmd) error {
 	startMu.RLock()
 	defer startMu.RUnlock()
+	prepare(cmd)
 	if err := cmd.Start(); err != nil {
 		return err
 	}
+	started(cmd)
 	mu.Lock()
 	children[cmd.Process.Pid] = true
 	if leadsGroup(cmd) {
@@ -65,6 +69,7 @@ func prune() {
 	for g := range groups {
 		if !children[g] && !groupAlive(g) {
 			delete(groups, g)
+			releaseGroup(g)
 		}
 	}
 }
@@ -79,6 +84,14 @@ func Groups() []int {
 		out = append(out, g)
 	}
 	return out
+}
+
+// KillGroup kills a program Start started together with everything it
+// started: its process group, or on Windows its job object.
+func KillGroup(cmd *exec.Cmd) {
+	if cmd.Process != nil {
+		killGroup(cmd.Process.Pid)
+	}
 }
 
 // KillAll kills what tools started that is still running: every process

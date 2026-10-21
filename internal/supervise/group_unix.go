@@ -12,3 +12,11 @@ func leadsGroup(cmd *exec.Cmd) bool {
 }
 
 func killGroup(pgid int) { _ = syscall.Kill(-pgid, syscall.SIGKILL) }
+
+// Programs start as they are, in the process group they asked for.
+
+func prepare(*exec.Cmd) {}
+
+func started(*exec.Cmd) {}
+
+func releaseGroup(int) {}
