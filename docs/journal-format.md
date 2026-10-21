@@ -169,16 +169,16 @@ Lengths are checked before anything is allocated or read. The Zstandard decoder 
 
 ## Exclusive writer lock
 
-The journal must have exactly one writer. Where it can, the writer takes `flock(LOCK_EX | LOCK_NB)` on the journal file and holds it until `Close`.
+The journal must have exactly one writer. Where it can, the writer takes `flock(LOCK_EX | LOCK_NB)` on the journal file and holds it until `Close`; on Windows, an exclusive `LockFileEx` lock that fails at once rather than waiting. Windows' locks are mandatory, so that one covers a single byte far past the end of any journal, never its data, and readers can still read a journal that is being written.
 
 - A second writer, in another process or in the same process through a second `Open`, is refused with `ErrLocked`. Each open of the file has its own lock.
 - The lock is released automatically when the process exits or is killed. There are no stale lock files to clean up.
 - The file descriptor is close-on-exec, so child processes don't inherit the lock.
-- Where the platform or filesystem can't lock (no `flock`, as on Windows, or a filesystem that returns `ENOTSUP` or `ENOLCK`), the writer **logs a warning and continues without the lock**. `Writer.Locked()` reports whether the lock is held. Running only one writer per session folder is then up to whoever deploys Actlet.
+- Where the platform or filesystem can't lock (neither `flock` nor `LockFileEx`, or a filesystem that returns `ENOTSUP` or `ENOLCK`), the writer **logs a warning and continues without the lock**. `Writer.Locked()` reports whether the lock is held. Running only one writer per session folder is then up to whoever deploys Actlet.
 
 What the lock doesn't guarantee:
 
-- **It is advisory.** Code that writes to the file without going through this package isn't stopped.
+- **It is advisory.** Code that writes to the file without going through this package isn't stopped, on Windows too, since the lock covers no data.
 - **Shared and network filesystems can defeat it.** On Linux NFS, `flock` is emulated with NFS byte-range locks. Those depend on the lock service and on leases, and a lease that lapses during a network partition can let a second client take the lock while the first still believes it holds it. SMB/CIFS and FUSE filesystems vary, and some accept the lock without enforcing it.
 - **It can't see other machines.** A writer on another node that mounts the same block device isn't stopped by a lock this node holds.
 

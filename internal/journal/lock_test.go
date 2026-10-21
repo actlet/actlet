@@ -1,4 +1,4 @@
-//go:build darwin || dragonfly || freebsd || linux || netbsd || openbsd
+//go:build darwin || dragonfly || freebsd || linux || netbsd || openbsd || windows
 
 package journal
 
@@ -19,12 +19,16 @@ func TestSecondWriterRefused(t *testing.T) {
 	appendN(t, w, 1)
 
 	// A second open in the same process gets its own open file
-	// description, so flock refuses it just as it would another process.
+	// description, or handle on Windows, so the lock refuses it just as it
+	// would another process.
 	if _, err := Open(path, testOptions()); !errors.Is(err, ErrLocked) {
 		t.Fatalf("second Open: err = %v, want ErrLocked", err)
 	}
-	// The refused open must not have damaged the journal.
+	// The refused open must not have damaged the journal, and the lock
+	// doesn't keep readers out: on Windows, where locks are mandatory, it
+	// covers no data.
 	appendN(t, w, 1)
+	checkRecords(t, readAll(t, path), 2)
 	mustClose(t, w)
 
 	// Closing releases the lock.
