@@ -319,6 +319,9 @@ wait:
 
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	if p.closed {
+		return nil
+	}
 	p.closed = true
 	if p.gap != nil {
 		p.flushGapLocked()
@@ -329,6 +332,8 @@ wait:
 	if p.spill != nil {
 		rest, err := p.spill.read(max64(p.acked+1, p.spill.first), int(p.nextSeq))
 		if err != nil {
+			_ = p.spill.close()
+			p.spill = nil
 			return err
 		}
 		pending = append(pending, rest...)

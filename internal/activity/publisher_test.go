@@ -18,11 +18,19 @@ import (
 
 func newTest(t *testing.T, queue int, spillMax int64) *Publisher {
 	t.Helper()
-	return New(Options{
+	p := New(Options{
 		SessionID: "s1", Epoch: 1, Dir: t.TempDir(),
 		QueueLen: queue, SpillMax: spillMax,
 		Logger: slog.New(slog.DiscardHandler),
 	})
+	// Close it, and so its spill file, before the directory is removed:
+	// Windows can't remove an open file.
+	t.Cleanup(func() {
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		_ = p.Close(ctx)
+	})
+	return p
 }
 
 func text(s string) *Event {
@@ -167,8 +175,10 @@ func TestSpillCapLeavesGap(t *testing.T) {
 	if dropped := int(gaps[0].GetDropped()); stored+dropped != 300 || dropped == 0 {
 		t.Fatalf("stored %d and dropped %d of 300 text events", stored, dropped)
 	}
-	if !gaps[0].GetLast().AsTime().After(gaps[0].GetFirst().AsTime()) && gaps[0].GetDropped() > 1 {
-		t.Error("gap time range is empty")
+	// The gap spans the dropped events' times: a single instant when the
+	// clock didn't move between them, as a coarse one may not.
+	if g := gaps[0]; g.GetFirst() == nil || g.GetLast() == nil || g.GetLast().AsTime().Before(g.GetFirst().AsTime()) {
+		t.Errorf("gap time range %v to %v", g.GetFirst(), g.GetLast())
 	}
 }
 
@@ -199,6 +209,10 @@ func TestCloseKeepsUnsentEventsForTheNextRun(t *testing.T) {
 		t.Fatal(err)
 	}
 	p.Emit(text("ignored after close"))
+	// Closing again changes nothing.
+	if err := p.Close(ctx); err != nil {
+		t.Fatal(err)
+	}
 
 	backlogs, err := OpenBacklogs(p.opts.Dir, 2, slog.New(slog.DiscardHandler))
 	if err != nil || len(backlogs) != 1 {
