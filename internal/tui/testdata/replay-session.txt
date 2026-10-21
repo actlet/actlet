@@ -29,4 +29,4 @@
    22:13:35 problem    the input has no header row                                                  
 ────────────────────────────────────────────────────────────────────────────────────────────────────
  a recording · space play/pause · ←/→ seek · +/- speed · / search                                   
- ⠋ running  large │ ctx 6% │ 0.08 EUR │ 15s │ replay at the end 1x 100%                      ? keys 
+ ⠋ running  large │ ctx 6%/200k │ 0.08/5.00 EUR │ 15s │ replay at the end 1x 100%            ? keys 

@@ -674,15 +674,27 @@ func (m *Model) renderStatus(w int) string {
 			case pct >= 60:
 				cs = st.warn
 			}
-			parts = append(parts, st.muted.Render("ctx ")+cs.Render(fmt.Sprintf("%d%%", pct)))
+			parts = append(parts, st.muted.Render("ctx ")+cs.Render(fmt.Sprintf("%d%%", pct))+st.muted.Render("/"+tokens(window)))
 		} else if root.Context > 0 {
 			parts = append(parts, st.muted.Render("ctx ")+st.segment.Render(tokens(root.Context)))
 		}
 	}
-	if s.Usage.Cost > 0 {
+	// Cost and time, out of their budgets' limits when there are some.
+	if b, ok := m.budget(gatewayv0.BudgetKind_BUDGET_KIND_MONEY); ok {
+		used, _ := m.budgetUsed(b)
+		parts = append(parts, m.budgetStyle(b, used).Render(fmt.Sprintf("%.2f", max(used, 0)))+
+			st.muted.Render(fmt.Sprintf("/%.2f %s", b.Limit, b.Currency)))
+	} else if s.Usage.Cost > 0 {
 		parts = append(parts, st.segment.Render(fmt.Sprintf("%.2f %s", s.Usage.Cost, s.Usage.Currency)))
 	}
-	parts = append(parts, st.segment.Render(m.elapsed()), st.muted.Render(m.connLabel()))
+	if b, ok := m.budget(gatewayv0.BudgetKind_BUDGET_KIND_TIME); ok {
+		used, _ := m.budgetUsed(b)
+		spent := time.Duration(max(used, 0) * float64(time.Second)).Round(time.Second)
+		parts = append(parts, m.budgetStyle(b, used).Render(fmtDuration(spent))+st.muted.Render("/"+shortDuration(time.Duration(b.Limit)*time.Second)))
+	} else {
+		parts = append(parts, st.segment.Render(m.elapsed()))
+	}
+	parts = append(parts, st.muted.Render(m.connLabel()))
 	if alarm := m.budgetAlarm(); alarm != "" {
 		parts = append(parts, st.err.Render(alarm))
 	}
@@ -914,6 +926,58 @@ func (m *Model) budgetUsed(b view.BudgetState) (float64, bool) {
 		return live, true
 	}
 	return used, ok
+}
+
+// budget is the session's budget of a kind: as the latest budget status
+// reported it, or else as the run started with it.
+func (m *Model) budget(kind gatewayv0.BudgetKind) (view.BudgetState, bool) {
+	for _, b := range m.sess.Budgets {
+		if b.Kind == kind && b.Limit > 0 {
+			return b, true
+		}
+	}
+	if info := m.sess.Info; info != nil {
+		for _, b := range info.Budgets {
+			if b.GetKind() == kind && b.GetLimit() > 0 {
+				return view.BudgetState{Kind: kind, Limit: b.GetLimit(), Used: -1, Currency: view.Sanitize(b.GetCurrency())}, true
+			}
+		}
+	}
+	return view.BudgetState{}, false
+}
+
+// budgetStyle colours a budget's use: as text, then in the warning
+// colour from its alert threshold, and the error colour once it is used
+// up.
+func (m *Model) budgetStyle(b view.BudgetState, used float64) lipgloss.Style {
+	pct := used * 100 / b.Limit
+	alert := 0.0
+	if info := m.sess.Info; info != nil {
+		for _, ib := range info.Budgets {
+			if ib.GetKind() == b.Kind {
+				alert = float64(ib.GetAlertAtPercent())
+			}
+		}
+	}
+	switch {
+	case b.State == "exhausted" || b.State == "waiting" || pct >= 100:
+		return m.st.err
+	case b.State == "alerted" || alert > 0 && pct >= alert:
+		return m.st.warn
+	}
+	return m.st.segment
+}
+
+// shortDuration writes a duration without its zero parts: 30m, 1h30m.
+func shortDuration(d time.Duration) string {
+	s := d.Round(time.Second).String()
+	if strings.HasSuffix(s, "m0s") {
+		s = strings.TrimSuffix(s, "0s")
+	}
+	if strings.HasSuffix(s, "h0m") {
+		s = strings.TrimSuffix(s, "0m")
+	}
+	return s
 }
 
 // budgetAlarm says which budget is used up, for the status line.

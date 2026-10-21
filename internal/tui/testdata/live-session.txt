@@ -29,4 +29,4 @@
    22:13:35 problem    the input has no header row                                                  
 ────────────────────────────────────────────────────────────────────────────────────────────────────
  › press i to send the agent a note                                                                 
- ⠋ running  large │ ctx 6% │ 0.08 EUR │ 30s │ local box                                      ? keys 
+ ⠋ running  large │ ctx 6%/200k │ 0.08/5.00 EUR │ 30s │ local box                            ? keys 

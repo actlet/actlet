@@ -30,14 +30,14 @@ make demo-attach   # in a second terminal: another viewer on the same box
      ┊     │ ../inputs/sales.csv:8:west,2026-07,widget,150,4500      │
  ──────────────────────────────────────────────────────────────────────────────────────────
   › press i to send the agent a note
-  ⠋ running  large │ ctx 3% │ 0.08 EUR │ 22s │ this process                           ? keys
+  ⠋ running  large │ ctx 3%/200k │ 0.08/5.00 EUR │ 22s │ this process               ? keys
 ```
 
 The **Chat** tab is the conversation, one model turn at a time: who speaks (the agent, a subagent, the operator, or Actlet itself, each in its own colour), what the model said, then each tool call as one block with its result. A block shows the tool, its key arguments, how it went (✓, ✗, a spinner while it runs, ? when the outcome is unknown after a crash) and how long it took, then the start of its output or its diff. A subagent is shown inside the `Subagent` call that started it, with its own turns, and its final answer under it. The sidebar lists the workers and the files changed so far, by their path in the session folder, with the lines added and removed by all their changes together; it hides when the terminal is narrow. The worker shown, picked with `[` and `]`, is highlighted with a `▸`; the agent stands for the whole conversation, its subagents nested in it. `o`, or a click on a file, opens it in a read-only viewer, from the box or, in a replay, from what the recording holds. Watching a running session, the sidebar also lists its **viewers**: the gateway the box reports to, or the orchestrator the viewer is attached through, then everyone watching, each by the name it gives itself (`-name`, by default `actlet attach` or `actlet-cli`), how it is attached (`local`, the session folder's socket; `direct`, the box's port; `orchestrator`) and since when, the viewer itself marked `you`. A box lists the viewers on its socket and its port; through an orchestrator you see only that orchestrator's viewers, which it may name itself. Who watched is never recorded.
 
 Text in a known format is highlighted: the task and the effective configuration, which are JSON, in the Task and Profile tabs, the tools manifest as Markdown, and in the file viewer JSON, YAML, TOML, Python, Go, JavaScript and TypeScript, shell, SQL, diffs and Markdown, by the file's extension. Highlighting only colours what the viewer shows, after escape sequences are removed ([untrusted text](#untrusted-text)).
 
-The **status line** keeps to what matters at a glance: the session's state in its colour, the model, how full its context is (green, then yellow past 60%, red past 85%), the cost so far, the time, and what the viewer is connected to. The rest is in the other tabs:
+The **status line** keeps to what matters at a glance: the session's state in its colour, the model, how full its context is out of the model's window (`ctx 35%/128k`: green, then yellow past 60%, red past 85%; just the tokens when the window isn't known), the cost so far and the time, each out of its budget when the profile sets one (`0.12/5.00 EUR`, `36s/30m`: yellow from the budget's alert, red once it is used up), and what the viewer is connected to. The rest is in the other tabs:
 
 | Tab | Shows |
 |---|---|

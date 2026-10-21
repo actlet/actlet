@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/charmbracelet/x/ansi"
 
@@ -313,4 +314,35 @@ func luminance(hex string) float64 {
 		rgb[i] = c
 	}
 	return 0.2126*rgb[0] + 0.7152*rgb[1] + 0.0722*rgb[2]
+}
+
+// The status line gives cost and time out of their budgets, coloured as
+// they near their limits, and the context out of the model's window.
+func TestStatusBudgets(t *testing.T) {
+	m := liveModel()
+	m.sess.Info.Budgets = append(m.sess.Info.Budgets, &gatewayv0.Budget{Kind: gatewayv0.BudgetKind_BUDGET_KIND_TIME, Limit: 40, AlertAtPercent: 50})
+	status := func() string {
+		lines := strings.Split(m.DumpColor(), "\n")
+		return lines[len(lines)-1]
+	}
+	plain := ansi.Strip(status())
+	for _, want := range []string{"ctx 6%/200k", "0.08/5.00 EUR", "30s/40s"} {
+		if !strings.Contains(plain, want) {
+			t.Errorf("no %q in %q", want, plain)
+		}
+	}
+	// 30s of 40s is past the alert at 50%.
+	if !strings.Contains(status(), m.st.warn.Render("30s")) {
+		t.Errorf("time isn't in the warning colour: %q", status())
+	}
+	if !strings.Contains(status(), m.st.segment.Render("0.08")) {
+		t.Errorf("cost isn't plain: %q", status())
+	}
+	m.SetClock(func() time.Time { return epoch0.Add(time.Minute) })
+	if !strings.Contains(status(), m.st.err.Render("1m0s")) {
+		t.Errorf("time past its limit isn't in the error colour: %q", ansi.Strip(status()))
+	}
+	if got := shortDuration(90 * time.Minute); got != "1h30m" {
+		t.Errorf("shortDuration %q", got)
+	}
 }
