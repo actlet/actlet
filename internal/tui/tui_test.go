@@ -248,18 +248,25 @@ func TestProgramSmoke(t *testing.T) {
 			}
 		}
 	}
-	keys("tab", "tab", "tab", "tab", "]", "i", "hello", "enter", "P")
-	deadline := time.Now().Add(5 * time.Second)
-	for {
-		mu.Lock()
-		n := len(sent)
-		mu.Unlock()
-		if n == 2 || time.Now().After(deadline) {
-			break
+	// Commands are sent in the background: wait for the note before
+	// pausing, so that they are sent, and answered, in this order.
+	waitSent := func(want int) {
+		deadline := time.Now().Add(5 * time.Second)
+		for {
+			mu.Lock()
+			n := len(sent)
+			mu.Unlock()
+			if n == want || time.Now().After(deadline) {
+				break
+			}
+			time.Sleep(10 * time.Millisecond)
 		}
-		time.Sleep(10 * time.Millisecond)
+		time.Sleep(100 * time.Millisecond)
 	}
-	time.Sleep(100 * time.Millisecond)
+	keys("tab", "tab", "tab", "tab", "]", "i", "hello", "enter")
+	waitSent(1)
+	keys("P")
+	waitSent(2)
 	keys("q")
 	select {
 	case err := <-done:
