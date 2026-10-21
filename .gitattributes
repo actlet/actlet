@@ -1,0 +1,10 @@
+# Every text file is checked out with LF line endings, on Windows too:
+# golden files, fixtures, recordings' exports, skills and themes are
+# compared byte for byte, and shell scripts must run in containers.
+* text=auto eol=lf
+
+# Binary formats: never converted.
+*.actrec binary
+*.actlet binary
+*.png binary
+*.jpg binary
