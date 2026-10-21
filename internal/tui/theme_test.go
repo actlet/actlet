@@ -1,9 +1,11 @@
 package tui
 
 import (
+	"math"
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -259,4 +261,56 @@ func TestProfileTheme(t *testing.T) {
 			t.Errorf("profile %q applied again", tt.profile)
 		}
 	}
+}
+
+// The built-in themes keep text readable: at least 4.5:1 contrast, the
+// WCAG AA level for text, for every text token on the background and on
+// panels, selected text on the selection, and the background's colour on
+// every pill.
+func TestBuiltinContrast(t *testing.T) {
+	text := []string{"text", "muted", "accent", "agent", "subagent", "operator", "ok", "error", "warning", "attach",
+		"added", "removed", "hunk", "keyword", "string", "number", "comment", "key", "function", "punctuation"}
+	pills := []string{"accent", "attach", "subagent", "warning", "ok", "error", "operator"}
+	for _, th := range []Theme{ThemeDark, ThemeLight} {
+		c := th.Colors
+		check := func(fg, bg string) {
+			if r := contrast(c[fg], c[bg]); r < 4.5 {
+				t.Errorf("%s: %s on %s is %.2f:1", th.Name, fg, bg, r)
+			}
+		}
+		for _, fg := range text {
+			check(fg, "background")
+			check(fg, "panel")
+		}
+		for _, fg := range []string{"text", "accent", "muted"} {
+			check(fg, "selection")
+		}
+		for _, p := range pills {
+			check("background", p)
+		}
+	}
+}
+
+// contrast is the WCAG contrast ratio of two #rrggbb colours.
+func contrast(a, b string) float64 {
+	la, lb := luminance(a), luminance(b)
+	if la < lb {
+		la, lb = lb, la
+	}
+	return (la + 0.05) / (lb + 0.05)
+}
+
+func luminance(hex string) float64 {
+	var rgb [3]float64
+	for i := range rgb {
+		v, _ := strconv.ParseUint(hex[1+2*i:3+2*i], 16, 8)
+		c := float64(v) / 255
+		if c <= 0.04045 {
+			c /= 12.92
+		} else {
+			c = math.Pow((c+0.055)/1.055, 2.4)
+		}
+		rgb[i] = c
+	}
+	return 0.2126*rgb[0] + 0.7152*rgb[1] + 0.0722*rgb[2]
 }

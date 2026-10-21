@@ -109,7 +109,8 @@ Each colour is `#rrggbb`, `#rgb`, an ANSI colour number from 0 to 255, or `none`
 | `panel` | the header, the sidebar, the status line and the file viewer |
 | `selection` | the selected tool call, file or worker (with `reverse`, in reverse video) |
 | `border` | separator lines, rules and borders |
-| `text`, `muted`, `faint` | text, less important text, hints |
+| `text`, `muted` | text, and less important text and hints |
+| `faint` | decoration only, never text: the lines between tool calls and the `│` between the status line's segments |
 | `accent` | the title, the active tab, the prompt, headings and the worker shown |
 | `agent`, `subagent`, `operator` | the speakers' labels |
 | `ok`, `error`, `warning` | done, failed, and running or warned: tool calls, workers, the session's state |
@@ -117,7 +118,7 @@ Each colour is `#rrggbb`, `#rgb`, an ANSI colour number from 0 to 255, or `none`
 | `added`, `removed`, `hunk` | diffs: added and removed lines, hunk headers |
 | `keyword`, `string`, `number`, `comment`, `key`, `function`, `punctuation` | syntax highlighting |
 
-Unknown fields, tokens and attributes are errors. A file that can't be read or isn't a valid theme leaves the viewer on `dark`, and the status line says why. Theme files are at most 64 KiB. New tokens may be added; existing ones keep their names.
+Every token drawn as text is meant to be readable on `background` and on `panel`, and the background's colour on the status pills: the built-in themes keep to a contrast of at least 4.5:1 there (WCAG AA), and a test holds them to it. Unknown fields, tokens and attributes are errors. A file that can't be read or isn't a valid theme leaves the viewer on `dark`, and the status line says why. Theme files are at most 64 KiB. New tokens may be added; existing ones keep their names.
 
 ## Searching a recording
 

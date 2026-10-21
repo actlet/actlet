@@ -151,9 +151,9 @@ func (m *Model) renderPopup(w, h int) []string {
 	end := min(p.scroll+inner, len(body))
 	foot := st.muted.Render(p.note)
 	if len(body) > inner {
-		foot += st.faint.Render(fmt.Sprintf(" · lines %d-%d of %d", p.scroll+1, end, len(body)))
+		foot += st.muted.Render(fmt.Sprintf(" · lines %d-%d of %d", p.scroll+1, end, len(body)))
 	}
-	foot += st.faint.Render(" · esc closes")
+	foot += st.muted.Render(" · esc closes")
 	rows := []string{st.accent.Render(p.path), st.border.Render(strings.Repeat("─", innerW))}
 	rows = append(rows, block(body[p.scroll:end], innerW, inner, st.panelBg)...)
 	rows = append(rows, foot)
@@ -186,7 +186,7 @@ func (m *Model) popupLines(p *popup, w int) []string {
 	}
 	text := strings.ReplaceAll(strings.Join(p.lines, "\n"), "\t", "    ")
 	for i, l := range st.highlight(languageOf(p.path), text) {
-		out = append(out, st.faint.Render(fmt.Sprintf("%4d ", i+1))+ansi.Truncate(l, w-6, "…"))
+		out = append(out, st.muted.Render(fmt.Sprintf("%4d ", i+1))+ansi.Truncate(l, w-6, "…"))
 	}
 	return out
 }

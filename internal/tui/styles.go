@@ -133,7 +133,7 @@ func newStyles(t Theme) *styles {
 func (st *styles) inputStyles(s textinput.Styles) textinput.Styles {
 	s.Focused.Prompt, s.Blurred.Prompt = st.accent, st.accent
 	s.Focused.Text, s.Blurred.Text = st.text, st.text
-	s.Focused.Placeholder, s.Blurred.Placeholder = st.faint, st.faint
+	s.Focused.Placeholder, s.Blurred.Placeholder = st.muted, st.muted
 	return s
 }
 

@@ -371,7 +371,7 @@ func (m *Model) callLines(call *view.ToolCall, wk *view.Worker, prefix string, w
 		}
 	}
 	if more := len(lines) - len(shown); more > 0 {
-		add(gutter + st.faint.Render("… "+plural(uint64(more), "more line")))
+		add(gutter + st.muted.Render("… "+plural(uint64(more), "more line")))
 	}
 	return out
 }
@@ -557,13 +557,13 @@ func (m *Model) sidebarLines(w int) []string {
 		out = append(out, ansi.Truncate(" "+indent+icon+" "+st.text.Render(wk.ID)+extra, w, "…"))
 	}
 	if len(workers) == 0 {
-		out = append(out, st.faint.Render("none yet"))
+		out = append(out, st.muted.Render("none yet"))
 	}
 	out = append(out, "")
 	head("Files")
 	files := s.Files()
 	if len(files) == 0 {
-		out = append(out, st.faint.Render("none changed"))
+		out = append(out, st.muted.Render("none changed"))
 	}
 	for k := range m.fileRows {
 		delete(m.fileRows, k)
@@ -579,7 +579,7 @@ func (m *Model) sidebarLines(w int) []string {
 		out = append(out, st.text.Render(name)+" "+stat)
 	}
 	if len(files) > 0 {
-		out = append(out, st.faint.Render("o or a click opens a file"))
+		out = append(out, st.muted.Render("o or a click opens a file"))
 	}
 	if m.player == nil && m.info != nil {
 		out = append(out, "")
@@ -622,7 +622,7 @@ func (m *Model) viewerLines(w int) []string {
 		row(icon + " " + ls.Render(label) + gap + st.muted.Render(right))
 	}
 	if len(m.info.GetViewers()) == 0 {
-		row(st.faint.Render("none listed"))
+		row(st.muted.Render("none listed"))
 	}
 	return out
 }
@@ -729,9 +729,9 @@ func (m *Model) renderInput(w int) string {
 		return st.muted.Render(ansi.Truncate(" "+keys, w, "…"))
 	}
 	if m.player != nil {
-		return st.faint.Render(" a recording · space play/pause · ←/→ seek · +/- speed · / search")
+		return st.muted.Render(" a recording · space play/pause · ←/→ seek · +/- speed · / search")
 	}
-	return st.accent.Render(" › ") + st.faint.Render("press i to send the agent a note")
+	return st.accent.Render(" › ") + st.muted.Render("press i to send the agent a note")
 }
 
 // sessionLines draw the Session tab: the figures the status line leaves
@@ -830,7 +830,7 @@ func (m *Model) sessionLines(w int) []string {
 	if len(s.Feedback) > 0 {
 		head("Feedback")
 		if s.FeedbackDropped > 0 {
-			add(m.st.faint.Render(fmt.Sprintf("  … %d earlier", s.FeedbackDropped)))
+			add(m.st.muted.Render(fmt.Sprintf("  … %d earlier", s.FeedbackDropped)))
 		}
 		for _, f := range s.Feedback {
 			add(fmt.Sprintf("  %s %-10s %s", f.Time.UTC().Format("15:04:05"), f.Kind, f.Message))
@@ -1086,7 +1086,7 @@ func (m *Model) clock(t time.Time) string {
 	if t.IsZero() || t.Unix() <= 0 {
 		return ""
 	}
-	return m.st.faint.Render(" · " + t.UTC().Format("15:04:05"))
+	return m.st.muted.Render(" · " + t.UTC().Format("15:04:05"))
 }
 
 var spinnerFrames = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
