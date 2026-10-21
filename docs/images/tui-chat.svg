@@ -1,0 +1,219 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1032" height="682" viewBox="0 0 1032 682">
+<rect width="100%" height="100%" rx="8" fill="#17171F"/>
+<g font-family="ui-sans-serif, -apple-system, 'Segoe UI', sans-serif" font-size="12.6"><circle cx="20" cy="16" r="5.5" fill="#FF5F57"/><circle cx="38" cy="16" r="5.5" fill="#FEBC2E"/><circle cx="56" cy="16" r="5.5" fill="#28C840"/><text x="516" y="20" text-anchor="middle" fill="#DCDCE6" opacity="0.6">actlet run -tui</text></g>
+<g font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" style="white-space:pre">
+<rect x="12" y="40" width="8.9" height="18" fill="#21212C"/>
+<rect x="20.4" y="40" width="84.5" height="18" fill="#A48BFA"/>
+<rect x="104.4" y="40" width="529.7" height="18" fill="#21212C"/>
+<rect x="633.6" y="40" width="50.9" height="18" fill="#A48BFA"/>
+<rect x="684" y="40" width="336.5" height="18" fill="#21212C"/>
+<text x="28.8" y="53.65" fill="#17171F" textLength="67.2" lengthAdjust="spacingAndGlyphs" font-weight="bold">◆ actlet</text>
+<text x="112.8" y="53.65" fill="#DCDCE6" textLength="126" lengthAdjust="spacingAndGlyphs">q3-sales-review</text>
+<text x="642" y="53.65" fill="#17171F" textLength="33.6" lengthAdjust="spacingAndGlyphs" font-weight="bold">Chat</text>
+<text x="692.4" y="53.65" fill="#9999AF" textLength="58.8" lengthAdjust="spacingAndGlyphs">Session</text>
+<text x="768" y="53.65" fill="#9999AF" textLength="33.6" lengthAdjust="spacingAndGlyphs">Task</text>
+<text x="818.4" y="53.65" fill="#9999AF" textLength="58.8" lengthAdjust="spacingAndGlyphs">Profile</text>
+<text x="894" y="53.65" fill="#9999AF" textLength="42" lengthAdjust="spacingAndGlyphs">Tools</text>
+<text x="952.8" y="53.65" fill="#9999AF" textLength="50.4" lengthAdjust="spacingAndGlyphs">Events</text>
+<rect x="742.8" y="57.5" width="277.7" height="18" fill="#21212C"/>
+<text x="54" y="71.15" fill="#3A3950" textLength="8.4" lengthAdjust="spacingAndGlyphs">┊</text>
+<text x="87.6" y="71.15" fill="#5FD192" textLength="8.4" lengthAdjust="spacingAndGlyphs">✓</text>
+<text x="104.4" y="71.15" fill="#DCDCE6" textLength="42" lengthAdjust="spacingAndGlyphs" font-weight="bold">Write</text>
+<text x="154.8" y="71.15" fill="#9999AF" textLength="201.6" lengthAdjust="spacingAndGlyphs">analysis/north.md  +9 −0</text>
+<text x="700.8" y="71.15" fill="#9999AF" textLength="33.6" lengthAdjust="spacingAndGlyphs">64ms</text>
+<text x="742.8" y="71.15" fill="#3A3950" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="759.6" y="71.15" fill="#A48BFA" textLength="58.8" lengthAdjust="spacingAndGlyphs" font-weight="bold">WORKERS</text>
+<rect x="742.8" y="75" width="17.3" height="18" fill="#21212C"/>
+<rect x="759.6" y="75" width="252.5" height="18" fill="#33304A"/>
+<rect x="1011.6" y="75" width="8.9" height="18" fill="#21212C"/>
+<text x="54" y="88.65" fill="#3A3950" textLength="8.4" lengthAdjust="spacingAndGlyphs">┊</text>
+<text x="104.4" y="88.65" fill="#3A3950" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="121.2" y="88.65" fill="#5FB8E6" textLength="126" lengthAdjust="spacingAndGlyphs">@@ -0,0 +1,9 @@</text>
+<text x="742.8" y="88.65" fill="#3A3950" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="759.6" y="88.65" fill="#A48BFA" textLength="8.4" lengthAdjust="spacingAndGlyphs" font-weight="bold">▸</text>
+<text x="768" y="88.65" fill="#E9C46A" textLength="8.4" lengthAdjust="spacingAndGlyphs">●</text>
+<text x="784.8" y="88.65" fill="#A48BFA" textLength="33.6" lengthAdjust="spacingAndGlyphs" font-weight="bold">root</text>
+<text x="826.8" y="88.65" fill="#9999AF" textLength="126" lengthAdjust="spacingAndGlyphs">large · 5 turns</text>
+<rect x="742.8" y="92.5" width="277.7" height="18" fill="#21212C"/>
+<text x="54" y="106.15" fill="#3A3950" textLength="8.4" lengthAdjust="spacingAndGlyphs">┊</text>
+<text x="104.4" y="106.15" fill="#3A3950" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="121.2" y="106.15" fill="#5FD192" textLength="100.8" lengthAdjust="spacingAndGlyphs">+# North, Q3</text>
+<text x="742.8" y="106.15" fill="#3A3950" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="776.4" y="106.15" fill="#5FD192" textLength="8.4" lengthAdjust="spacingAndGlyphs">✓</text>
+<text x="793.2" y="106.15" fill="#DCDCE6" textLength="50.4" lengthAdjust="spacingAndGlyphs">root.1</text>
+<text x="852" y="106.15" fill="#9999AF" textLength="117.6" lengthAdjust="spacingAndGlyphs">fast · 3 turns</text>
+<rect x="742.8" y="110" width="277.7" height="18" fill="#21212C"/>
+<text x="54" y="123.65" fill="#3A3950" textLength="8.4" lengthAdjust="spacingAndGlyphs">┊</text>
+<text x="104.4" y="123.65" fill="#3A3950" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="121.2" y="123.65" fill="#5FD192" textLength="8.4" lengthAdjust="spacingAndGlyphs">+</text>
+<text x="742.8" y="123.65" fill="#3A3950" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="776.4" y="123.65" fill="#5FD192" textLength="8.4" lengthAdjust="spacingAndGlyphs">✓</text>
+<text x="793.2" y="123.65" fill="#DCDCE6" textLength="50.4" lengthAdjust="spacingAndGlyphs">root.2</text>
+<text x="852" y="123.65" fill="#9999AF" textLength="117.6" lengthAdjust="spacingAndGlyphs">fast · 3 turns</text>
+<rect x="742.8" y="127.5" width="277.7" height="18" fill="#21212C"/>
+<text x="54" y="141.15" fill="#3A3950" textLength="8.4" lengthAdjust="spacingAndGlyphs">┊</text>
+<text x="104.4" y="141.15" fill="#3A3950" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="121.2" y="141.15" fill="#9999AF" textLength="117.6" lengthAdjust="spacingAndGlyphs">… 7 more lines</text>
+<text x="742.8" y="141.15" fill="#3A3950" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="776.4" y="141.15" fill="#5FD192" textLength="8.4" lengthAdjust="spacingAndGlyphs">✓</text>
+<text x="793.2" y="141.15" fill="#DCDCE6" textLength="50.4" lengthAdjust="spacingAndGlyphs">root.3</text>
+<text x="852" y="141.15" fill="#9999AF" textLength="117.6" lengthAdjust="spacingAndGlyphs">fast · 3 turns</text>
+<rect x="742.8" y="145" width="277.7" height="18" fill="#21212C"/>
+<text x="54" y="158.65" fill="#3A3950" textLength="8.4" lengthAdjust="spacingAndGlyphs">┊</text>
+<text x="742.8" y="158.65" fill="#3A3950" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<rect x="742.8" y="162.5" width="277.7" height="18" fill="#21212C"/>
+<text x="54" y="176.15" fill="#3A3950" textLength="8.4" lengthAdjust="spacingAndGlyphs">┊</text>
+<text x="70.8" y="176.15" fill="#5FB8E6" textLength="8.4" lengthAdjust="spacingAndGlyphs">▌</text>
+<text x="87.6" y="176.15" fill="#5FB8E6" textLength="126" lengthAdjust="spacingAndGlyphs" font-weight="bold">Subagent root.3</text>
+<text x="222" y="176.15" fill="#9999AF" textLength="378" lengthAdjust="spacingAndGlyphs">· turn 3 · fast · 3.0k in / 40 out · 23:23:10</text>
+<text x="742.8" y="176.15" fill="#3A3950" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="759.6" y="176.15" fill="#A48BFA" textLength="42" lengthAdjust="spacingAndGlyphs" font-weight="bold">FILES</text>
+<rect x="742.8" y="180" width="277.7" height="18" fill="#21212C"/>
+<text x="54" y="193.65" fill="#3A3950" textLength="8.4" lengthAdjust="spacingAndGlyphs">┊</text>
+<text x="70.8" y="193.65" fill="#5FB8E6" textLength="8.4" lengthAdjust="spacingAndGlyphs">▌</text>
+<text x="87.6" y="193.65" fill="#DCDCE6" textLength="478.8" lengthAdjust="spacingAndGlyphs">North done; 11850 EUR, gadget sales started in September.</text>
+<text x="742.8" y="193.65" fill="#3A3950" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="759.6" y="193.65" fill="#DCDCE6" textLength="201.6" lengthAdjust="spacingAndGlyphs">…kspace/analysis/west.md</text>
+<text x="969.6" y="193.65" fill="#5FD192" textLength="16.8" lengthAdjust="spacingAndGlyphs">+6</text>
+<text x="994.8" y="193.65" fill="#F37184" textLength="16.8" lengthAdjust="spacingAndGlyphs">−0</text>
+<rect x="742.8" y="197.5" width="277.7" height="18" fill="#21212C"/>
+<text x="54" y="211.15" fill="#3A3950" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="70.8" y="211.15" fill="#9999AF" textLength="8.4" lengthAdjust="spacingAndGlyphs">↳</text>
+<text x="87.6" y="211.15" fill="#DCDCE6" textLength="478.8" lengthAdjust="spacingAndGlyphs">North done; 11850 EUR, gadget sales started in September.</text>
+<text x="742.8" y="211.15" fill="#3A3950" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="759.6" y="211.15" fill="#DCDCE6" textLength="201.6" lengthAdjust="spacingAndGlyphs">…space/analysis/north.md</text>
+<text x="969.6" y="211.15" fill="#5FD192" textLength="16.8" lengthAdjust="spacingAndGlyphs">+9</text>
+<text x="994.8" y="211.15" fill="#F37184" textLength="16.8" lengthAdjust="spacingAndGlyphs">−0</text>
+<rect x="742.8" y="215" width="277.7" height="18" fill="#21212C"/>
+<text x="20.4" y="228.65" fill="#9999AF" textLength="352.8" lengthAdjust="spacingAndGlyphs">· the agent got the note from orchestrator</text>
+<text x="742.8" y="228.65" fill="#3A3950" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="759.6" y="228.65" fill="#DCDCE6" textLength="201.6" lengthAdjust="spacingAndGlyphs">…space/analysis/south.md</text>
+<text x="969.6" y="228.65" fill="#5FD192" textLength="16.8" lengthAdjust="spacingAndGlyphs">+6</text>
+<text x="994.8" y="228.65" fill="#F37184" textLength="16.8" lengthAdjust="spacingAndGlyphs">−0</text>
+<rect x="742.8" y="232.5" width="277.7" height="18" fill="#21212C"/>
+<text x="20.4" y="246.15" fill="#3A3950" textLength="714" lengthAdjust="spacingAndGlyphs">─────────────────────────────────────────────────────────────────────────────────────</text>
+<text x="742.8" y="246.15" fill="#3A3950" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="759.6" y="246.15" fill="#DCDCE6" textLength="159.6" lengthAdjust="spacingAndGlyphs">workspace/totals.py</text>
+<text x="927.6" y="246.15" fill="#5FD192" textLength="16.8" lengthAdjust="spacingAndGlyphs">+9</text>
+<text x="952.8" y="246.15" fill="#F37184" textLength="16.8" lengthAdjust="spacingAndGlyphs">−0</text>
+<rect x="742.8" y="250" width="277.7" height="18" fill="#21212C"/>
+<text x="20.4" y="263.65" fill="#A48BFA" textLength="8.4" lengthAdjust="spacingAndGlyphs">▌</text>
+<text x="37.2" y="263.65" fill="#A48BFA" textLength="42" lengthAdjust="spacingAndGlyphs" font-weight="bold">Agent</text>
+<text x="87.6" y="263.65" fill="#9999AF" textLength="386.4" lengthAdjust="spacingAndGlyphs">· turn 4 · large · 13k in / 420 out · 23:23:11</text>
+<text x="742.8" y="263.65" fill="#3A3950" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="759.6" y="263.65" fill="#9999AF" textLength="210" lengthAdjust="spacingAndGlyphs">o or a click opens a file</text>
+<rect x="742.8" y="267.5" width="277.7" height="18" fill="#21212C"/>
+<text x="20.4" y="281.15" fill="#A48BFA" textLength="8.4" lengthAdjust="spacingAndGlyphs">▌</text>
+<text x="37.2" y="281.15" fill="#DCDCE6" textLength="487.2" lengthAdjust="spacingAndGlyphs">While the regions are written up, I&#39;ll compute the totals.</text>
+<text x="742.8" y="281.15" fill="#3A3950" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<rect x="742.8" y="285" width="277.7" height="18" fill="#21212C"/>
+<text x="37.2" y="298.65" fill="#F37184" textLength="8.4" lengthAdjust="spacingAndGlyphs">✗</text>
+<text x="54" y="298.65" fill="#DCDCE6" textLength="50.4" lengthAdjust="spacingAndGlyphs" font-weight="bold">Python</text>
+<text x="112.8" y="298.65" fill="#9999AF" textLength="84" lengthAdjust="spacingAndGlyphs">import csv</text>
+<text x="692.4" y="298.65" fill="#9999AF" textLength="42" lengthAdjust="spacingAndGlyphs">154ms</text>
+<text x="742.8" y="298.65" fill="#3A3950" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="759.6" y="298.65" fill="#A48BFA" textLength="58.8" lengthAdjust="spacingAndGlyphs" font-weight="bold">VIEWERS</text>
+<rect x="742.8" y="302.5" width="277.7" height="18" fill="#21212C"/>
+<text x="54" y="316.15" fill="#3A3950" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="70.8" y="316.15" fill="#F37184" textLength="92.4" lengthAdjust="spacingAndGlyphs">exit code 1</text>
+<text x="742.8" y="316.15" fill="#3A3950" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="759.6" y="316.15" fill="#A48BFA" textLength="8.4" lengthAdjust="spacingAndGlyphs" font-weight="bold">⇄</text>
+<text x="776.4" y="316.15" fill="#DCDCE6" textLength="58.8" lengthAdjust="spacingAndGlyphs">gateway</text>
+<text x="843.6" y="316.15" fill="#9999AF" textLength="100.8" lengthAdjust="spacingAndGlyphs">gateway:7400</text>
+<text x="952.8" y="316.15" fill="#5FD192" textLength="8.4" lengthAdjust="spacingAndGlyphs">●</text>
+<rect x="742.8" y="320" width="277.7" height="18" fill="#21212C"/>
+<text x="54" y="333.65" fill="#3A3950" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="70.8" y="333.65" fill="#F37184" textLength="235.2" lengthAdjust="spacingAndGlyphs">exception: KeyError: &#39;north&#39;</text>
+<text x="742.8" y="333.65" fill="#3A3950" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="759.6" y="333.65" fill="#A48BFA" textLength="8.4" lengthAdjust="spacingAndGlyphs" font-weight="bold">◉</text>
+<text x="776.4" y="333.65" fill="#A48BFA" textLength="84" lengthAdjust="spacingAndGlyphs" font-weight="bold">actlet run</text>
+<text x="936" y="333.65" fill="#9999AF" textLength="75.6" lengthAdjust="spacingAndGlyphs">you · 42s</text>
+<rect x="742.8" y="337.5" width="277.7" height="18" fill="#21212C"/>
+<text x="54" y="351.15" fill="#3A3950" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="70.8" y="351.15" fill="#9999AF" textLength="277.2" lengthAdjust="spacingAndGlyphs">traceback, most recent call last:</text>
+<text x="742.8" y="351.15" fill="#3A3950" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<rect x="742.8" y="355" width="277.7" height="18" fill="#21212C"/>
+<text x="54" y="368.65" fill="#3A3950" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="70.8" y="368.65" fill="#9999AF" textLength="117.6" lengthAdjust="spacingAndGlyphs">… 2 more lines</text>
+<text x="742.8" y="368.65" fill="#3A3950" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<rect x="742.8" y="372.5" width="277.7" height="18" fill="#21212C"/>
+<text x="20.4" y="386.15" fill="#3A3950" textLength="714" lengthAdjust="spacingAndGlyphs">─────────────────────────────────────────────────────────────────────────────────────</text>
+<text x="742.8" y="386.15" fill="#3A3950" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<rect x="742.8" y="390" width="277.7" height="18" fill="#21212C"/>
+<text x="20.4" y="403.65" fill="#A48BFA" textLength="8.4" lengthAdjust="spacingAndGlyphs">▌</text>
+<text x="37.2" y="403.65" fill="#A48BFA" textLength="42" lengthAdjust="spacingAndGlyphs" font-weight="bold">Agent</text>
+<text x="87.6" y="403.65" fill="#9999AF" textLength="386.4" lengthAdjust="spacingAndGlyphs">· turn 5 · large · 14k in / 380 out · 23:23:11</text>
+<text x="742.8" y="403.65" fill="#3A3950" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<rect x="742.8" y="407.5" width="277.7" height="18" fill="#21212C"/>
+<text x="20.4" y="421.15" fill="#A48BFA" textLength="8.4" lengthAdjust="spacingAndGlyphs">▌</text>
+<text x="37.2" y="421.15" fill="#DCDCE6" textLength="512.4" lengthAdjust="spacingAndGlyphs">A KeyError: I forgot to start each region at zero. Fixing it.</text>
+<text x="742.8" y="421.15" fill="#3A3950" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<rect x="742.8" y="425" width="277.7" height="18" fill="#21212C"/>
+<text x="37.2" y="438.65" fill="#5FD192" textLength="8.4" lengthAdjust="spacingAndGlyphs">✓</text>
+<text x="54" y="438.65" fill="#DCDCE6" textLength="42" lengthAdjust="spacingAndGlyphs" font-weight="bold">Write</text>
+<text x="104.4" y="438.65" fill="#9999AF" textLength="134.4" lengthAdjust="spacingAndGlyphs">totals.py  +9 −0</text>
+<text x="700.8" y="438.65" fill="#9999AF" textLength="33.6" lengthAdjust="spacingAndGlyphs">34ms</text>
+<text x="742.8" y="438.65" fill="#3A3950" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<rect x="742.8" y="442.5" width="277.7" height="18" fill="#21212C"/>
+<text x="54" y="456.15" fill="#3A3950" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="70.8" y="456.15" fill="#5FB8E6" textLength="126" lengthAdjust="spacingAndGlyphs">@@ -0,0 +1,9 @@</text>
+<text x="742.8" y="456.15" fill="#3A3950" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<rect x="742.8" y="460" width="277.7" height="18" fill="#21212C"/>
+<text x="54" y="473.65" fill="#3A3950" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="70.8" y="473.65" fill="#5FD192" textLength="92.4" lengthAdjust="spacingAndGlyphs">+import csv</text>
+<text x="742.8" y="473.65" fill="#3A3950" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<rect x="742.8" y="477.5" width="277.7" height="18" fill="#21212C"/>
+<text x="54" y="491.15" fill="#3A3950" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="70.8" y="491.15" fill="#5FD192" textLength="302.4" lengthAdjust="spacingAndGlyphs">+from collections import defaultdict</text>
+<text x="742.8" y="491.15" fill="#3A3950" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<rect x="742.8" y="495" width="277.7" height="18" fill="#21212C"/>
+<text x="54" y="508.65" fill="#3A3950" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="70.8" y="508.65" fill="#9999AF" textLength="117.6" lengthAdjust="spacingAndGlyphs">… 7 more lines</text>
+<text x="742.8" y="508.65" fill="#3A3950" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<rect x="742.8" y="512.5" width="277.7" height="18" fill="#21212C"/>
+<text x="37.2" y="526.15" fill="#5A5A72" textLength="697.2" lengthAdjust="spacingAndGlyphs">┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄</text>
+<text x="742.8" y="526.15" fill="#3A3950" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<rect x="742.8" y="530" width="277.7" height="18" fill="#21212C"/>
+<text x="37.2" y="543.65" fill="#5FD192" textLength="8.4" lengthAdjust="spacingAndGlyphs">✓</text>
+<text x="54" y="543.65" fill="#DCDCE6" textLength="50.4" lengthAdjust="spacingAndGlyphs" font-weight="bold">Python</text>
+<text x="112.8" y="543.65" fill="#9999AF" textLength="75.6" lengthAdjust="spacingAndGlyphs">totals.py</text>
+<text x="692.4" y="543.65" fill="#9999AF" textLength="42" lengthAdjust="spacingAndGlyphs">147ms</text>
+<text x="742.8" y="543.65" fill="#3A3950" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<rect x="742.8" y="547.5" width="277.7" height="18" fill="#21212C"/>
+<text x="54" y="561.15" fill="#3A3950" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="70.8" y="561.15" fill="#DCDCE6" textLength="134.4" lengthAdjust="spacingAndGlyphs">north: 11850 EUR</text>
+<text x="742.8" y="561.15" fill="#3A3950" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<rect x="742.8" y="565" width="277.7" height="18" fill="#21212C"/>
+<text x="54" y="578.65" fill="#3A3950" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="70.8" y="578.65" fill="#DCDCE6" textLength="134.4" lengthAdjust="spacingAndGlyphs">south: 16750 EUR</text>
+<text x="742.8" y="578.65" fill="#3A3950" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<rect x="742.8" y="582.5" width="277.7" height="18" fill="#21212C"/>
+<text x="54" y="596.15" fill="#3A3950" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="70.8" y="596.15" fill="#DCDCE6" textLength="126" lengthAdjust="spacingAndGlyphs">west: 14700 EUR</text>
+<text x="742.8" y="596.15" fill="#3A3950" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<rect x="742.8" y="600" width="277.7" height="18" fill="#21212C"/>
+<text x="54" y="613.65" fill="#3A3950" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="70.8" y="613.65" fill="#9999AF" textLength="109.2" lengthAdjust="spacingAndGlyphs">… 1 more line</text>
+<text x="742.8" y="613.65" fill="#3A3950" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="12" y="631.15" fill="#3A3950" textLength="1008" lengthAdjust="spacingAndGlyphs">────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────</text>
+<text x="20.4" y="648.65" fill="#A48BFA" textLength="8.4" lengthAdjust="spacingAndGlyphs" font-weight="bold">›</text>
+<text x="37.2" y="648.65" fill="#9999AF" textLength="268.8" lengthAdjust="spacingAndGlyphs">press i to send the agent a note</text>
+<rect x="12" y="652.5" width="92.9" height="18" fill="#E9C46A"/>
+<rect x="104.4" y="652.5" width="916.1" height="18" fill="#21212C"/>
+<text x="20.4" y="666.15" fill="#17171F" textLength="75.6" lengthAdjust="spacingAndGlyphs" font-weight="bold">⠋ running</text>
+<text x="112.8" y="666.15" fill="#A48BFA" textLength="42" lengthAdjust="spacingAndGlyphs" font-weight="bold">large</text>
+<text x="163.2" y="666.15" fill="#5A5A72" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="180" y="666.15" fill="#9999AF" textLength="25.2" lengthAdjust="spacingAndGlyphs">ctx</text>
+<text x="213.6" y="666.15" fill="#5FD192" textLength="16.8" lengthAdjust="spacingAndGlyphs">6%</text>
+<text x="230.4" y="666.15" fill="#9999AF" textLength="42" lengthAdjust="spacingAndGlyphs">/200k</text>
+<text x="280.8" y="666.15" fill="#5A5A72" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="297.6" y="666.15" fill="#DCDCE6" textLength="33.6" lengthAdjust="spacingAndGlyphs">0.24</text>
+<text x="331.2" y="666.15" fill="#9999AF" textLength="75.6" lengthAdjust="spacingAndGlyphs">/0.60 EUR</text>
+<text x="415.2" y="666.15" fill="#5A5A72" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="432" y="666.15" fill="#DCDCE6" textLength="33.6" lengthAdjust="spacingAndGlyphs">4.0s</text>
+<text x="465.6" y="666.15" fill="#9999AF" textLength="33.6" lengthAdjust="spacingAndGlyphs">/30m</text>
+<text x="507.6" y="666.15" fill="#5A5A72" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="524.4" y="666.15" fill="#9999AF" textLength="100.8" lengthAdjust="spacingAndGlyphs">this process</text>
+<text x="961.2" y="666.15" fill="#9999AF" textLength="50.4" lengthAdjust="spacingAndGlyphs">? help</text>
+</g>
+</svg>

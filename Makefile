@@ -145,6 +145,10 @@ generate: ## Regenerate protobuf and gRPC code (needs protoc)
 		--go-grpc_out=. --go-grpc_opt=module=github.com/actlet/actlet $(PUBLIC_PROTOS)
 	protoc -I . -I proto --go_out=. --go_opt=module=github.com/actlet/actlet $(INTERNAL_PROTOS)
 
+.PHONY: screenshots
+screenshots: ## Draw the README's screenshots of the viewer into docs/images
+	go run test/screenshots/generate.go docs/images
+
 .PHONY: check
 check: ## Check formatting, vet, lint, go.mod tidiness and known vulnerabilities
 	@unformatted="$$(gofmt -l .)"; \

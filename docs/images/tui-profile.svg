@@ -1,0 +1,138 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1032" height="682" viewBox="0 0 1032 682">
+<rect width="100%" height="100%" rx="8" fill="#17171F"/>
+<g font-family="ui-sans-serif, -apple-system, 'Segoe UI', sans-serif" font-size="12.6"><circle cx="20" cy="16" r="5.5" fill="#FF5F57"/><circle cx="38" cy="16" r="5.5" fill="#FEBC2E"/><circle cx="56" cy="16" r="5.5" fill="#28C840"/><text x="516" y="20" text-anchor="middle" fill="#DCDCE6" opacity="0.6">actlet attach · Profile</text></g>
+<g font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="14" xml:space="preserve" style="white-space:pre">
+<rect x="12" y="40" width="8.9" height="18" fill="#21212C"/>
+<rect x="20.4" y="40" width="84.5" height="18" fill="#A48BFA"/>
+<rect x="104.4" y="40" width="143.3" height="18" fill="#21212C"/>
+<rect x="247.2" y="40" width="227.3" height="18" fill="#F28FB0"/>
+<rect x="474" y="40" width="336.5" height="18" fill="#21212C"/>
+<rect x="810" y="40" width="76.1" height="18" fill="#A48BFA"/>
+<rect x="885.6" y="40" width="134.9" height="18" fill="#21212C"/>
+<text x="28.8" y="53.65" fill="#17171F" textLength="67.2" lengthAdjust="spacingAndGlyphs" font-weight="bold">◆ actlet</text>
+<text x="112.8" y="53.65" fill="#DCDCE6" textLength="126" lengthAdjust="spacingAndGlyphs">q3-sales-review</text>
+<text x="255.6" y="53.65" fill="#17171F" textLength="210" lengthAdjust="spacingAndGlyphs" font-weight="bold">⇄ attached · local socket</text>
+<text x="642" y="53.65" fill="#9999AF" textLength="33.6" lengthAdjust="spacingAndGlyphs">Chat</text>
+<text x="692.4" y="53.65" fill="#9999AF" textLength="58.8" lengthAdjust="spacingAndGlyphs">Session</text>
+<text x="768" y="53.65" fill="#9999AF" textLength="33.6" lengthAdjust="spacingAndGlyphs">Task</text>
+<text x="818.4" y="53.65" fill="#17171F" textLength="58.8" lengthAdjust="spacingAndGlyphs" font-weight="bold">Profile</text>
+<text x="894" y="53.65" fill="#9999AF" textLength="42" lengthAdjust="spacingAndGlyphs">Tools</text>
+<text x="952.8" y="53.65" fill="#9999AF" textLength="50.4" lengthAdjust="spacingAndGlyphs">Events</text>
+<text x="20.4" y="71.15" fill="#A48BFA" textLength="193.2" lengthAdjust="spacingAndGlyphs" font-weight="bold">Effective configuration</text>
+<text x="222" y="71.15" fill="#9999AF" textLength="117.6" lengthAdjust="spacingAndGlyphs">(profile demo)</text>
+<text x="37.2" y="88.65" fill="#8E8EA6" textLength="8.4" lengthAdjust="spacingAndGlyphs">{</text>
+<text x="54" y="106.15" fill="#7FAAF7" textLength="100.8" lengthAdjust="spacingAndGlyphs">&#34;profile_id&#34;</text>
+<text x="154.8" y="106.15" fill="#8E8EA6" textLength="8.4" lengthAdjust="spacingAndGlyphs">:</text>
+<text x="171.6" y="106.15" fill="#A3D982" textLength="50.4" lengthAdjust="spacingAndGlyphs">&#34;demo&#34;</text>
+<text x="222" y="106.15" fill="#8E8EA6" textLength="8.4" lengthAdjust="spacingAndGlyphs">,</text>
+<text x="54" y="123.65" fill="#7FAAF7" textLength="142.8" lengthAdjust="spacingAndGlyphs">&#34;profile_version&#34;</text>
+<text x="196.8" y="123.65" fill="#8E8EA6" textLength="8.4" lengthAdjust="spacingAndGlyphs">:</text>
+<text x="213.6" y="123.65" fill="#A3D982" textLength="25.2" lengthAdjust="spacingAndGlyphs">&#34;1&#34;</text>
+<text x="238.8" y="123.65" fill="#8E8EA6" textLength="8.4" lengthAdjust="spacingAndGlyphs">,</text>
+<text x="54" y="141.15" fill="#7FAAF7" textLength="109.2" lengthAdjust="spacingAndGlyphs">&#34;max_workers&#34;</text>
+<text x="163.2" y="141.15" fill="#8E8EA6" textLength="8.4" lengthAdjust="spacingAndGlyphs">:</text>
+<text x="180" y="141.15" fill="#F5A86E" textLength="8.4" lengthAdjust="spacingAndGlyphs">4</text>
+<text x="188.4" y="141.15" fill="#8E8EA6" textLength="8.4" lengthAdjust="spacingAndGlyphs">,</text>
+<text x="54" y="158.65" fill="#7FAAF7" textLength="184.8" lengthAdjust="spacingAndGlyphs">&#34;max_tool_concurrency&#34;</text>
+<text x="238.8" y="158.65" fill="#8E8EA6" textLength="8.4" lengthAdjust="spacingAndGlyphs">:</text>
+<text x="255.6" y="158.65" fill="#F5A86E" textLength="8.4" lengthAdjust="spacingAndGlyphs">4</text>
+<text x="264" y="158.65" fill="#8E8EA6" textLength="8.4" lengthAdjust="spacingAndGlyphs">,</text>
+<text x="54" y="176.15" fill="#7FAAF7" textLength="100.8" lengthAdjust="spacingAndGlyphs">&#34;stop_grace&#34;</text>
+<text x="154.8" y="176.15" fill="#8E8EA6" textLength="8.4" lengthAdjust="spacingAndGlyphs">:</text>
+<text x="171.6" y="176.15" fill="#A3D982" textLength="42" lengthAdjust="spacingAndGlyphs">&#34;10s&#34;</text>
+<text x="213.6" y="176.15" fill="#8E8EA6" textLength="8.4" lengthAdjust="spacingAndGlyphs">,</text>
+<text x="54" y="193.65" fill="#7FAAF7" textLength="168" lengthAdjust="spacingAndGlyphs">&#34;default_pause_mode&#34;</text>
+<text x="222" y="193.65" fill="#8E8EA6" textLength="8.4" lengthAdjust="spacingAndGlyphs">:</text>
+<text x="238.8" y="193.65" fill="#A3D982" textLength="58.8" lengthAdjust="spacingAndGlyphs">&#34;drain&#34;</text>
+<text x="297.6" y="193.65" fill="#8E8EA6" textLength="8.4" lengthAdjust="spacingAndGlyphs">,</text>
+<text x="54" y="211.15" fill="#7FAAF7" textLength="142.8" lengthAdjust="spacingAndGlyphs">&#34;signal_deadline&#34;</text>
+<text x="196.8" y="211.15" fill="#8E8EA6" textLength="8.4" lengthAdjust="spacingAndGlyphs">:</text>
+<text x="213.6" y="211.15" fill="#A3D982" textLength="33.6" lengthAdjust="spacingAndGlyphs">&#34;8s&#34;</text>
+<text x="247.2" y="211.15" fill="#8E8EA6" textLength="8.4" lengthAdjust="spacingAndGlyphs">,</text>
+<text x="54" y="228.65" fill="#7FAAF7" textLength="58.8" lengthAdjust="spacingAndGlyphs">&#34;model&#34;</text>
+<text x="112.8" y="228.65" fill="#8E8EA6" textLength="8.4" lengthAdjust="spacingAndGlyphs">:</text>
+<text x="129.6" y="228.65" fill="#A3D982" textLength="58.8" lengthAdjust="spacingAndGlyphs">&#34;large&#34;</text>
+<text x="188.4" y="228.65" fill="#8E8EA6" textLength="8.4" lengthAdjust="spacingAndGlyphs">,</text>
+<text x="54" y="246.15" fill="#7FAAF7" textLength="201.6" lengthAdjust="spacingAndGlyphs">&#34;checkpoint_every_turns&#34;</text>
+<text x="255.6" y="246.15" fill="#8E8EA6" textLength="8.4" lengthAdjust="spacingAndGlyphs">:</text>
+<text x="272.4" y="246.15" fill="#F5A86E" textLength="8.4" lengthAdjust="spacingAndGlyphs">1</text>
+<text x="280.8" y="246.15" fill="#8E8EA6" textLength="8.4" lengthAdjust="spacingAndGlyphs">,</text>
+<text x="54" y="263.65" fill="#7FAAF7" textLength="58.8" lengthAdjust="spacingAndGlyphs">&#34;tools&#34;</text>
+<text x="112.8" y="263.65" fill="#8E8EA6" textLength="8.4" lengthAdjust="spacingAndGlyphs">:</text>
+<text x="129.6" y="263.65" fill="#8E8EA6" textLength="8.4" lengthAdjust="spacingAndGlyphs">[</text>
+<text x="70.8" y="281.15" fill="#A3D982" textLength="92.4" lengthAdjust="spacingAndGlyphs">&#34;read_file&#34;</text>
+<text x="163.2" y="281.15" fill="#8E8EA6" textLength="8.4" lengthAdjust="spacingAndGlyphs">,</text>
+<text x="70.8" y="298.65" fill="#A3D982" textLength="100.8" lengthAdjust="spacingAndGlyphs">&#34;write_file&#34;</text>
+<text x="171.6" y="298.65" fill="#8E8EA6" textLength="8.4" lengthAdjust="spacingAndGlyphs">,</text>
+<text x="70.8" y="316.15" fill="#A3D982" textLength="92.4" lengthAdjust="spacingAndGlyphs">&#34;edit_file&#34;</text>
+<text x="163.2" y="316.15" fill="#8E8EA6" textLength="8.4" lengthAdjust="spacingAndGlyphs">,</text>
+<text x="70.8" y="333.65" fill="#A3D982" textLength="50.4" lengthAdjust="spacingAndGlyphs">&#34;glob&#34;</text>
+<text x="121.2" y="333.65" fill="#8E8EA6" textLength="8.4" lengthAdjust="spacingAndGlyphs">,</text>
+<text x="70.8" y="351.15" fill="#A3D982" textLength="50.4" lengthAdjust="spacingAndGlyphs">&#34;grep&#34;</text>
+<text x="121.2" y="351.15" fill="#8E8EA6" textLength="8.4" lengthAdjust="spacingAndGlyphs">,</text>
+<text x="70.8" y="368.65" fill="#A3D982" textLength="58.8" lengthAdjust="spacingAndGlyphs">&#34;shell&#34;</text>
+<text x="129.6" y="368.65" fill="#8E8EA6" textLength="8.4" lengthAdjust="spacingAndGlyphs">,</text>
+<text x="70.8" y="386.15" fill="#A3D982" textLength="67.2" lengthAdjust="spacingAndGlyphs">&#34;python&#34;</text>
+<text x="54" y="403.65" fill="#8E8EA6" textLength="16.8" lengthAdjust="spacingAndGlyphs">],</text>
+<text x="54" y="421.15" fill="#7FAAF7" textLength="134.4" lengthAdjust="spacingAndGlyphs">&#34;subagent_model&#34;</text>
+<text x="188.4" y="421.15" fill="#8E8EA6" textLength="8.4" lengthAdjust="spacingAndGlyphs">:</text>
+<text x="205.2" y="421.15" fill="#A3D982" textLength="50.4" lengthAdjust="spacingAndGlyphs">&#34;fast&#34;</text>
+<text x="255.6" y="421.15" fill="#8E8EA6" textLength="8.4" lengthAdjust="spacingAndGlyphs">,</text>
+<text x="54" y="438.65" fill="#7FAAF7" textLength="168" lengthAdjust="spacingAndGlyphs">&#34;max_subagent_depth&#34;</text>
+<text x="222" y="438.65" fill="#8E8EA6" textLength="8.4" lengthAdjust="spacingAndGlyphs">:</text>
+<text x="238.8" y="438.65" fill="#F5A86E" textLength="8.4" lengthAdjust="spacingAndGlyphs">1</text>
+<text x="247.2" y="438.65" fill="#8E8EA6" textLength="8.4" lengthAdjust="spacingAndGlyphs">,</text>
+<text x="54" y="456.15" fill="#7FAAF7" textLength="126" lengthAdjust="spacingAndGlyphs">&#34;max_subagents&#34;</text>
+<text x="180" y="456.15" fill="#8E8EA6" textLength="8.4" lengthAdjust="spacingAndGlyphs">:</text>
+<text x="196.8" y="456.15" fill="#F5A86E" textLength="8.4" lengthAdjust="spacingAndGlyphs">3</text>
+<text x="205.2" y="456.15" fill="#8E8EA6" textLength="8.4" lengthAdjust="spacingAndGlyphs">,</text>
+<text x="54" y="473.65" fill="#7FAAF7" textLength="75.6" lengthAdjust="spacingAndGlyphs">&#34;budgets&#34;</text>
+<text x="129.6" y="473.65" fill="#8E8EA6" textLength="8.4" lengthAdjust="spacingAndGlyphs">:</text>
+<text x="146.4" y="473.65" fill="#8E8EA6" textLength="8.4" lengthAdjust="spacingAndGlyphs">[</text>
+<text x="70.8" y="491.15" fill="#8E8EA6" textLength="8.4" lengthAdjust="spacingAndGlyphs">{</text>
+<text x="87.6" y="508.65" fill="#7FAAF7" textLength="50.4" lengthAdjust="spacingAndGlyphs">&#34;kind&#34;</text>
+<text x="138" y="508.65" fill="#8E8EA6" textLength="8.4" lengthAdjust="spacingAndGlyphs">:</text>
+<text x="154.8" y="508.65" fill="#A3D982" textLength="159.6" lengthAdjust="spacingAndGlyphs">&#34;BUDGET_KIND_MONEY&#34;</text>
+<text x="314.4" y="508.65" fill="#8E8EA6" textLength="8.4" lengthAdjust="spacingAndGlyphs">,</text>
+<text x="87.6" y="526.15" fill="#7FAAF7" textLength="58.8" lengthAdjust="spacingAndGlyphs">&#34;limit&#34;</text>
+<text x="146.4" y="526.15" fill="#8E8EA6" textLength="8.4" lengthAdjust="spacingAndGlyphs">:</text>
+<text x="163.2" y="526.15" fill="#F5A86E" textLength="25.2" lengthAdjust="spacingAndGlyphs">0.6</text>
+<text x="188.4" y="526.15" fill="#8E8EA6" textLength="8.4" lengthAdjust="spacingAndGlyphs">,</text>
+<text x="87.6" y="543.65" fill="#7FAAF7" textLength="84" lengthAdjust="spacingAndGlyphs">&#34;currency&#34;</text>
+<text x="171.6" y="543.65" fill="#8E8EA6" textLength="8.4" lengthAdjust="spacingAndGlyphs">:</text>
+<text x="188.4" y="543.65" fill="#A3D982" textLength="42" lengthAdjust="spacingAndGlyphs">&#34;EUR&#34;</text>
+<text x="230.4" y="543.65" fill="#8E8EA6" textLength="8.4" lengthAdjust="spacingAndGlyphs">,</text>
+<text x="87.6" y="561.15" fill="#7FAAF7" textLength="151.2" lengthAdjust="spacingAndGlyphs">&#34;alert_at_percent&#34;</text>
+<text x="238.8" y="561.15" fill="#8E8EA6" textLength="8.4" lengthAdjust="spacingAndGlyphs">:</text>
+<text x="255.6" y="561.15" fill="#F5A86E" textLength="16.8" lengthAdjust="spacingAndGlyphs">50</text>
+<text x="272.4" y="561.15" fill="#8E8EA6" textLength="8.4" lengthAdjust="spacingAndGlyphs">,</text>
+<text x="87.6" y="578.65" fill="#7FAAF7" textLength="100.8" lengthAdjust="spacingAndGlyphs">&#34;on_exhaust&#34;</text>
+<text x="188.4" y="578.65" fill="#8E8EA6" textLength="8.4" lengthAdjust="spacingAndGlyphs">:</text>
+<text x="205.2" y="578.65" fill="#A3D982" textLength="168" lengthAdjust="spacingAndGlyphs">&#34;BUDGET_ACTION_WAIT&#34;</text>
+<text x="373.2" y="578.65" fill="#8E8EA6" textLength="8.4" lengthAdjust="spacingAndGlyphs">,</text>
+<text x="87.6" y="596.15" fill="#7FAAF7" textLength="92.4" lengthAdjust="spacingAndGlyphs">&#34;wait_mode&#34;</text>
+<text x="180" y="596.15" fill="#8E8EA6" textLength="8.4" lengthAdjust="spacingAndGlyphs">:</text>
+<text x="196.8" y="596.15" fill="#A3D982" textLength="193.2" lengthAdjust="spacingAndGlyphs">&#34;BUDGET_WAIT_MODE_IDLE&#34;</text>
+<text x="70.8" y="613.65" fill="#8E8EA6" textLength="16.8" lengthAdjust="spacingAndGlyphs">},</text>
+<text x="12" y="631.15" fill="#3A3950" textLength="1008" lengthAdjust="spacingAndGlyphs">────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────</text>
+<text x="20.4" y="648.65" fill="#A48BFA" textLength="8.4" lengthAdjust="spacingAndGlyphs" font-weight="bold">›</text>
+<text x="37.2" y="648.65" fill="#9999AF" textLength="268.8" lengthAdjust="spacingAndGlyphs">press i to send the agent a note</text>
+<rect x="12" y="652.5" width="92.9" height="18" fill="#E9C46A"/>
+<rect x="104.4" y="652.5" width="916.1" height="18" fill="#21212C"/>
+<text x="20.4" y="666.15" fill="#17171F" textLength="75.6" lengthAdjust="spacingAndGlyphs" font-weight="bold">⠋ running</text>
+<text x="112.8" y="666.15" fill="#A48BFA" textLength="42" lengthAdjust="spacingAndGlyphs" font-weight="bold">large</text>
+<text x="163.2" y="666.15" fill="#5A5A72" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="180" y="666.15" fill="#9999AF" textLength="25.2" lengthAdjust="spacingAndGlyphs">ctx</text>
+<text x="213.6" y="666.15" fill="#5FD192" textLength="16.8" lengthAdjust="spacingAndGlyphs">6%</text>
+<text x="230.4" y="666.15" fill="#9999AF" textLength="42" lengthAdjust="spacingAndGlyphs">/200k</text>
+<text x="280.8" y="666.15" fill="#5A5A72" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="297.6" y="666.15" fill="#DCDCE6" textLength="33.6" lengthAdjust="spacingAndGlyphs">0.24</text>
+<text x="331.2" y="666.15" fill="#9999AF" textLength="75.6" lengthAdjust="spacingAndGlyphs">/0.60 EUR</text>
+<text x="415.2" y="666.15" fill="#5A5A72" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="432" y="666.15" fill="#DCDCE6" textLength="33.6" lengthAdjust="spacingAndGlyphs">4.0s</text>
+<text x="465.6" y="666.15" fill="#9999AF" textLength="33.6" lengthAdjust="spacingAndGlyphs">/30m</text>
+<text x="507.6" y="666.15" fill="#5A5A72" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="524.4" y="666.15" fill="#9999AF" textLength="75.6" lengthAdjust="spacingAndGlyphs">local box</text>
+<text x="961.2" y="666.15" fill="#9999AF" textLength="50.4" lengthAdjust="spacingAndGlyphs">? help</text>
+</g>
+</svg>
