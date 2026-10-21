@@ -55,7 +55,7 @@ Select a tool call with `↑` `↓` (or click it) and press `enter` to expand it
 
 ## Building and testing
 
-Requirements: Go 1.27 or newer and GNU Make. `make setup` installs the pinned versions of `golangci-lint`, used by `make check`, and of `protoc-gen-go` and `protoc-gen-go-grpc`, used by `make generate` (which also needs `protoc`).
+Requirements: Go 1.27.3 or newer and GNU Make. `make setup` installs the pinned versions of `golangci-lint`, used by `make check`, and of `protoc-gen-go` and `protoc-gen-go-grpc`, used by `make generate` (which also needs `protoc`).
 
 ```sh
 make setup   # download modules, install development tools
