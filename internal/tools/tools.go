@@ -15,6 +15,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
+	"os"
 	"sort"
 	"strings"
 )
@@ -69,6 +71,32 @@ type Change struct {
 
 func errorResult(format string, args ...any) Result {
 	return Result{Output: fmt.Sprintf(format, args...), IsError: true}
+}
+
+// fsError reports a file system error to the agent in the same words on
+// every operating system, naming the file as the agent knows it rather
+// than by its path on the host.
+func (e *Env) fsError(err error) Result {
+	reason := func(err error) string {
+		switch {
+		case errors.Is(err, fs.ErrNotExist):
+			return "no such file or directory"
+		case errors.Is(err, fs.ErrPermission):
+			return "permission denied"
+		case errors.Is(err, fs.ErrExist):
+			return "file already exists"
+		}
+		return err.Error()
+	}
+	var pe *fs.PathError
+	var le *os.LinkError
+	switch {
+	case errors.As(err, &pe):
+		return errorResult("%s %s: %s", pe.Op, e.display(pe.Path), reason(pe.Err))
+	case errors.As(err, &le):
+		return errorResult("%s %s: %s", le.Op, e.display(le.New), reason(le.Err))
+	}
+	return errorResult("%v", err)
 }
 
 // UnknownOutcome is the result of a call that can't be recovered.

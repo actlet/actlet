@@ -91,7 +91,8 @@ func TestReadFile(t *testing.T) {
 		{"absolute", map[string]any{"path": filepath.Join(root, "inputs", "data.txt"), "offset": 30}, []string{"line 30"}, false},
 		{"past the end", map[string]any{"path": "../inputs/data.txt", "offset": 31}, []string{"offset 31 is past the end"}, true},
 		{"binary", map[string]any{"path": "bin"}, []string{"binary file"}, true},
-		{"missing", map[string]any{"path": "nope.txt"}, []string{"no such file"}, true},
+		// The same words on every system, without the host's path.
+		{"missing", map[string]any{"path": "nope.txt"}, []string{"open nope.txt: no such file or directory"}, true},
 		{"directory", map[string]any{"path": "."}, []string{"is a directory"}, true},
 		{"unknown field", map[string]any{"path": "bin", "mode": "fast"}, []string{"unknown field"}, true},
 	}
@@ -105,6 +106,9 @@ func TestReadFile(t *testing.T) {
 				if !strings.Contains(r.Output, w) {
 					t.Errorf("output lacks %q:\n%s", w, r.Output)
 				}
+			}
+			if r.IsError && strings.Contains(r.Output, root) {
+				t.Errorf("the error names the host's path:\n%s", r.Output)
 			}
 		})
 	}

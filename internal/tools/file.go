@@ -65,12 +65,12 @@ func (e *Env) readFile(path string, offset, limit int) Result {
 	}
 	f, err := os.Open(path)
 	if err != nil {
-		return errorResult("%v", err)
+		return e.fsError(err)
 	}
 	defer func() { _ = f.Close() }()
 	fi, err := f.Stat()
 	if err != nil {
-		return errorResult("%v", err)
+		return e.fsError(err)
 	}
 	if fi.IsDir() {
 		return errorResult("%s is a directory; use glob to list files", e.display(path))
@@ -81,13 +81,13 @@ func (e *Env) readFile(path string, offset, limit int) Result {
 		return errorResult("%s is a binary file of %d bytes; inspect it with the shell", e.display(path), fi.Size())
 	}
 	if _, err := f.Seek(0, io.SeekStart); err != nil {
-		return errorResult("%v", err)
+		return e.fsError(err)
 	}
 
 	var out strings.Builder
 	data, err := io.ReadAll(io.LimitReader(f, 64<<20))
 	if err != nil {
-		return errorResult("%v", err)
+		return e.fsError(err)
 	}
 	lines := splitLines(string(data))
 	if len(lines) == 0 {
@@ -186,7 +186,7 @@ func (e *Env) planChange(path string, old []byte, existed bool, new []byte) (*Ca
 	return &Call{Check: check, writes: []string{real}, run: func(RunContext) Result {
 		// The file must still be what was planned against.
 		if now, err := currentHash(path); err != nil {
-			return errorResult("%v", err)
+			return e.fsError(err)
 		} else if now != c.Before {
 			return errorResult("%s changed since this call was prepared; read it again", e.display(path))
 		}
@@ -195,10 +195,10 @@ func (e *Env) planChange(path string, old []byte, existed bool, new []byte) (*Ca
 			perm = fi.Mode().Perm()
 		}
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-			return errorResult("%v", err)
+			return e.fsError(err)
 		}
 		if err := sessionfs.WriteFileAtomic(path, new, perm); err != nil {
-			return errorResult("%v", err)
+			return e.fsError(err)
 		}
 		shown := e.display(path)
 		ch := Change{Path: shown, Diff: unifiedDiff(shown, string(old), string(new)), Created: !existed}

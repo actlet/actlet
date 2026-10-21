@@ -75,7 +75,7 @@ func (e *Env) glob(ctx context.Context, dir, pattern string) Result {
 		paths, err = walkGlob(ctx, dir, pattern)
 	}
 	if err != nil {
-		return errorResult("%v", err)
+		return e.fsError(err)
 	}
 	if len(paths) == 0 {
 		return Result{Output: "no files match"}
@@ -326,7 +326,7 @@ func (e *Env) walkGrep(ctx context.Context, target string, re *regexp.Regexp, gl
 		return nil
 	})
 	if err != nil {
-		return errorResult("%v", err)
+		return e.fsError(err)
 	}
 	return g.result()
 }
