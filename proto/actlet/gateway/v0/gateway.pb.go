@@ -1323,9 +1323,11 @@ func (x *LocalAttach) GetDisabled() bool {
 }
 
 // Budget limits the session's use of one resource, over all its runs:
-// TIME counts active run time, MONEY the cost the gateway reports with
-// model and bridged tool calls, TOKENS the models' input and output
-// tokens, and DISK the session folder's size.
+// TIME counts wall-clock time since the session first started, paused
+// time included, MONEY the cost the gateway reports with model and
+// bridged tool calls, TOKENS the models' input and output tokens, and
+// DISK the size of the whole session folder: task.json, inputs,
+// workspace, output and Actlet's own state.
 type Budget struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Kind  BudgetKind             `protobuf:"varint,1,opt,name=kind,proto3,enum=actlet.gateway.v0.BudgetKind" json:"kind,omitempty"`

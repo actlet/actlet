@@ -111,6 +111,8 @@ type BudgetState struct {
 	Currency    string
 	// State is "ok", "alerted", "exhausted" or "waiting".
 	State string
+	// At is when the session reported it.
+	At time.Time
 }
 
 // Feedback is feedback the agent sent.
@@ -537,7 +539,7 @@ func (s *Session) Apply(ev *gatewayv0.ActivityEvent) {
 		s.Budgets = nil
 		for _, u := range b.BudgetStatus.GetBudgets() {
 			s.Budgets = append(s.Budgets, BudgetState{Kind: u.GetKind(), Limit: u.GetLimit(), Used: u.GetUsed(),
-				Currency: Sanitize(u.GetCurrency()), State: Sanitize(u.GetState())})
+				Currency: Sanitize(u.GetCurrency()), State: Sanitize(u.GetState()), At: at})
 		}
 	case *gatewayv0.ActivityEvent_Feedback:
 		s.Feedback = append(s.Feedback, Feedback{Worker: Sanitize(ev.GetWorker()), Kind: Sanitize(b.Feedback.GetKind()),

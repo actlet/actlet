@@ -10,6 +10,7 @@ package actlet.session.v0;
 
 import "actlet/gateway/v0/gateway.proto";
 import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
 
 option go_package = "github.com/actlet/actlet/internal/session/sessionpb";
 
@@ -23,6 +24,9 @@ message Started {
   bool resumed = 4;
   string worker_id = 5;
   string actlet_version = 6;
+  // When the session's first run started. Every run records it again, so
+  // the time budget, wall-clock time since then, counts from it.
+  google.protobuf.Timestamp first_started = 7;
 }
 
 // Config is the effective configuration of a run: the profile, within the

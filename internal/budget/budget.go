@@ -1,6 +1,6 @@
-// Package budget tracks a session's budgets: active run time, the cost
-// the gateway reports, model tokens and the session folder's size, over
-// all the session's runs. When a budget reaches its alert threshold, the
+// Package budget tracks a session's budgets: wall-clock time since the
+// session first started, the cost the gateway reports, model tokens and
+// the session folder's size, over all the session's runs. When a budget reaches its alert threshold, the
 // agent is told once; when it is used up, the session is stopped, pauses,
 // or idles until the budget is raised or reset, as its profile says.
 //
@@ -65,8 +65,9 @@ type Hooks struct {
 
 // Restored is what earlier runs recorded.
 type Restored struct {
-	// ActiveTime is the earlier runs' active time.
-	ActiveTime time.Duration
+	// FirstStart is when the session first started; zero for a session
+	// starting now.
+	FirstStart time.Time
 	// Offsets are the usage totals budgets were reset at.
 	Offsets map[Kind]float64
 	// Alerted are the limits at which each budget's alert was given.
@@ -80,8 +81,7 @@ type Tracker struct {
 	mu       sync.Mutex
 	budgets  map[Kind]*gatewayv0.Budget
 	order    []Kind
-	start    time.Time
-	baseTime time.Duration
+	first    time.Time // the session's first start
 	tokens   float64
 	cost     float64
 	currency string
@@ -96,7 +96,8 @@ type Tracker struct {
 	warned    bool          // about a cost in another currency
 }
 
-// New returns a tracker for the budgets, starting this run now.
+// New returns a tracker for the budgets, of a session that first started
+// at r.FirstStart, or now.
 func New(budgets []*gatewayv0.Budget, r Restored, h Hooks) *Tracker {
 	if h.Now == nil {
 		h.Now = time.Now
@@ -105,9 +106,12 @@ func New(budgets []*gatewayv0.Budget, r Restored, h Hooks) *Tracker {
 		h.Logger = slog.Default()
 	}
 	t := &Tracker{
-		h: h, start: h.Now(), baseTime: r.ActiveTime,
+		h: h, first: r.FirstStart,
 		offsets: map[Kind]float64{}, alerted: map[Kind]float64{},
 		exhausted: map[Kind]float64{}, waiting: map[Kind]bool{}, wake: make(chan struct{}),
+	}
+	if t.first.IsZero() {
+		t.first = h.Now()
 	}
 	for k, v := range r.Offsets {
 		t.offsets[k] = v
@@ -200,7 +204,7 @@ func (t *Tracker) usedLocked(k Kind) float64 {
 	var total float64
 	switch k {
 	case Time:
-		total = (t.baseTime + t.h.Now().Sub(t.start)).Seconds()
+		total = t.h.Now().Sub(t.first).Seconds()
 	case Money:
 		total = t.cost
 	case Tokens:

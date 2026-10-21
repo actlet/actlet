@@ -102,12 +102,13 @@ func (p *probe) lastStatus() *gatewayv0.BudgetStatus {
 	return p.status[len(p.status)-1]
 }
 
-// Active time counts earlier runs; the alert is given once, and the limit
-// stops the session once.
+// Time counts from the session's first start, across runs and the pauses
+// between them; the alert is given once, and the limit stops the session
+// once.
 func TestTimeAlertAndKill(t *testing.T) {
 	p := newProbe()
 	tr := New([]*gatewayv0.Budget{{Kind: Time, Limit: 10, AlertAtPercent: 50, OnExhaust: gatewayv0.BudgetAction_BUDGET_ACTION_KILL}},
-		Restored{ActiveTime: 3 * time.Second}, p.hooks())
+		Restored{FirstStart: p.now.Add(-3 * time.Second)}, p.hooks())
 	tr.check("start")
 	if p.events() != "" || p.lastStatus().GetReason() != "start" || p.lastStatus().GetBudgets()[0].GetUsed() != 3 {
 		t.Fatalf("start: events %q, status %v", p.events(), p.lastStatus())
@@ -201,6 +202,34 @@ func TestResetCurrencyAndPause(t *testing.T) {
 	// After the reset at 1 EUR, 1.5 EUR in all is 0.5 EUR of the budget.
 	if p.events() != "money exhausted, tokens exhausted" || !strings.Contains(p.actions(), "pause: tokens budget used up") {
 		t.Errorf("events %q, actions %q", p.events(), p.actions())
+	}
+}
+
+// A session resumed after a long pause can be past its time budget at
+// once; a reset starts the count again from the reset.
+func TestTimeCountsPausesAndResets(t *testing.T) {
+	p := newProbe()
+	b := []*gatewayv0.Budget{{Kind: Time, Limit: 60, OnExhaust: gatewayv0.BudgetAction_BUDGET_ACTION_WAIT,
+		WaitMode: gatewayv0.BudgetWaitMode_BUDGET_WAIT_MODE_PAUSE}}
+	first := p.now.Add(-2 * time.Hour) // a run of a minute, then a long pause
+	tr := New(b, Restored{FirstStart: first}, p.hooks())
+	tr.check("start")
+	if p.events() != "time exhausted" || !strings.Contains(p.actions(), "pause: time budget used up (2h0m0s of 1m0s)") {
+		t.Fatalf("resumed: events %q, actions %q", p.events(), p.actions())
+	}
+	resets := tr.Reset([]Kind{Time})
+	if len(resets) != 1 || resets[0].GetOffset() != (2*time.Hour).Seconds() {
+		t.Fatalf("resets %v", resets)
+	}
+	tr.Apply(resets)
+	p.advance(10 * time.Second)
+	if u := tr.Status().GetBudgets()[0]; u.GetUsed() != 10 || u.GetState() != "ok" {
+		t.Errorf("10s after the reset: %v", u)
+	}
+	// A later run restores the first start and the reset.
+	tr = New(b, Restored{FirstStart: first, Offsets: map[Kind]float64{Time: resets[0].GetOffset()}}, p.hooks())
+	if u := tr.Status().GetBudgets()[0]; u.GetUsed() != 10 {
+		t.Errorf("restored: %v", u)
 	}
 }
 

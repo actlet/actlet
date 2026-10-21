@@ -195,9 +195,11 @@ message LocalAttach {
 }
 
 // Budget limits the session's use of one resource, over all its runs:
-// TIME counts active run time, MONEY the cost the gateway reports with
-// model and bridged tool calls, TOKENS the models' input and output
-// tokens, and DISK the session folder's size.
+// TIME counts wall-clock time since the session first started, paused
+// time included, MONEY the cost the gateway reports with model and
+// bridged tool calls, TOKENS the models' input and output tokens, and
+// DISK the size of the whole session folder: task.json, inputs,
+// workspace, output and Actlet's own state.
 message Budget {
   BudgetKind kind = 1;
   // The limit in the kind's unit: seconds for TIME, currency units for

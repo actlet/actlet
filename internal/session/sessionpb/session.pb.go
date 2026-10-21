@@ -17,6 +17,7 @@ import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	durationpb "google.golang.org/protobuf/types/known/durationpb"
+	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
@@ -40,6 +41,9 @@ type Started struct {
 	Resumed       bool   `protobuf:"varint,4,opt,name=resumed,proto3" json:"resumed,omitempty"`
 	WorkerId      string `protobuf:"bytes,5,opt,name=worker_id,json=workerId,proto3" json:"worker_id,omitempty"`
 	ActletVersion string `protobuf:"bytes,6,opt,name=actlet_version,json=actletVersion,proto3" json:"actlet_version,omitempty"`
+	// When the session's first run started. Every run records it again, so
+	// the time budget, wall-clock time since then, counts from it.
+	FirstStarted  *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=first_started,json=firstStarted,proto3" json:"first_started,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -114,6 +118,13 @@ func (x *Started) GetActletVersion() string {
 		return x.ActletVersion
 	}
 	return ""
+}
+
+func (x *Started) GetFirstStarted() *timestamppb.Timestamp {
+	if x != nil {
+		return x.FirstStarted
+	}
+	return nil
 }
 
 // Config is the effective configuration of a run: the profile, within the
@@ -716,7 +727,7 @@ var File_internal_session_sessionpb_session_proto protoreflect.FileDescriptor
 
 const file_internal_session_sessionpb_session_proto_rawDesc = "" +
 	"\n" +
-	"(internal/session/sessionpb/session.proto\x12\x11actlet.session.v0\x1a\x1factlet/gateway/v0/gateway.proto\x1a\x1egoogle/protobuf/duration.proto\"\xcf\x01\n" +
+	"(internal/session/sessionpb/session.proto\x12\x11actlet.session.v0\x1a\x1factlet/gateway/v0/gateway.proto\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\x90\x02\n" +
 	"\aStarted\x12\x14\n" +
 	"\x05epoch\x18\x01 \x01(\x04R\x05epoch\x12\x1d\n" +
 	"\n" +
@@ -724,7 +735,8 @@ const file_internal_session_sessionpb_session_proto_rawDesc = "" +
 	"\x06config\x18\x03 \x01(\v2\x19.actlet.session.v0.ConfigR\x06config\x12\x18\n" +
 	"\aresumed\x18\x04 \x01(\bR\aresumed\x12\x1b\n" +
 	"\tworker_id\x18\x05 \x01(\tR\bworkerId\x12%\n" +
-	"\x0eactlet_version\x18\x06 \x01(\tR\ractletVersion\"\xcc\x05\n" +
+	"\x0eactlet_version\x18\x06 \x01(\tR\ractletVersion\x12?\n" +
+	"\rfirst_started\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\ffirstStarted\"\xcc\x05\n" +
 	"\x06Config\x12\x1d\n" +
 	"\n" +
 	"profile_id\x18\x01 \x01(\tR\tprofileId\x12'\n" +
@@ -796,35 +808,37 @@ func file_internal_session_sessionpb_session_proto_rawDescGZIP() []byte {
 
 var file_internal_session_sessionpb_session_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
 var file_internal_session_sessionpb_session_proto_goTypes = []any{
-	(*Started)(nil),             // 0: actlet.session.v0.Started
-	(*Config)(nil),              // 1: actlet.session.v0.Config
-	(*Command)(nil),             // 2: actlet.session.v0.Command
-	(*ConfigRevision)(nil),      // 3: actlet.session.v0.ConfigRevision
-	(*BudgetEvent)(nil),         // 4: actlet.session.v0.BudgetEvent
-	(*Fork)(nil),                // 5: actlet.session.v0.Fork
-	(*StepDone)(nil),            // 6: actlet.session.v0.StepDone
-	(*Ended)(nil),               // 7: actlet.session.v0.Ended
-	(*durationpb.Duration)(nil), // 8: google.protobuf.Duration
-	(*v0.Budget)(nil),           // 9: actlet.gateway.v0.Budget
-	(*v0.CompactionPolicy)(nil), // 10: actlet.gateway.v0.CompactionPolicy
-	(v0.BudgetKind)(0),          // 11: actlet.gateway.v0.BudgetKind
-	(*v0.Lineage)(nil),          // 12: actlet.gateway.v0.Lineage
+	(*Started)(nil),               // 0: actlet.session.v0.Started
+	(*Config)(nil),                // 1: actlet.session.v0.Config
+	(*Command)(nil),               // 2: actlet.session.v0.Command
+	(*ConfigRevision)(nil),        // 3: actlet.session.v0.ConfigRevision
+	(*BudgetEvent)(nil),           // 4: actlet.session.v0.BudgetEvent
+	(*Fork)(nil),                  // 5: actlet.session.v0.Fork
+	(*StepDone)(nil),              // 6: actlet.session.v0.StepDone
+	(*Ended)(nil),                 // 7: actlet.session.v0.Ended
+	(*timestamppb.Timestamp)(nil), // 8: google.protobuf.Timestamp
+	(*durationpb.Duration)(nil),   // 9: google.protobuf.Duration
+	(*v0.Budget)(nil),             // 10: actlet.gateway.v0.Budget
+	(*v0.CompactionPolicy)(nil),   // 11: actlet.gateway.v0.CompactionPolicy
+	(v0.BudgetKind)(0),            // 12: actlet.gateway.v0.BudgetKind
+	(*v0.Lineage)(nil),            // 13: actlet.gateway.v0.Lineage
 }
 var file_internal_session_sessionpb_session_proto_depIdxs = []int32{
 	1,  // 0: actlet.session.v0.Started.config:type_name -> actlet.session.v0.Config
-	8,  // 1: actlet.session.v0.Config.stop_grace:type_name -> google.protobuf.Duration
-	8,  // 2: actlet.session.v0.Config.signal_deadline:type_name -> google.protobuf.Duration
-	9,  // 3: actlet.session.v0.Config.budgets:type_name -> actlet.gateway.v0.Budget
-	10, // 4: actlet.session.v0.Config.compaction:type_name -> actlet.gateway.v0.CompactionPolicy
-	8,  // 5: actlet.session.v0.Command.stop_grace:type_name -> google.protobuf.Duration
-	1,  // 6: actlet.session.v0.ConfigRevision.config:type_name -> actlet.session.v0.Config
-	11, // 7: actlet.session.v0.BudgetEvent.kind:type_name -> actlet.gateway.v0.BudgetKind
-	12, // 8: actlet.session.v0.Fork.lineage:type_name -> actlet.gateway.v0.Lineage
-	9,  // [9:9] is the sub-list for method output_type
-	9,  // [9:9] is the sub-list for method input_type
-	9,  // [9:9] is the sub-list for extension type_name
-	9,  // [9:9] is the sub-list for extension extendee
-	0,  // [0:9] is the sub-list for field type_name
+	8,  // 1: actlet.session.v0.Started.first_started:type_name -> google.protobuf.Timestamp
+	9,  // 2: actlet.session.v0.Config.stop_grace:type_name -> google.protobuf.Duration
+	9,  // 3: actlet.session.v0.Config.signal_deadline:type_name -> google.protobuf.Duration
+	10, // 4: actlet.session.v0.Config.budgets:type_name -> actlet.gateway.v0.Budget
+	11, // 5: actlet.session.v0.Config.compaction:type_name -> actlet.gateway.v0.CompactionPolicy
+	9,  // 6: actlet.session.v0.Command.stop_grace:type_name -> google.protobuf.Duration
+	1,  // 7: actlet.session.v0.ConfigRevision.config:type_name -> actlet.session.v0.Config
+	12, // 8: actlet.session.v0.BudgetEvent.kind:type_name -> actlet.gateway.v0.BudgetKind
+	13, // 9: actlet.session.v0.Fork.lineage:type_name -> actlet.gateway.v0.Lineage
+	10, // [10:10] is the sub-list for method output_type
+	10, // [10:10] is the sub-list for method input_type
+	10, // [10:10] is the sub-list for extension type_name
+	10, // [10:10] is the sub-list for extension extendee
+	0,  // [0:10] is the sub-list for field type_name
 }
 
 func init() { file_internal_session_sessionpb_session_proto_init() }

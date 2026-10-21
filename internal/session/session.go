@@ -21,6 +21,7 @@ import (
 
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/actlet/actlet/internal/agent"
 	"github.com/actlet/actlet/internal/budget"
@@ -108,10 +109,6 @@ type Recovered struct {
 	// Lineage is set when the session was forked from another session's
 	// checkpoint.
 	Lineage *gatewayv0.Lineage
-
-	// The current run's first and latest record times, for its active
-	// time.
-	runStart, runLast time.Time
 }
 
 func steerOf(c *sessionpb.Command) agent.Steer {
@@ -167,7 +164,6 @@ func Recover(f sessionfs.Folder) (*Recovered, error) {
 	for {
 		b, err := r.Next()
 		if errors.Is(err, io.EOF) || errors.Is(err, journal.ErrTornTail) {
-			rec.endRun()
 			return rec, nil // opening the journal for writing truncates a torn tail
 		}
 		if err != nil {
@@ -181,22 +177,7 @@ func Recover(f sessionfs.Folder) (*Recovered, error) {
 	}
 }
 
-// endRun adds a run's active time: from its start to its last record.
-func (r *Recovered) endRun() {
-	if !r.runStart.IsZero() && r.runLast.After(r.runStart) {
-		r.Budget.ActiveTime += r.runLast.Sub(r.runStart)
-	}
-	r.runStart, r.runLast = time.Time{}, time.Time{}
-}
-
 func (r *Recovered) apply(jr journal.Record) error {
-	if jr.Kind == kindStarted {
-		r.endRun()
-		r.runStart = jr.Time
-	}
-	if jr.Time.After(r.runLast) {
-		r.runLast = jr.Time
-	}
 	if agent.IsRecord(jr.Kind) {
 		if jr.Kind == agent.KindCheckpoint {
 			// Keep the parts of a packed checkpoint, which come just
@@ -220,6 +201,14 @@ func (r *Recovered) apply(jr journal.Record) error {
 		r.Epochs++
 		r.Config = m.GetConfig()
 		r.Ended = nil
+		if r.Budget.FirstStart.IsZero() {
+			// Journals written before runs recorded it: the first run's
+			// record says when it started.
+			r.Budget.FirstStart = jr.Time
+			if m.GetFirstStarted() != nil {
+				r.Budget.FirstStart = m.GetFirstStarted().AsTime()
+			}
+		}
 	case kindCommand:
 		var m sessionpb.Command
 		if err := proto.Unmarshal(jr.Data, &m); err != nil {
@@ -323,6 +312,8 @@ type Session struct {
 	log *slog.Logger
 	j   *journal.Writer
 
+	firstStart time.Time // when the session's first run started
+
 	cmdMu    sync.Mutex // serialises commands
 	commands map[string]*sessionpb.Command
 	steerMu  sync.Mutex
@@ -397,9 +388,14 @@ func Start(p Params) (*Session, error) {
 	s.soft, s.softCancel = context.WithCancel(context.Background())
 	s.hard, s.hardCancel = context.WithCancel(context.Background())
 
+	s.firstStart = time.Now()
+	if p.Recovered != nil && !p.Recovered.Budget.FirstStart.IsZero() {
+		s.firstStart = p.Recovered.Budget.FirstStart
+	}
 	started := &sessionpb.Started{
 		Epoch: p.Epoch, SessionId: p.SessionID, Config: p.Config,
 		Resumed: p.Recovered != nil, WorkerId: p.WorkerID, ActletVersion: p.Version,
+		FirstStarted: timestamppb.New(s.firstStart),
 	}
 	if err := s.record(context.Background(), kindStarted, started); err != nil {
 		_ = j.Close()
@@ -428,6 +424,7 @@ func (s *Session) startBudgets() {
 	if s.p.Recovered != nil {
 		restored = s.p.Recovered.Budget
 	}
+	restored.FirstStart = s.firstStart
 	s.budget = budget.New(s.p.Config.GetBudgets(), restored, budget.Hooks{
 		Record: func(ev *sessionpb.BudgetEvent) error { return s.record(context.Background(), kindBudget, ev) },
 		Emit: func(st *gatewayv0.BudgetStatus) {

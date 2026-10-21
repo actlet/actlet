@@ -12,6 +12,7 @@ import (
 
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/actlet/actlet/internal/view"
 	attachv0 "github.com/actlet/actlet/proto/actlet/attach/v0"
 	gatewayv0 "github.com/actlet/actlet/proto/actlet/gateway/v0"
 )
@@ -341,6 +342,13 @@ func TestStatusBudgets(t *testing.T) {
 	m.SetClock(func() time.Time { return epoch0.Add(time.Minute) })
 	if !strings.Contains(status(), m.st.err.Render("1m0s")) {
 		t.Errorf("time past its limit isn't in the error colour: %q", ansi.Strip(status()))
+	}
+	// Once a status has come, time counts on from it: wall-clock time
+	// since the session first started, which may be longer than this run.
+	m.sess.Budgets = []view.BudgetState{{Kind: gatewayv0.BudgetKind_BUDGET_KIND_TIME, Limit: 40, Used: 100, State: "exhausted", At: epoch0}}
+	m.SetClock(func() time.Time { return epoch0.Add(20 * time.Second) })
+	if plain := ansi.Strip(status()); !strings.Contains(plain, "2m0s/40s") {
+		t.Errorf("no 2m0s/40s in %q", plain)
 	}
 	if got := shortDuration(90 * time.Minute); got != "1h30m" {
 		t.Errorf("shortDuration %q", got)

@@ -96,7 +96,7 @@ A budget limits what the session uses over all its runs:
 
 | Kind | Counts | Unit |
 |---|---|---|
-| `time` | active run time: time inside `actlet run`, not while paused or exited | seconds |
+| `time` | wall-clock time since the session first started, paused time included; a reset counts from the reset | seconds |
 | `money` | the cost the gateway reports with each model call and bridged tool call, in the budget's currency; costs in another currency don't count | currency units |
 | `tokens` | the models' input and output tokens, the agent's, its subagents' and the `llm` tool's | tokens |
 | `disk` | the session folder's size, looked at every 15 seconds and shortly after each tool call | bytes |
@@ -106,6 +106,8 @@ At `alert_at_percent`, the agent is told once, in a notice before its next model
 - `kill` stops the session, with the profile's `stop_grace`; it exits 4.
 - `wait` with `wait_mode: pause` pauses it; it exits 3. A new run with the same budget pauses again at once; once the orchestrator raises the budget, a new run carries on.
 - `wait` with `wait_mode: idle` keeps the session running but holds model calls and bridged tool calls back until a [profile update](#updating-a-running-session) raises or resets the budget. Running tool calls finish.
+
+The time budget counts from the start of the session's first run, which every run records in the session journal, so a paused session's clock keeps running. A session resumed after a long pause can therefore be past its time budget at once; the orchestrator raises or resets the budget with a profile update when it wants the session to carry on. A forked session counts from its own first run.
 
 Usage is checked as it is reported, before budget-consuming work starts, so a budget can be overshot by the one call that crosses it. Alerts and limits reached are recorded in the session journal before Actlet acts on them, and `budget_status` activity events report the budgets at the start of a run, at alerts and limits, and when they change. Viewers show each budget's use; the agent can ask with the `budget_status` tool.
 

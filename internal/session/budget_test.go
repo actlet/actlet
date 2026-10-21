@@ -46,14 +46,14 @@ func TestTimeBudgetStops(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if rec.Budget.Alerted[budget.Time] != 2 || rec.Budget.ActiveTime < 2*time.Second || len(rec.Steers) != 1 || !rec.Steers[0].System {
+	if rec.Budget.Alerted[budget.Time] != 2 || time.Since(rec.Budget.FirstStart) < 2*time.Second || len(rec.Steers) != 1 || !rec.Steers[0].System {
 		t.Errorf("recovered %+v, steers %+v", rec.Budget, rec.Steers)
 	}
 }
 
 // A budget that waits by pausing pauses the session; a run with the same
 // budget pauses again at once, and one with a raised budget completes,
-// without alerting again.
+// without alerting again. Every run counts from the first one's start.
 func TestBudgetPausesUntilRaised(t *testing.T) {
 	f := folder(t)
 	b := &gatewayv0.Budget{Kind: budget.Time, Limit: 3, AlertAtPercent: 50,
@@ -62,6 +62,11 @@ func TestBudgetPausesUntilRaised(t *testing.T) {
 	if o := outcome(t, r); o.State != gatewayv0.SessionState_SESSION_STATE_PAUSED || !strings.Contains(o.Reason, "pausing until it is raised") {
 		t.Fatalf("first run: %+v", o)
 	}
+	rec, err := Recover(f)
+	if err != nil || rec.Budget.FirstStart.IsZero() {
+		t.Fatalf("recovered %+v, %v", rec, err)
+	}
+	first := rec.Budget.FirstStart
 	r = start(t, f, `{"steps":20,"step":"300ms"}`, withBudget(b))
 	if o := outcome(t, r); o.State != gatewayv0.SessionState_SESSION_STATE_PAUSED {
 		t.Fatalf("second run: %+v", o)
@@ -72,7 +77,10 @@ func TestBudgetPausesUntilRaised(t *testing.T) {
 		t.Fatalf("third run: %+v", o)
 	}
 	// The alert at the first limit came once; at 50% of 60s, none came.
-	rec, _ := Recover(f)
+	rec, _ = Recover(f)
+	if !rec.Budget.FirstStart.Equal(first) {
+		t.Errorf("first start %v after three runs, was %v", rec.Budget.FirstStart, first)
+	}
 	notices := 0
 	for _, s := range rec.Steers {
 		if s.CommandID == "budget-time-3" {
