@@ -81,33 +81,41 @@ ACTLET_THEME=mine actlet-cli replay play run.actrec     # ~/.config/actlet/theme
 actlet-cli attach -direct 127.0.0.1:7600 -theme ./ocean.yaml
 ```
 
-A theme other than the built-in ones is a file. By name, it is `<name>.yaml`, `.yml` or `.json` in `$XDG_CONFIG_HOME/actlet/themes`, or `~/.config/actlet/themes` when `XDG_CONFIG_HOME` isn't set; the flag and `ACTLET_THEME` may also give a file's path. A profile only names a theme, built in or in the viewer's own themes folder, so that it can't make a viewer read files elsewhere. A theme gives only the colours it changes and takes the rest from its base, `dark` unless it names another built-in theme:
+A theme other than the built-in ones is a file. By name, it is `<name>.yaml`, `.yml` or `.json` in `$XDG_CONFIG_HOME/actlet/themes`, or `~/.config/actlet/themes` when `XDG_CONFIG_HOME` isn't set; the flag and `ACTLET_THEME` may also give a file's path. A profile only names a theme, built in or in the viewer's own themes folder, so that it can't make a viewer read files elsewhere.
+
+### The theme format
+
+A theme is plain data, YAML or JSON, the same for every viewer of Actlet's: the terminal viewer reads it, and a web viewer can read the same file. It gives colours and emphasis by token. The built-in themes are files in this format, in [`themes/`](../themes), and give every token; a theme file gives only the tokens it changes and takes the rest from its base, `dark` unless it names another built-in theme:
 
 ```yaml
 # ~/.config/actlet/themes/mine.yaml
+name: mine             # optional; the file's name otherwise
 base: light            # dark (the default), light or plain
 colors:
-  accent: "#d33682"    # the title, the active tab, the prompt, the shown worker
+  accent: "#d33682"
   background: none     # the terminal's own background
   ok: "2"              # an ANSI colour number, 0 to 255
+emphasis:
+  key: [bold, underline]
 ```
 
-Each colour is `#rrggbb`, `#rgb`, an ANSI colour number from 0 to 255, or `none` for the terminal's own:
+Each colour is `#rrggbb`, `#rgb`, an ANSI colour number from 0 to 255, or `none` for the terminal's own. `emphasis` adds attributes to a token's text: `bold`, `italic`, `underline` and `reverse`; it replaces the base's emphasis of the tokens it names. The tokens:
 
-| Colour | Used for |
+| Token | Used for |
 |---|---|
 | `background` | the screen |
 | `panel` | the header, the sidebar, the status line and the file viewer |
-| `selection` | the selected tool call, file or worker |
+| `selection` | the selected tool call, file or worker (with `reverse`, in reverse video) |
 | `border` | separator lines, rules and borders |
 | `text`, `muted`, `faint` | text, less important text, hints |
 | `accent` | the title, the active tab, the prompt, headings and the worker shown |
 | `agent`, `subagent`, `operator` | the speakers' labels |
-| `ok`, `error`, `warning` | done, failed, and running or warned: tool calls, workers, the session's state, diffs |
+| `ok`, `error`, `warning` | done, failed, and running or warned: tool calls, workers, the session's state |
 | `attach` | the badge of a viewer attached from elsewhere |
+| `added`, `removed`, `hunk` | diffs: added and removed lines, hunk headers |
 | `keyword`, `string`, `number`, `comment`, `key`, `function`, `punctuation` | syntax highlighting |
 
-A file that can't be read, isn't a theme or names an unknown colour leaves the viewer on `dark`, and the status line says why. Theme files are at most 64 KiB.
+Unknown fields, tokens and attributes are errors. A file that can't be read or isn't a valid theme leaves the viewer on `dark`, and the status line says why. Theme files are at most 64 KiB. New tokens may be added; existing ones keep their names.
 
 ## Searching a recording
 

@@ -2,6 +2,7 @@ package tui
 
 import (
 	"image/color"
+	"slices"
 	"strings"
 
 	"charm.land/bubbles/v2/textinput"
@@ -13,7 +14,6 @@ import (
 // than for every line drawn.
 type styles struct {
 	theme Theme
-	plain bool // no colours: emphasis by attributes only
 
 	// Background escape sequences of the screen, of panels and of a
 	// selected row, which paint keeps under styled text.
@@ -29,9 +29,9 @@ type styles struct {
 	logo, tabOn, tabOff, badge, replayBadge lipgloss.Style
 	// Speakers: their bar and their name, by speaker.
 	speaker map[string]speakerStyle
-	// A selected row, and the sidebar's selected worker.
-	selected, selMarker lipgloss.Style
-	sideHead            lipgloss.Style
+	// The sidebar's marker of the worker shown.
+	selMarker lipgloss.Style
+	sideHead  lipgloss.Style
 	// The status line's state, by kind, and its other segments.
 	state             map[string]lipgloss.Style
 	segment, segFaint lipgloss.Style
@@ -76,61 +76,55 @@ func bgSeq(c string) string {
 }
 
 func newStyles(t Theme) *styles {
-	p := t.Colors
-	fg := func(c string) lipgloss.Style { return lipgloss.NewStyle().Foreground(colorOf(c)) }
-	// A pill: dark text on a colour, or reverse video without colours.
-	pill := func(c string) lipgloss.Style {
+	col := func(tok string) string { return t.Colors[tok] }
+	has := func(tok, attr string) bool { return slices.Contains(t.Emphasis[tok], attr) }
+	// fg is a token's colour, with its emphasis.
+	fg := func(tok string) lipgloss.Style {
+		return lipgloss.NewStyle().Foreground(colorOf(col(tok))).
+			Bold(has(tok, "bold")).Italic(has(tok, "italic")).Underline(has(tok, "underline")).Reverse(has(tok, "reverse"))
+	}
+	// A pill: the background's colour on a token's, or reverse video
+	// when either has none.
+	pill := func(tok string) lipgloss.Style {
+		on, c := col("background"), col(tok)
 		if c == "" || c == "none" {
 			return lipgloss.NewStyle().Reverse(true).Bold(true).Padding(0, 1)
 		}
-		on := p.Background
 		if on == "" || on == "none" {
 			on = "#000000"
 		}
 		return lipgloss.NewStyle().Background(colorOf(c)).Foreground(colorOf(on)).Bold(true).Padding(0, 1)
 	}
-	s := &styles{theme: t, bg: bgSeq(p.Background), panelBg: bgSeq(p.Panel), selBg: bgSeq(p.Selection)}
-	s.plain = true
-	for _, c := range p.fields() {
-		if *c != "" && *c != "none" {
-			s.plain = false
-		}
+	s := &styles{theme: t, bg: bgSeq(col("background")), panelBg: bgSeq(col("panel")), selBg: bgSeq(col("selection"))}
+	if has("selection", "reverse") {
+		s.selBg += ansi.Style{}.Reverse(true).String()
 	}
-	s.text, s.muted, s.faint = fg(p.Text), fg(p.Muted), fg(p.Faint)
-	s.bold = fg(p.Text).Bold(true)
-	s.accent = fg(p.Accent).Bold(true)
-	s.ok, s.err, s.warn = fg(p.OK), fg(p.Error), fg(p.Warning)
-	s.add, s.del, s.hunk = fg(p.OK), fg(p.Error), fg(p.Subagent)
-	s.border = fg(p.Border)
-	s.logo = pill(p.Accent)
-	s.tabOn = pill(p.Accent)
-	s.tabOff = fg(p.Muted).Padding(0, 1)
-	s.badge = pill(p.Attach)
-	s.replayBadge = pill(p.Subagent)
+	s.text, s.muted, s.faint = fg("text"), fg("muted"), fg("faint")
+	s.bold = fg("text").Bold(true)
+	s.accent = fg("accent")
+	s.ok, s.err, s.warn = fg("ok"), fg("error"), fg("warning")
+	s.add, s.del, s.hunk = fg("added"), fg("removed"), fg("hunk")
+	s.border = fg("border")
+	s.logo = pill("accent")
+	s.tabOn = pill("accent")
+	s.tabOff = fg("muted").Padding(0, 1)
+	s.badge = pill("attach")
+	s.replayBadge = pill("subagent")
 	s.speaker = map[string]speakerStyle{}
-	for name, c := range map[string]string{spAgent: p.Agent, spSubagent: p.Subagent, spOperator: p.Operator} {
-		s.speaker[name] = speakerStyle{bar: fg(c), name: fg(c).Bold(true)}
+	for _, name := range []string{spAgent, spSubagent, spOperator} {
+		s.speaker[name] = speakerStyle{bar: fg(name), name: fg(name).Bold(true)}
 	}
-	s.selected = lipgloss.NewStyle().Background(colorOf(p.Selection))
-	s.selMarker = fg(p.Accent).Bold(true)
-	s.sideHead = fg(p.Accent).Bold(true)
+	s.selMarker = fg("accent").Bold(true)
+	s.sideHead = fg("accent").Bold(true).Underline(has("accent", "underline") || col("accent") == "none")
 	s.state = map[string]lipgloss.Style{
-		stRunning: pill(p.Warning), stDone: pill(p.OK), stFailed: pill(p.Error), stPaused: pill(p.Operator),
+		stRunning: pill("warning"), stDone: pill("ok"), stFailed: pill("error"), stPaused: pill("operator"),
 	}
-	s.segment = fg(p.Text)
-	s.segFaint = fg(p.Faint)
-	s.key = fg(p.Key)
-	s.popupBorder = fg(p.Border)
-	s.synKeyword, s.synString, s.synNumber = fg(p.Keyword), fg(p.String), fg(p.Number)
-	s.synComment, s.synKey, s.synFunc, s.synPunct = fg(p.Comment).Italic(true), fg(p.Key), fg(p.Function), fg(p.Punctuation)
-	if s.plain {
-		s.tabOff = lipgloss.NewStyle().Padding(0, 1)
-		s.selected = lipgloss.NewStyle().Reverse(true)
-		s.selBg = ansi.Style{}.Reverse(true).String()
-		s.accent = lipgloss.NewStyle().Bold(true)
-		s.sideHead = lipgloss.NewStyle().Bold(true).Underline(true)
-		s.synComment = lipgloss.NewStyle()
-	}
+	s.segment = fg("text")
+	s.segFaint = fg("faint")
+	s.key = fg("key")
+	s.popupBorder = fg("border")
+	s.synKeyword, s.synString, s.synNumber = fg("keyword"), fg("string"), fg("number")
+	s.synComment, s.synKey, s.synFunc, s.synPunct = fg("comment"), fg("key"), fg("function"), fg("punctuation")
 	return s
 }
 

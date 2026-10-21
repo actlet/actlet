@@ -1,0 +1,32 @@
+# Actlet's dark theme, the default. Viewers share this format: see
+# docs/tui.md, "Colours and themes".
+name: dark
+colors:
+  background: "#17171F"
+  panel: "#21212C"
+  selection: "#33304A"
+  border: "#3A3950"
+  text: "#DCDCE6"
+  muted: "#8E8EA6"
+  faint: "#5A5A72"
+  accent: "#A48BFA"
+  agent: "#A48BFA"
+  subagent: "#5FB8E6"
+  operator: "#F2B65E"
+  ok: "#5FD192"
+  error: "#F2687C"
+  warning: "#E9C46A"
+  attach: "#F28FB0"
+  added: "#5FD192"
+  removed: "#F2687C"
+  hunk: "#5FB8E6"
+  keyword: "#C79BF2"
+  string: "#A3D982"
+  number: "#F5A86E"
+  comment: "#6B6B85"
+  key: "#7FAAF7"
+  function: "#5ED6E3"
+  punctuation: "#8E8EA6"
+emphasis:
+  accent: [bold]
+  comment: [italic]

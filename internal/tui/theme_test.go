@@ -3,6 +3,7 @@ package tui
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -19,16 +20,22 @@ func TestParseTheme(t *testing.T) {
 		err        string
 	}{
 		{"partial overrides dark", "colors:\n  accent: \"#ff0000\"\n", func(th Theme) bool {
-			return th.Colors.Accent == "#ff0000" && th.Colors.Text == ThemeDark.Colors.Text
+			return th.Colors["accent"] == "#ff0000" && th.Colors["text"] == ThemeDark.Colors["text"]
 		}, ""},
 		{"on a light base", "base: light\ncolors:\n  ok: \"2\"\n", func(th Theme) bool {
-			return th.Colors.OK == "2" && th.Colors.Background == ThemeLight.Colors.Background
+			return th.Colors["ok"] == "2" && th.Colors["background"] == ThemeLight.Colors["background"]
 		}, ""},
-		{"none clears a colour", "colors:\n  background: none\n", func(th Theme) bool { return th.Colors.Background == "none" }, ""},
-		{"json", `{"name": "j", "colors": {"key": "#abc"}}`, func(th Theme) bool { return th.Name == "j" && th.Colors.Key == "#abc" }, ""},
+		{"none clears a colour", "colors:\n  background: none\n", func(th Theme) bool { return th.Colors["background"] == "none" }, ""},
+		{"json", `{"name": "j", "colors": {"key": "#abc"}}`, func(th Theme) bool { return th.Name == "j" && th.Colors["key"] == "#abc" }, ""},
 		{"bad colour", "colors:\n  accent: red\n", nil, "isn't a colour"},
 		{"out of range", "colors:\n  accent: \"256\"\n", nil, "isn't a colour"},
-		{"unknown colour", "colors:\n  acent: \"#fff\"\n", nil, "unknown field"},
+		{"unknown colour", "colors:\n  acent: \"#fff\"\n", nil, "unknown token"},
+		{"unknown field", "colours:\n  accent: \"#fff\"\n", nil, "unknown field"},
+		{"emphasis", "emphasis:\n  key: [bold, underline]\n", func(th Theme) bool {
+			return slices.Equal(th.Emphasis["key"], []string{"bold", "underline"}) && slices.Equal(th.Emphasis["comment"], []string{"italic"})
+		}, ""},
+		{"unknown attribute", "emphasis:\n  key: [blink]\n", nil, "unknown attribute"},
+		{"emphasis of no token", "emphasis:\n  kee: [bold]\n", nil, "unknown token"},
 		{"unknown base", "base: neon\n", nil, "isn't a built-in theme"},
 	}
 	for _, tt := range tests {
@@ -66,10 +73,10 @@ func TestLoadTheme(t *testing.T) {
 	if th, err := LoadTheme("light", dir, false); err != nil || th.Name != "light" {
 		t.Errorf("light: %v %v", th.Name, err)
 	}
-	if th, err := LoadTheme("mine", dir, false); err != nil || th.Name != "mine" || th.Colors.Accent != "#123456" {
+	if th, err := LoadTheme("mine", dir, false); err != nil || th.Name != "mine" || th.Colors["accent"] != "#123456" {
 		t.Errorf("mine: %+v %v", th, err)
 	}
-	if th, err := LoadTheme(path, dir, true); err != nil || th.Colors.Background != ThemeLight.Colors.Background {
+	if th, err := LoadTheme(path, dir, true); err != nil || th.Colors["background"] != ThemeLight.Colors["background"] {
 		t.Errorf("by path: %+v %v", th, err)
 	}
 	for _, name := range []string{path, "../mine", "sub/mine", "mine.yaml", `..\mine`} {
@@ -115,6 +122,20 @@ func TestResolveLook(t *testing.T) {
 		l := ResolveLook(tt.flag, nil, func(k string) string { return env[k] })
 		if l.Theme.Name != tt.theme || (l.Notice != "") != tt.notice {
 			t.Errorf("flag %q env %v: theme %q notice %q", tt.flag, tt.env, l.Theme.Name, l.Notice)
+		}
+	}
+}
+
+// Built-in themes give every token, and the plain one no colour.
+func TestBuiltinThemes(t *testing.T) {
+	for name, th := range BuiltinThemes {
+		if th.Name != name || th.Base != "" || len(th.Colors) != len(Tokens) {
+			t.Errorf("%s: name %q, base %q, %d colours", name, th.Name, th.Base, len(th.Colors))
+		}
+	}
+	for tok, c := range ThemePlain.Colors {
+		if c != "none" {
+			t.Errorf("plain colours %s", tok)
 		}
 	}
 }

@@ -4,83 +4,77 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 
 	"sigs.k8s.io/yaml"
+
+	"github.com/actlet/actlet/themes"
 )
 
-// Theme is the viewer's colours. A theme file gives some of them and
-// takes the rest from its base.
+// Theme is the viewer's colours and emphasis, by token. A theme file
+// gives some tokens and takes the rest from its base. The format is
+// plain data, shared with other viewers.
 type Theme struct {
-	Name   string  `json:"name,omitempty"`
-	Base   string  `json:"base,omitempty"`
-	Colors Palette `json:"colors"`
+	Name string `json:"name,omitempty"`
+	// Base is the built-in theme a theme file changes: dark unless it
+	// says otherwise. Built-in themes give every token and have none.
+	Base string `json:"base,omitempty"`
+	// Colors are "#rrggbb", "#rgb", an ANSI colour number from 0 to 255,
+	// or "none" for the terminal's own, by token.
+	Colors map[string]string `json:"colors,omitempty"`
+	// Emphasis adds attributes to tokens: bold, italic, underline and
+	// reverse.
+	Emphasis map[string][]string `json:"emphasis,omitempty"`
 }
 
-// Palette is a theme's colours: each "#rrggbb", "#rgb", an ANSI colour
-// number from 0 to 255, or "none" for the terminal's own.
-type Palette struct {
-	// The screen, and the panels on it: the header, the sidebar, the
-	// status line and popups.
-	Background string `json:"background,omitempty"`
-	Panel      string `json:"panel,omitempty"`
-	// The selected tool call, file or worker.
-	Selection string `json:"selection,omitempty"`
-	Border    string `json:"border,omitempty"`
-	Text      string `json:"text,omitempty"`
-	Muted     string `json:"muted,omitempty"`
-	Faint     string `json:"faint,omitempty"`
-	// The title, the active tab and the input prompt.
-	Accent string `json:"accent,omitempty"`
-	// Speakers.
-	Agent    string `json:"agent,omitempty"`
-	Subagent string `json:"subagent,omitempty"`
-	Operator string `json:"operator,omitempty"`
-	// States: done, failed, and running or warned.
-	OK      string `json:"ok,omitempty"`
-	Error   string `json:"error,omitempty"`
-	Warning string `json:"warning,omitempty"`
-	// The attach badge.
-	Attach string `json:"attach,omitempty"`
-	// Syntax highlighting.
-	Keyword     string `json:"keyword,omitempty"`
-	String      string `json:"string,omitempty"`
-	Number      string `json:"number,omitempty"`
-	Comment     string `json:"comment,omitempty"`
-	Key         string `json:"key,omitempty"`
-	Function    string `json:"function,omitempty"`
-	Punctuation string `json:"punctuation,omitempty"`
+// Tokens are the theme's colour tokens, in the order the docs list them.
+var Tokens = []string{
+	"background", "panel", "selection", "border", "text", "muted", "faint", "accent",
+	"agent", "subagent", "operator", "ok", "error", "warning", "attach",
+	"added", "removed", "hunk",
+	"keyword", "string", "number", "comment", "key", "function", "punctuation",
 }
 
-// Built-in themes.
+// Attributes are the emphasis a token may have.
+var Attributes = []string{"bold", "italic", "underline", "reverse"}
+
+// Built-in themes, from the themes package's data files.
 var (
-	ThemeDark = Theme{Name: "dark", Colors: Palette{
-		Background: "#17171F", Panel: "#21212C", Selection: "#33304A", Border: "#3A3950",
-		Text: "#DCDCE6", Muted: "#8E8EA6", Faint: "#5A5A72", Accent: "#A48BFA",
-		Agent: "#A48BFA", Subagent: "#5FB8E6", Operator: "#F2B65E",
-		OK: "#5FD192", Error: "#F2687C", Warning: "#E9C46A", Attach: "#F28FB0",
-		Keyword: "#C79BF2", String: "#A3D982", Number: "#F5A86E", Comment: "#6B6B85",
-		Key: "#7FAAF7", Function: "#5ED6E3", Punctuation: "#8E8EA6",
-	}}
-	ThemeLight = Theme{Name: "light", Colors: Palette{
-		Background: "#FBFBFD", Panel: "#EEEFF5", Selection: "#DCD8F7", Border: "#CACCDA",
-		Text: "#2A2C38", Muted: "#676A7E", Faint: "#A2A5B5", Accent: "#6A45E8",
-		Agent: "#6A45E8", Subagent: "#1C74B4", Operator: "#B0630C",
-		OK: "#23854A", Error: "#C8304A", Warning: "#946500", Attach: "#C2306E",
-		Keyword: "#7A35D9", String: "#2E7D32", Number: "#B5520B", Comment: "#8C8FA0",
-		Key: "#1D4FD6", Function: "#0B7488", Punctuation: "#676A7E",
-	}}
+	ThemeDark  = builtin("dark")
+	ThemeLight = builtin("light")
 	// ThemePlain has no colours, for NO_COLOR: emphasis is bold,
 	// underline and reverse video.
-	ThemePlain = Theme{Name: "plain"}
+	ThemePlain = builtin("plain")
 )
 
 // BuiltinThemes are the themes every viewer has, by name.
 var BuiltinThemes = map[string]Theme{"dark": ThemeDark, "light": ThemeLight, "plain": ThemePlain}
+
+func builtin(name string) Theme {
+	data, err := themes.FS.ReadFile(name + ".yaml")
+	if err != nil {
+		panic(err)
+	}
+	var t Theme
+	if err := yaml.UnmarshalStrict(data, &t); err != nil {
+		panic(fmt.Sprintf("theme %s: %v", name, err))
+	}
+	if err := t.check(); err != nil {
+		panic(fmt.Sprintf("theme %s: %v", name, err))
+	}
+	for _, tok := range Tokens {
+		if _, ok := t.Colors[tok]; !ok {
+			panic(fmt.Sprintf("theme %s: no %s", name, tok))
+		}
+	}
+	return t
+}
 
 // maxThemeFile bounds a theme file.
 const maxThemeFile = 64 << 10
@@ -102,41 +96,49 @@ func ParseTheme(data []byte) (Theme, error) {
 		}
 		base = b
 	}
-	for _, c := range t.Colors.fields() {
-		if err := checkColor(*c); err != nil {
-			return Theme{}, err
+	if err := t.check(); err != nil {
+		return Theme{}, err
+	}
+	out := Theme{Name: t.Name, Colors: maps.Clone(base.Colors), Emphasis: maps.Clone(base.Emphasis)}
+	maps.Copy(out.Colors, t.Colors)
+	if out.Emphasis == nil {
+		out.Emphasis = map[string][]string{}
+	}
+	maps.Copy(out.Emphasis, t.Emphasis)
+	return out, nil
+}
+
+// check reports a token, colour or attribute that isn't one.
+func (t Theme) check() error {
+	for tok, c := range t.Colors {
+		if !slices.Contains(Tokens, tok) {
+			return fmt.Errorf("colors: unknown token %q", tok)
+		}
+		if err := checkColor(c); err != nil {
+			return fmt.Errorf("colors.%s: %w", tok, err)
 		}
 	}
-	base.Colors.merge(t.Colors)
-	base.Name = t.Name
-	return base, nil
+	for tok, attrs := range t.Emphasis {
+		if !slices.Contains(Tokens, tok) {
+			return fmt.Errorf("emphasis: unknown token %q", tok)
+		}
+		for _, a := range attrs {
+			if !slices.Contains(Attributes, a) {
+				return fmt.Errorf("emphasis.%s: unknown attribute %q: use bold, italic, underline or reverse", tok, a)
+			}
+		}
+	}
+	return nil
 }
 
 func checkColor(c string) error {
-	if c == "" || c == "none" || reColor.MatchString(c) {
+	if c == "none" || reColor.MatchString(c) {
 		return nil
 	}
 	if n, err := strconv.Atoi(c); err == nil && n >= 0 && n <= 255 {
 		return nil
 	}
 	return fmt.Errorf("%q isn't a colour: give #rrggbb, #rgb, 0 to 255 or none", c)
-}
-
-// fields are the palette's colours, to check and merge them.
-func (p *Palette) fields() []*string {
-	return []*string{&p.Background, &p.Panel, &p.Selection, &p.Border, &p.Text, &p.Muted, &p.Faint, &p.Accent,
-		&p.Agent, &p.Subagent, &p.Operator, &p.OK, &p.Error, &p.Warning, &p.Attach,
-		&p.Keyword, &p.String, &p.Number, &p.Comment, &p.Key, &p.Function, &p.Punctuation}
-}
-
-// merge takes the colours over gives.
-func (p *Palette) merge(over Palette) {
-	dst, src := p.fields(), over.fields()
-	for i, c := range src {
-		if *c != "" {
-			*dst[i] = *c
-		}
-	}
 }
 
 // ThemesDir is where a viewer finds theme files by name:

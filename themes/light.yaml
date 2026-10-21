@@ -1,0 +1,32 @@
+# Actlet's light theme. Viewers share this format: see docs/tui.md,
+# "Colours and themes".
+name: light
+colors:
+  background: "#FBFBFD"
+  panel: "#EEEFF5"
+  selection: "#DCD8F7"
+  border: "#CACCDA"
+  text: "#2A2C38"
+  muted: "#676A7E"
+  faint: "#A2A5B5"
+  accent: "#6A45E8"
+  agent: "#6A45E8"
+  subagent: "#1C74B4"
+  operator: "#B0630C"
+  ok: "#23854A"
+  error: "#C8304A"
+  warning: "#946500"
+  attach: "#C2306E"
+  added: "#23854A"
+  removed: "#C8304A"
+  hunk: "#1C74B4"
+  keyword: "#7A35D9"
+  string: "#2E7D32"
+  number: "#B5520B"
+  comment: "#8C8FA0"
+  key: "#1D4FD6"
+  function: "#0B7488"
+  punctuation: "#676A7E"
+emphasis:
+  accent: [bold]
+  comment: [italic]

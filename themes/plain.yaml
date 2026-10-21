@@ -1,0 +1,38 @@
+# Actlet's theme without colours, which NO_COLOR picks: emphasis is bold,
+# underline and reverse video. Viewers share this format: see
+# docs/tui.md, "Colours and themes".
+name: plain
+colors:
+  background: none
+  panel: none
+  selection: none
+  border: none
+  text: none
+  muted: none
+  faint: none
+  accent: none
+  agent: none
+  subagent: none
+  operator: none
+  ok: none
+  error: none
+  warning: none
+  attach: none
+  added: none
+  removed: none
+  hunk: none
+  keyword: none
+  string: none
+  number: none
+  comment: none
+  key: none
+  function: none
+  punctuation: none
+emphasis:
+  accent: [bold]
+  selection: [reverse]
+  agent: [bold]
+  subagent: [bold]
+  operator: [bold]
+  keyword: [bold]
+  key: [underline]
