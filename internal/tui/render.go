@@ -883,13 +883,20 @@ func (m *Model) taskLines(w int) []string {
 	}
 	add(m.st.accent.Render("Task ") + info.TaskID + m.st.muted.Render(" ("+info.TaskKind+")"))
 	out = append(out, "")
-	for _, l := range strings.Split(strings.TrimRight(info.Task, "\n"), "\n") {
+	for _, l := range m.st.highlight("json", strings.TrimRight(info.Task, "\n")) {
 		add("  " + l)
 	}
 	out = append(out, "", m.st.accent.Render("Workers"))
 	for _, wk := range m.sess.Workers() {
 		indent := strings.Repeat("  ", strings.Count(wk.ID, ".")+1)
-		add(fmt.Sprintf("%s%s  %s  %s  model %s", indent, m.st.bold.Render(wk.ID), wk.Status, plural(wk.Turns, "turn"), orNA(wk.Model)))
+		status := m.st.warn
+		switch wk.Status {
+		case view.WorkerFinished:
+			status = m.st.ok
+		case view.WorkerFailed:
+			status = m.st.err
+		}
+		add(fmt.Sprintf("%s%s  %s  %s  model %s", indent, m.st.bold.Render(wk.ID), status.Render(wk.Status.String()), plural(wk.Turns, "turn"), orNA(wk.Model)))
 		if wk.Task != "" {
 			add(indent + "  task: " + firstLine(wk.Task))
 		}
@@ -910,7 +917,7 @@ func (m *Model) profileLines(w int) []string {
 		return []string{m.st.muted.Render("no profile information yet")}
 	}
 	add(m.st.accent.Render("Effective configuration") + m.st.muted.Render(" (profile "+m.sess.Profile+")"))
-	for _, l := range strings.Split(strings.TrimRight(info.Config, "\n"), "\n") {
+	for _, l := range m.st.highlight("json", strings.TrimRight(info.Config, "\n")) {
 		add("  " + l)
 	}
 	out = append(out, "", m.st.accent.Render("Models"))
@@ -991,7 +998,7 @@ func (m *Model) toolsLines(w int) []string {
 	if info.Manifest == "" {
 		add("  none")
 	}
-	for _, l := range strings.Split(info.Manifest, "\n") {
+	for _, l := range m.st.highlight("markdown", info.Manifest) {
 		if l != "" {
 			add("  " + l)
 		}

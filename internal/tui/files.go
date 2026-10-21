@@ -3,8 +3,6 @@ package tui
 import (
 	"context"
 	"fmt"
-	"path"
-	"regexp"
 	"strings"
 	"time"
 
@@ -175,104 +173,20 @@ func (m *Model) renderPopup(w, h int) []string {
 	return out
 }
 
-// popupLines are the open file's lines, numbered and highlighted, w
-// cells wide.
+// popupLines are the open file's lines, numbered and highlighted by its
+// kind, w cells wide.
 func (m *Model) popupLines(p *popup, w int) []string {
 	st := m.st
 	var out []string
-	for i, l := range p.lines {
-		if p.diff {
+	if p.diff {
+		for _, l := range p.lines {
 			out = append(out, st.diffStyle(l).Render(ansi.Truncate(l, w, "…")))
-			continue
 		}
-		num := st.faint.Render(fmt.Sprintf("%4d ", i+1))
-		text := ansi.Truncate(strings.ReplaceAll(l, "\t", "    "), w-6, "…")
-		out = append(out, num+st.highlight(p.path, text, i))
+		return out
+	}
+	text := strings.ReplaceAll(strings.Join(p.lines, "\n"), "\t", "    ")
+	for i, l := range st.highlight(languageOf(p.path), text) {
+		out = append(out, st.faint.Render(fmt.Sprintf("%4d ", i+1))+ansi.Truncate(l, w-6, "…"))
 	}
 	return out
-}
-
-var (
-	reString = regexp.MustCompile(`"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'`)
-	reWord   = regexp.MustCompile(`\b[A-Za-z_]+\b`)
-	keywords = map[string][]string{
-		".py":   {"def", "class", "import", "from", "return", "for", "in", "if", "elif", "else", "while", "with", "as", "try", "except", "raise", "None", "True", "False", "and", "or", "not", "lambda", "yield", "pass"},
-		".go":   {"package", "import", "func", "return", "for", "range", "if", "else", "var", "const", "type", "struct", "interface", "go", "defer", "switch", "case", "nil", "true", "false", "map", "chan"},
-		".sh":   {"if", "then", "else", "fi", "for", "do", "done", "while", "case", "esac", "echo", "export", "function", "in"},
-		".js":   {"function", "const", "let", "var", "return", "if", "else", "for", "while", "import", "export", "from", "class", "new", "null", "true", "false", "async", "await"},
-		".ts":   {"function", "const", "let", "var", "return", "if", "else", "for", "while", "import", "export", "from", "class", "new", "null", "true", "false", "async", "await", "interface", "type"},
-		".yaml": {"true", "false", "null"},
-	}
-)
-
-// highlight colours a line cheaply by the file's kind: comments,
-// strings, keywords, Markdown headings, a CSV header.
-func (st *styles) highlight(p, l string, n int) string {
-	ext := strings.ToLower(path.Ext(p))
-	switch ext {
-	case ".md":
-		if strings.HasPrefix(l, "#") {
-			return st.bold.Render(l)
-		}
-		return l
-	case ".csv", ".tsv":
-		if n == 0 {
-			return st.bold.Render(l)
-		}
-		return l
-	case ".yml":
-		ext = ".yaml"
-	}
-	comment := ""
-	switch ext {
-	case ".py", ".sh", ".yaml", ".toml":
-		comment = "#"
-	case ".go", ".js", ".ts", ".java", ".c", ".rs":
-		comment = "//"
-	}
-	if comment != "" {
-		if i := strings.Index(l, comment); i >= 0 && !inString(l, i) {
-			return st.highlightCode(l[:i], ext) + st.synComment.Render(l[i:])
-		}
-	}
-	if kw := keywords[ext]; kw != nil || ext == ".json" {
-		return st.highlightCode(l, ext)
-	}
-	return l
-}
-
-func inString(l string, i int) bool {
-	for _, loc := range reString.FindAllStringIndex(l, -1) {
-		if i >= loc[0] && i < loc[1] {
-			return true
-		}
-	}
-	return false
-}
-
-func (st *styles) highlightCode(l, ext string) string {
-	kw := keywords[ext]
-	var b strings.Builder
-	last := 0
-	for _, loc := range reString.FindAllStringIndex(l, -1) {
-		b.WriteString(st.highlightWords(l[last:loc[0]], kw))
-		b.WriteString(st.synString.Render(l[loc[0]:loc[1]]))
-		last = loc[1]
-	}
-	b.WriteString(st.highlightWords(l[last:], kw))
-	return b.String()
-}
-
-func (st *styles) highlightWords(s string, kw []string) string {
-	if len(kw) == 0 {
-		return s
-	}
-	return reWord.ReplaceAllStringFunc(s, func(w string) string {
-		for _, k := range kw {
-			if w == k {
-				return st.synKeyword.Render(w)
-			}
-		}
-		return w
-	})
 }

@@ -38,7 +38,8 @@ type styles struct {
 	key               lipgloss.Style // keys of key-value lines
 	popupBorder       lipgloss.Style
 
-	// Syntax highlighting.
+	// Syntax highlighting, and the texts highlighted so far.
+	hlCache                                                                 map[string][]string
 	synKeyword, synString, synNumber, synComment, synKey, synFunc, synPunct lipgloss.Style
 }
 
@@ -95,7 +96,7 @@ func newStyles(t Theme) *styles {
 		}
 		return lipgloss.NewStyle().Background(colorOf(c)).Foreground(colorOf(on)).Bold(true).Padding(0, 1)
 	}
-	s := &styles{theme: t, bg: bgSeq(col("background")), panelBg: bgSeq(col("panel")), selBg: bgSeq(col("selection"))}
+	s := &styles{theme: t, hlCache: map[string][]string{}, bg: bgSeq(col("background")), panelBg: bgSeq(col("panel")), selBg: bgSeq(col("selection"))}
 	if has("selection", "reverse") {
 		s.selBg += ansi.Style{}.Reverse(true).String()
 	}
