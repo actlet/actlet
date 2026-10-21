@@ -133,13 +133,11 @@ func recordedFile(s *view.Session, p string) *popup {
 	return pp
 }
 
-// renderPopup draws the open file over the body: a panel with a border,
-// centred.
+// renderPopup draws the open file over the body.
 func (m *Model) renderPopup(w, h int) []string {
 	st := m.st
 	p := m.popup
-	boxW, boxH := max(w-4, 20), max(h-2, 5)
-	innerW, inner := boxW-4, boxH-4 // border and padding; title, rule and foot
+	innerW := panelWidth(w) - 4
 	if p.styled == nil || p.styledW != innerW {
 		p.styled, p.styledW = m.popupLines(p, innerW), innerW
 	}
@@ -147,15 +145,27 @@ func (m *Model) renderPopup(w, h int) []string {
 	if len(body) == 0 {
 		body = []string{st.muted.Render(p.note)}
 	}
-	p.scroll = max(0, min(p.scroll, len(body)-inner))
-	end := min(p.scroll+inner, len(body))
-	foot := st.muted.Render(p.note)
+	return m.panel(w, h, p.path, body, &p.scroll, p.note)
+}
+
+// panelWidth is how wide a panel is on a screen w wide.
+func panelWidth(w int) int { return max(w-4, 20) }
+
+// panel draws a bordered panel over the body, centred: a title, lines
+// scrolled to *scroll, and a note at the foot.
+func (m *Model) panel(w, h int, title string, body []string, scroll *int, note string) []string {
+	st := m.st
+	boxW, boxH := panelWidth(w), max(h-2, 5)
+	innerW, inner := boxW-4, boxH-4 // border and padding; title, rule and foot
+	*scroll = max(0, min(*scroll, len(body)-inner))
+	end := min(*scroll+inner, len(body))
+	foot := st.muted.Render(note)
 	if len(body) > inner {
-		foot += st.muted.Render(fmt.Sprintf(" · lines %d-%d of %d", p.scroll+1, end, len(body)))
+		foot += st.muted.Render(fmt.Sprintf(" · lines %d-%d of %d", *scroll+1, end, len(body)))
 	}
 	foot += st.muted.Render(" · esc closes")
-	rows := []string{st.accent.Render(p.path), st.border.Render(strings.Repeat("─", innerW))}
-	rows = append(rows, block(body[p.scroll:end], innerW, inner, st.panelBg)...)
+	rows := []string{st.accent.Render(title), st.border.Render(strings.Repeat("─", innerW))}
+	rows = append(rows, block(body[*scroll:end], innerW, inner, st.panelBg)...)
 	rows = append(rows, foot)
 	bar := func(l, r string) string { return st.popupBorder.Render(l + strings.Repeat("─", boxW-2) + r) }
 	side := st.popupBorder.Render("│")

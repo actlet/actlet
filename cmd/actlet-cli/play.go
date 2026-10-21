@@ -19,7 +19,7 @@ speed, filter by worker or tool, and follow a recording that is still
 being written. Nothing is run: no network, tools or models.
 
 Keys: space play/pause, left/right seek, +/- speed, f follow, up/down select
-a tool call, enter expand it, [ ] worker, t tool, tab views, ? keys, q quit.
+a tool call, enter expand it, [ ] worker, t tool, tab views, ? help, q quit.
 The mouse works too: click tabs and tool calls, scroll with the wheel.
 
 Flags:
@@ -45,6 +45,7 @@ func runReplayPlay(args []string, stdout, stderr io.Writer) int {
 	fs.Var(&separators, "separators", "draw lines between turns and tool calls; on by default [ACTLET_TUI_SEPARATORS]")
 	theme := fs.String("theme", "", "the colours: dark, light, plain, a theme file's name or its path [ACTLET_THEME]")
 	color := fs.Bool("color", false, "with -dump: keep the colours, as ANSI escape sequences")
+	keys := fs.Bool("keys", false, "with -dump: show the help panel, with the viewer's keys")
 	width := fs.Int("width", 120, "with -dump: the screen width")
 	height := fs.Int("height", 40, "with -dump: the screen height")
 	path, code, ok := parseFileArgs(fs, args, stderr)
@@ -80,6 +81,7 @@ func runReplayPlay(args []string, stdout, stderr io.Writer) int {
 		if *file != "" {
 			m.Open(*file)
 		}
+		m.ShowHelp(*keys)
 		if *color {
 			fmt.Fprintln(stdout, m.DumpColor())
 		} else {

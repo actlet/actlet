@@ -634,3 +634,51 @@ func TestReplaySearchKeys(t *testing.T) {
 		t.Errorf("a search without matches: %q", m.notice)
 	}
 }
+
+// ? opens the help, which lists the keys that apply, from the tables
+// that handle them; ? or esc closes it.
+func TestHelp(t *testing.T) {
+	live := liveModel()
+	p, err := OpenPlayer(recording(t, run()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer p.Close()
+	p.Seek(p.Len())
+	replay := NewReplay(p)
+	replay.SetConnection(Connection{Kind: "recording", Target: "run.actrec"})
+	replay.SetSize(100, 32)
+	for name, m := range map[string]*Model{"live": live, "replay": replay} {
+		m.SetSize(100, 100) // tall enough for the whole help
+		m.key(tea.KeyPressMsg{Code: '?', Text: "?"})
+		if !m.help {
+			t.Fatalf("%s: ? didn't open the help", name)
+		}
+		dump := m.Dump()
+		for _, table := range [][]binding{mainKeys, filesKeys, popupKeys, helpKeys} {
+			for _, b := range table {
+				if b.hidden || !b.applies(m) {
+					continue
+				}
+				if !strings.Contains(dump, b.help) {
+					t.Errorf("%s: the help lacks %q", name, b.help)
+				}
+			}
+		}
+		for _, other := range []string{"pause the session", "search the recording"} {
+			if want := (other == "pause the session") == (name == "live"); strings.Contains(dump, other) != want {
+				t.Errorf("%s: %q listed: %v", name, other, !want)
+			}
+		}
+		m.SetSize(100, 32)
+		golden(t, name+"-help", m.Dump())
+		m.key(tea.KeyPressMsg{Code: tea.KeyDown})
+		if m.helpScroll != 1 {
+			t.Errorf("%s: scroll %d", name, m.helpScroll)
+		}
+		m.key(tea.KeyPressMsg{Code: tea.KeyEscape})
+		if m.help {
+			t.Errorf("%s: esc didn't close the help", name)
+		}
+	}
+}

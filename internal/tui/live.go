@@ -169,6 +169,8 @@ type DumpOptions struct {
 	Look Look
 	// Color keeps the colours, as ANSI escape sequences.
 	Color bool
+	// Keys shows the help panel.
+	Keys bool
 }
 
 // DumpLive renders a box's screen once, as text: what it holds now. It
@@ -195,6 +197,7 @@ func DumpLive(ctx context.Context, client attachv0.AttachClient, conn Connection
 		if o.File != "" {
 			m.Open(o.File)
 		}
+		m.ShowHelp(o.Keys)
 		if o.Color {
 			return m.DumpColor()
 		}

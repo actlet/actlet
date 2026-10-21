@@ -30,7 +30,7 @@ make demo-attach   # in a second terminal: another viewer on the same box
      ┊     │ ../inputs/sales.csv:8:west,2026-07,widget,150,4500      │
  ──────────────────────────────────────────────────────────────────────────────────────────
   › press i to send the agent a note
-  ⠋ running  large │ ctx 3%/200k │ 0.08/5.00 EUR │ 22s │ this process               ? keys
+  ⠋ running  large │ ctx 3%/200k │ 0.08/5.00 EUR │ 22s │ this process               ? help
 ```
 
 The **Chat** tab is the conversation, one model turn at a time: who speaks (the agent, a subagent, the operator, or Actlet itself, each in its own colour), what the model said, then each tool call as one block with its result. A block shows the tool, its key arguments, how it went (✓, ✗, a spinner while it runs, ? when the outcome is unknown after a crash) and how long it took, then the start of its output or its diff. A subagent is shown inside the `Subagent` call that started it, with its own turns, and its final answer under it. The sidebar lists the workers and the files changed so far, by their path in the session folder, with the lines added and removed by all their changes together; it hides when the terminal is narrow. The worker shown, picked with `[` and `]`, is highlighted with a `▸`; the agent stands for the whole conversation, its subagents nested in it. `o`, or a click on a file, opens it in a read-only viewer, from the box or, in a replay, from what the recording holds. Watching a running session, the sidebar also lists its **viewers**: the gateway the box reports to, or the orchestrator the viewer is attached through, then everyone watching, each by the name it gives itself (`-name`, by default `actlet attach` or `actlet-cli`), how it is attached (`local`, the session folder's socket; `direct`, the box's port; `orchestrator`) and since when, the viewer itself marked `you`. A box lists the viewers on its socket and its port; through an orchestrator you see only that orchestrator's viewers, which it may name itself. Who watched is never recorded.
@@ -64,7 +64,7 @@ Figures Actlet doesn't have show as `n/a`: cost needs a gateway that reports it 
 | `pgup` `pgdn`, `end` | scroll, and back to following the end |
 | `i` | type a note for the agent; `enter` sends it |
 | `P`, `X` | pause or stop the session, if the profile allows it |
-| `?` | show the keys |
+| `?` | open the help: every key of this viewer, by group; `?` or `esc` closes it |
 | `q` | quit; the session carries on |
 
 The mouse works too: click a tab, click a tool call to select it and again to expand it, and scroll with the wheel. Playing a recording adds `space` (play and pause), `←` `→` (seek), `+` `-` (speed), `f` (follow a recording that is still being written) and search: `/` takes a phrase, and `enter` moves the replay to the next event that has it anywhere, regardless of case, as the last event shown; `n` and `N` find the next and previous, wrapping around. The status line says which match of how many it is.
@@ -161,7 +161,7 @@ A running box listens on a Unix socket in its session folder, `.actlet/attach.so
 
 The socket serves the attach protocol, [`proto/actlet/attach/v0`](../proto/actlet/attach/v0/attach.proto), over gRPC: `Info` describes the session and the box's figures, `Watch` streams the run's activity from a position (what the box still holds, then live events), and `Command` sends a note or, when allowed, a pause or stop. The box keeps the last few thousand events, plus the run's start, state changes and subagent starts and ends, so a late viewer still sees the run's shape; a viewer told it missed events shows that in the Session tab. Viewers elsewhere use the same protocol.
 
-`actlet attach -dump` and `actlet-cli replay play -dump` print a screen as text and exit, without a terminal: handy for scripts and bug reports. `-tab` picks the tab and `-width` and `-height` the size. With `-color` the screen keeps its colours, as ANSI escape sequences in 24-bit colour, in the theme `-theme` picks: `cat` it in a terminal, or turn it into an image with a tool such as `freeze` or `aha`.
+`actlet attach -dump` and `actlet-cli replay play -dump` print a screen as text and exit, without a terminal: handy for scripts and bug reports. `-tab` picks the tab and `-width` and `-height` the size. `-keys` prints the help panel. With `-color` the screen keeps its colours, as ANSI escape sequences in 24-bit colour, in the theme `-theme` picks: `cat` it in a terminal, or turn it into an image with a tool such as `freeze` or `aha`.
 
 `actlet-cli replay view --json <file>` writes what the viewer knows at the end of a recording, or of its events as `replay export --jsonl` writes them, as JSON: the session, its workers and their turns and tool calls, changed files, budgets and the event log. It is in the form a web viewer reads, so that a viewer written in another language can check that it folds the same events into the same view.
 

@@ -39,7 +39,10 @@ func (m *Model) Render() string {
 			body[i] = " " + l
 		}
 	}
-	if m.popup != nil {
+	switch {
+	case m.help:
+		body = m.panel(w, bodyH, "Keys", m.helpLines(), &m.helpScroll, "the keys of this viewer")
+	case m.popup != nil:
 		body = m.renderPopup(w, bodyH)
 	}
 	screen := make([]string, 0, h)
@@ -702,7 +705,7 @@ func (m *Model) renderStatus(w int) string {
 	if m.notice != "" {
 		left += sep + st.warn.Render(m.notice)
 	}
-	right := st.segFaint.Render("? keys ")
+	right := st.muted.Render("? help ")
 	gap := w - lipgloss.Width(left) - lipgloss.Width(right)
 	if gap < 1 {
 		return ansi.Truncate(left, w, "…")
@@ -732,13 +735,6 @@ func (m *Model) renderInput(w int) string {
 	st := m.st
 	if m.typing {
 		return m.input.View()
-	}
-	if m.help {
-		keys := "i note · ↑/↓ select · enter expand · e all · o files · s subagents · d lines · [ ] worker · t tool · tab views · P pause · X stop · q detach"
-		if m.player != nil {
-			keys = "space play · ←/→ seek · +/- speed · f follow · / search · n/N next/previous · ↑/↓ select · enter expand · e all · o files · d lines · [ ] worker · t tool · tab views · q quit"
-		}
-		return st.muted.Render(ansi.Truncate(" "+keys, w, "…"))
 	}
 	if m.player != nil {
 		return st.muted.Render(" a recording · space play/pause · ←/→ seek · +/- speed · / search")

@@ -110,8 +110,10 @@ type Model struct {
 
 	input  textinput.Model
 	typing bool
-	help   bool
 	notice string
+	// help shows the help panel, scrolled helpScroll lines.
+	help       bool
+	helpScroll int
 
 	// searching is typing a search of the recording; query is the last
 	// one, which n and N find again.
@@ -176,6 +178,9 @@ func (m *Model) SetClock(now func() time.Time) { m.now = now }
 
 // SetSeparators draws lines between turns and tool calls.
 func (m *Model) SetSeparators(on bool) { m.separators = on }
+
+// ShowHelp opens or closes the help panel.
+func (m *Model) ShowHelp(on bool) { m.help, m.helpScroll = on, 0 }
 
 // ExpandAll expands every tool call block.
 func (m *Model) ExpandAll(on bool) { m.expandAll = on }
@@ -280,8 +285,8 @@ func (m *Model) click(c tea.Mouse) tea.Cmd {
 	if c.Button != tea.MouseLeft {
 		return nil
 	}
-	if m.popup != nil {
-		m.popup = nil // a click closes it
+	if m.popup != nil || m.help {
+		m.popup, m.help = nil, false // a click closes them
 		return nil
 	}
 	if p, ok := m.fileRows[c.Y]; ok && m.tab == TabChat && c.X >= m.sideX {
@@ -338,148 +343,24 @@ func (m *Model) key(k tea.KeyPressMsg) tea.Cmd {
 		m.input, cmd = m.input.Update(k)
 		return cmd
 	}
-	if p := m.popup; p != nil {
-		switch key {
-		case "esc", "q", "enter", "o":
-			m.popup = nil
-		case "up", "k":
-			p.scroll = max(p.scroll-1, 0)
-		case "down", "j":
-			p.scroll++
-		case "pgup":
-			p.scroll = max(p.scroll-m.height/2, 0)
-		case "pgdown", "space":
-			p.scroll += m.height / 2
-		case "home", "g":
-			p.scroll = 0
-		case "ctrl+c":
-			return tea.Quit
-		}
-		return nil
+	if m.help {
+		cmd, _ := m.dispatch(helpKeys, key)
+		return cmd
+	}
+	if m.popup != nil {
+		cmd, _ := m.dispatch(popupKeys, key)
+		return cmd
 	}
 	if m.filesFocus {
-		files := m.sess.Files()
-		switch key {
-		case "up", "k":
-			m.fileSel = max(m.fileSel-1, 0)
-			return nil
-		case "down", "j":
-			m.fileSel = min(m.fileSel+1, max(len(files)-1, 0))
-			return nil
-		case "enter":
-			if m.fileSel < len(files) {
-				return m.openFile(files[m.fileSel].Path)
-			}
-			return nil
-		case "esc", "o":
-			m.filesFocus = false
-			return nil
+		if cmd, ok := m.dispatch(filesKeys, key); ok {
+			return cmd
 		}
 	}
-	switch key {
-	case "q", "ctrl+c":
-		return tea.Quit
+	if key != "q" && key != "ctrl+c" {
+		m.notice = "" // a key clears the notice, but quitting leaves it be
 	}
-	m.notice = ""
-	switch key {
-	case "?":
-		m.help = !m.help
-	case "tab":
-		m.tab, m.scroll = (m.tab+1)%tabCount, 0
-	case "shift+tab":
-		m.tab, m.scroll = (m.tab+tabCount-1)%tabCount, 0
-	case "1", "2", "3", "4", "5", "6":
-		m.tab, m.scroll = int(key[0]-'1'), 0
-	case "up", "k":
-		if m.tab == TabChat {
-			m.selectBlock(-1)
-		} else {
-			m.scroll++
-		}
-	case "down", "j":
-		if m.tab == TabChat {
-			m.selectBlock(1)
-		} else {
-			m.scroll = max(m.scroll-1, 0)
-		}
-	case "pgup":
-		m.scroll += m.height / 2
-		m.selected = ""
-	case "pgdown":
-		m.scroll = max(m.scroll-m.height/2, 0)
-		m.selected = ""
-	case "end", "G", "esc":
-		m.scroll, m.selected = 0, ""
-	case "enter":
-		if m.selected != "" {
-			m.expanded[m.selected] = !m.expanded[m.selected]
-		}
-	case "e":
-		m.expandAll = !m.expandAll
-	case "o":
-		if len(m.sess.Files()) == 0 {
-			m.notice = "no files changed yet"
-			return nil
-		}
-		m.tab, m.filesFocus = TabChat, true
-		m.fileSel = min(m.fileSel, len(m.sess.Files())-1)
-	case "d":
-		m.separators = !m.separators
-	case "s":
-		m.collapseSubs = !m.collapseSubs
-	case "]":
-		m.worker, m.scroll, m.selected = m.nextWorker(1), 0, ""
-	case "[":
-		m.worker, m.scroll, m.selected = m.nextWorker(-1), 0, ""
-	case "t":
-		m.tool, m.scroll, m.selected = m.nextTool(), 0, ""
-	case "i":
-		if m.player != nil {
-			m.notice = "a recording can't be sent notes"
-			return nil
-		}
-		m.typing = true
-		return m.input.Focus()
-	case "P":
-		return m.command(&attachv0.CommandRequest{Action: &attachv0.CommandRequest_Pause{Pause: &gatewayv0.Pause{Mode: gatewayv0.PauseMode_PAUSE_MODE_DRAIN}}}, "pause")
-	case "X":
-		return m.command(&attachv0.CommandRequest{Action: &attachv0.CommandRequest_Stop{Stop: &gatewayv0.Stop{}}}, "stop")
-	}
-	if p := m.player; p != nil {
-		switch key {
-		case "/":
-			m.searching, m.typing = true, true
-			m.input.Prompt = " / "
-			m.input.Placeholder = "search the recording; Enter finds, Esc cancels"
-			m.input.SetValue(m.query)
-			m.input.CursorEnd()
-			return m.input.Focus()
-		case "n":
-			m.find(1)
-		case "N":
-			m.find(-1)
-		case "space":
-			p.Toggle(m.now())
-		case "+", "=":
-			p.Faster()
-		case "-":
-			p.Slower()
-		case "right", "l":
-			p.Seek(p.Pos() + max(p.Len()/20, 1))
-			m.sess = p.View()
-		case "left", "h":
-			p.Seek(p.Pos() - max(p.Len()/20, 1))
-			m.sess = p.View()
-		case "home", "g":
-			p.Seek(0)
-			m.sess = p.View()
-		case "f":
-			p.Seek(p.Len())
-			p.SetFollow(!p.Follow())
-			m.sess = p.View()
-		}
-	}
-	return nil
+	cmd, _ := m.dispatch(mainKeys, key)
+	return cmd
 }
 
 // endSearchInput puts the input back to taking notes.

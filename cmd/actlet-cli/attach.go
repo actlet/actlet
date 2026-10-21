@@ -62,6 +62,7 @@ func runAttach(args []string, stdout, stderr io.Writer) int {
 	name := fs.String("name", "actlet-cli", "how this viewer is named to the session's other viewers")
 	theme := fs.String("theme", "", "the colours: dark, light, plain, a theme file's name or its path [ACTLET_THEME]")
 	color := fs.Bool("color", false, "with -dump: keep the colours, as ANSI escape sequences")
+	keys := fs.Bool("keys", false, "with -dump: show the help panel, with the viewer's keys")
 	width := fs.Int("width", 120, "with -dump: the screen width")
 	height := fs.Int("height", 40, "with -dump: the screen height")
 	if err := fs.Parse(args); err != nil {
@@ -113,7 +114,7 @@ func runAttach(args []string, stdout, stderr io.Writer) int {
 	look := tui.ResolveLook(*theme, separators.Value(), os.Getenv)
 	ctx := context.Background()
 	if *dump {
-		out, err := tui.DumpLive(ctx, client, conn, tui.DumpOptions{Tab: t, Width: *width, Height: *height, File: *file, Look: look, Color: *color})
+		out, err := tui.DumpLive(ctx, client, conn, tui.DumpOptions{Tab: t, Width: *width, Height: *height, File: *file, Look: look, Color: *color, Keys: *keys})
 		if err != nil {
 			return fail(err)
 		}

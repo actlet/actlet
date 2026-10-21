@@ -1,0 +1,32 @@
+  ◆ actlet  sum                                        Chat  Session  Task  Profile  Tools  Events  
+  ╭──────────────────────────────────────────────────────────────────────────────────────────────╮  
+  │ Keys                                                                                         │  
+  │ ──────────────────────────────────────────────────────────────────────────────────────────── │  
+  │ Navigation                                                                                   │  
+  │   ↑ k          select the previous tool call; other tabs: scroll up                          │  
+  │   ↓ j          select the next tool call; other tabs: scroll down                            │  
+  │   Enter        expand or collapse the selected tool call                                     │  
+  │   e            expand or collapse every tool call                                            │  
+  │   PgUp         scroll up a page                                                              │  
+  │   PgDn         scroll down a page                                                            │  
+  │   End G Esc    back to following the end                                                     │  
+  │                                                                                              │  
+  │ Tabs                                                                                         │  
+  │   Tab          the next tab                                                                  │  
+  │   Shift+Tab    the previous tab                                                              │  
+  │   1–6          Chat, Session, Task, Profile, Tools, Events                                   │  
+  │                                                                                              │  
+  │ Sidebar and files                                                                            │  
+  │   [            show the previous worker alone; the agent shows them all                      │  
+  │   ]            show the next worker alone                                                    │  
+  │   t            show one tool's calls at a time                                               │  
+  │   o            go to the changed files, to open one                                          │  
+  │                                                                                              │  
+  │ View                                                                                         │  
+  │   d            hide or show the lines between turns and tool calls                           │  
+  │ the keys of this viewer · lines 1-22 of 49 · esc closes                                      │  
+  ╰──────────────────────────────────────────────────────────────────────────────────────────────╯  
+                                                                                                    
+────────────────────────────────────────────────────────────────────────────────────────────────────
+ › press i to send the agent a note                                                                 
+ ⠋ running  large │ ctx 6%/200k │ 0.08/5.00 EUR │ 30s │ local box                            ? help 
